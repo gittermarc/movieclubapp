@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>filmfreaks.ipa</key>
+	<array>
+		<dict>
+			<key>architectures</key>
+			<array>
+				<string>arm64</string>
+			</array>
+			<key>buildNumber</key>
+			<string>1</string>
+			<key>certificate</key>
+			<dict>
+				<key>SHA1</key>
+				<string>B7C040D90DE68F86E9CAED9A622E3E3C5429F3B6</string>
+				<key>dateExpires</key>
+				<string>05.12.26</string>
+				<key>type</key>
+				<string>Cloud Managed Apple Distribution</string>
+			</dict>
+			<key>entitlements</key>
+			<dict>
+				<key>application-identifier</key>
+				<string>HPJKAPZ8A3.de.marcfechner.filmfreaks</string>
+				<key>aps-environment</key>
+				<string>production</string>
+				<key>com.apple.developer.icloud-container-environment</key>
+				<string>Production</string>
+				<key>com.apple.developer.icloud-container-identifiers</key>
+				<array>
+					<string>iCloud.de.marcfechner.filmfreaks</string>
+				</array>
+				<key>com.apple.developer.icloud-services</key>
+				<array>
+					<string>CloudKit</string>
+				</array>
+				<key>com.apple.developer.team-identifier</key>
+				<string>HPJKAPZ8A3</string>
+				<key>get-task-allow</key>
+				<false/>
+			</dict>
+			<key>name</key>
+			<string>filmfreaks.app</string>
+			<key>profile</key>
+			<dict>
+				<key>UUID</key>
+				<string>70eb9aa4-ad63-489b-a869-6f2629b022a8</string>
+				<key>dateExpires</key>
+				<string>05.12.26</string>
+				<key>name</key>
+				<string>iOS Team Ad Hoc Provisioning Profile: de.marcfechner.filmfreaks</string>
+			</dict>
+			<key>team</key>
+			<dict>
+				<key>id</key>
+				<string>HPJKAPZ8A3</string>
+				<key>name</key>
+				<string>Marc Fechner</string>
+			</dict>
+			<key>versionNumber</key>
+			<string>1.0</string>
+		</dict>
+	</array>
+</dict>
+</plist>
