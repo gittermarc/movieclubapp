@@ -5,6 +5,47 @@
 
 internal import SwiftUI
 
+// MARK: - Such-Historie (lokal per UserDefaults)
+
+fileprivate struct SearchHistoryManager {
+    private static let key = "MovieSearchHistory"
+    private static let maxEntries = 15
+
+    static func load() -> [String] {
+        (UserDefaults.standard.array(forKey: key) as? [String]) ?? []
+    }
+
+    static func save(_ entries: [String]) {
+        UserDefaults.standard.set(entries, forKey: key)
+    }
+
+    static func add(query: String) {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
+        var current = load()
+
+        // Dedupe (case-insensitive): vorhandenen Eintrag entfernen
+        current.removeAll { $0.caseInsensitiveCompare(trimmed) == .orderedSame }
+
+        // Neuestes vorne einfügen
+        current.insert(trimmed, at: 0)
+
+        // Begrenzen
+        if current.count > maxEntries {
+            current = Array(current.prefix(maxEntries))
+        }
+
+        save(current)
+    }
+
+    static func clear() {
+        save([])
+    }
+}
+
+// MARK: - MovieSearchView
+
 struct MovieSearchView: View {
     
     @Environment(\.dismiss) private var dismiss
@@ -15,8 +56,9 @@ struct MovieSearchView: View {
     @State private var errorMessage: String?
     @State private var results: [TMDbMovieResult] = []
     
-    // Detail-Sheet: nur noch das Item, kein extra Bool
+    // Detail-Sheet
     @State private var detailResult: TMDbMovieResult?
+    @State private var showingDetail: Bool = false
     
     // Toast
     @State private var toastMessage: String?
@@ -25,6 +67,9 @@ struct MovieSearchView: View {
     // Markierung: schon in Listen
     @State private var localWatchedKeys: Set<String>
     @State private var localBacklogKeys: Set<String>
+    
+    // NEU: Such-Historie
+    @State private var recentQueries: [String] = SearchHistoryManager.load()
     
     let existingWatched: [Movie]
     let existingBacklog: [Movie]
@@ -50,6 +95,7 @@ struct MovieSearchView: View {
         _localBacklogKeys = State(
             initialValue: Set(existingBacklog.map { MovieSearchView.keyFor(movie: $0) })
         )
+        // recentQueries kommt über den Default-Initializer (s.o.)
     }
     
     var body: some View {
@@ -69,6 +115,12 @@ struct MovieSearchView: View {
                 VStack(spacing: 12) {
                     // Suchfeld + Status
                     searchHeader
+                    
+                    // NEU: Zuletzt gesucht – nur wenn noch nichts eingegeben ist
+                    if query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                       !recentQueries.isEmpty {
+                        recentQueriesView
+                    }
                     
                     // Fehler / leere Zustände
                     if let errorMessage {
@@ -95,7 +147,8 @@ struct MovieSearchView: View {
                                 .padding(.bottom, 8)
                             }
                         }
-                    } else if !isLoading && query.isEmpty {
+                    } else if !isLoading && query.isEmpty && recentQueries.isEmpty {
+                        // Nur anzeigen, wenn wirklich gar kein Verlauf existiert
                         VStack(spacing: 8) {
                             Image(systemName: "magnifyingglass")
                                 .font(.largeTitle)
@@ -116,27 +169,30 @@ struct MovieSearchView: View {
                     }
                 }
             }
-            // WICHTIG: statt isPresented jetzt sheet(item:)
-            .sheet(item: $detailResult) { result in
-                let key = keyFor(result: result)
-                let isWatched = localWatchedKeys.contains(key)
-                let isBacklog = localBacklogKeys.contains(key)
-                
-                SearchResultDetailView(
-                    result: result,
-                    isInitiallyInWatched: isWatched,
-                    isInitiallyInBacklog: isBacklog,
-                    onAddToWatched: { movie in
-                        onAddToWatched(movie)
-                        localWatchedKeys.insert(key)
-                    },
-                    onAddToBacklog: { movie in
-                        onAddToBacklog(movie)
-                        localBacklogKeys.insert(key)
-                    }
-                )
+            .sheet(isPresented: $showingDetail) {
+                if let result = detailResult {
+                    let key = keyFor(result: result)
+                    let isWatched = localWatchedKeys.contains(key)
+                    let isBacklog = localBacklogKeys.contains(key)
+                    
+                    SearchResultDetailView(
+                        result: result,
+                        isInitiallyInWatched: isWatched,
+                        isInitiallyInBacklog: isBacklog,
+                        onAddToWatched: { movie in
+                            // erst in deine Listen
+                            onAddToWatched(movie)
+                            // dann lokalen Status in der Suche aktualisieren
+                            localWatchedKeys.insert(key)
+                        },
+                        onAddToBacklog: { movie in
+                            onAddToBacklog(movie)
+                            localBacklogKeys.insert(key)
+                        }
+                    )
+                }
             }
-            // 👇 Toast-Overlay unten
+            // Toast-Overlay unten
             .overlay(alignment: .bottom) {
                 if showToast, let toastMessage {
                     toastView(message: toastMessage)
@@ -170,6 +226,7 @@ struct MovieSearchView: View {
                             query = ""
                             results = []
                             errorMessage = nil
+                            // Verlauf bleibt erhalten
                         } label: {
                             Image(systemName: "xmark.circle.fill")
                                 .foregroundStyle(.secondary)
@@ -198,6 +255,60 @@ struct MovieSearchView: View {
             }
         }
         .padding(.top, 8)
+    }
+    
+    // MARK: - „Zuletzt gesucht“-View
+    
+    private var recentQueriesView: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text("Zuletzt gesucht")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                if !recentQueries.isEmpty {
+                    Button {
+                        SearchHistoryManager.clear()
+                        recentQueries = []
+                    } label: {
+                        Text("Verlauf löschen")
+                            .font(.caption2)
+                    }
+                    .buttonStyle(.borderless)
+                    .foregroundStyle(.secondary)
+                }
+            }
+            
+            LazyVGrid(
+                columns: [GridItem(.adaptive(minimum: 90), spacing: 8)],
+                alignment: .leading,
+                spacing: 8
+            ) {
+                ForEach(recentQueries, id: \.self) { term in
+                    Button {
+                        query = term
+                        Task {
+                            await performSearch()
+                        }
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "clock.arrow.circlepath")
+                                .font(.caption2)
+                            Text(term)
+                                .font(.caption)
+                                .lineLimit(1)
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(Color(.secondarySystemBackground))
+                        .clipShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .padding(.horizontal)
+        .padding(.bottom, 4)
     }
     
     // MARK: - Ergebnis-Karte
@@ -256,8 +367,8 @@ struct MovieSearchView: View {
                         .foregroundStyle(.secondary)
                     
                     Button {
-                        // Nur noch das Item setzen – das triggert das Sheet
                         detailResult = result
+                        showingDetail = true
                     } label: {
                         HStack(spacing: 4) {
                             Image(systemName: "info.circle")
@@ -351,6 +462,7 @@ struct MovieSearchView: View {
         withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
             showToast = true
         }
+        // Nach kurzer Zeit wieder ausblenden
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
             withAnimation(.easeOut(duration: 0.25)) {
                 showToast = false
@@ -369,9 +481,15 @@ struct MovieSearchView: View {
         
         do {
             let fetchedResults = try await TMDbAPI.shared.searchMovies(query: trimmed)
+            
+            // NEU: Suchbegriff in Verlauf speichern
+            SearchHistoryManager.add(query: trimmed)
+            let updatedHistory = SearchHistoryManager.load()
+            
             await MainActor.run {
                 self.results = fetchedResults
                 self.isLoading = false
+                self.recentQueries = updatedHistory
             }
         } catch TMDbError.missingAPIKey {
             await MainActor.run {
@@ -396,6 +514,7 @@ struct MovieSearchView: View {
         return String(dateString.prefix(4))
     }
     
+    // Schlüssel, um konsistent zu erkennen, ob ein Film schon in einer Liste ist
     private static func keyFor(movie: Movie) -> String {
         (movie.title.lowercased()) + "|" + movie.year
     }

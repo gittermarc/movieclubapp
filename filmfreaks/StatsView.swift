@@ -24,6 +24,17 @@ struct StatsView: View {
     @State private var selectedRange: StatsTimeRange = .all
     @State private var selectedLocationFilter: String? = nil
     
+    // MARK: - Actor-Sheet State
+    @State private var selectedActorName: String? = nil
+    @State private var selectedActorDetails: TMDbPersonDetails? = nil
+    @State private var isLoadingActor: Bool = false
+    @State private var actorError: String? = nil
+    @State private var showingActorSheet: Bool = false
+    
+    // MARK: - Genre-Sheet State (NEU)
+    @State private var selectedGenre: String? = nil
+    @State private var showingGenreSheet: Bool = false
+    
     // Eigener Formatter für das "Zuletzt geschaut"-Feld
     private static let recentDateFormatter: DateFormatter = {
         let df = DateFormatter()
@@ -62,10 +73,10 @@ struct StatsView: View {
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                                 
-                                // 👇 NEU: Zeitbereich als Chips
+                                // Zeitraum als Chips
                                 Text("Zeitraum")
                                     .font(.subheadline)
-
+                                
                                 ScrollView(.horizontal, showsIndicators: false) {
                                     HStack(spacing: 8) {
                                         ForEach(StatsTimeRange.allCases) { range in
@@ -235,7 +246,7 @@ struct StatsView: View {
                         .padding(.vertical, 4)
                     }
                     
-                    // MARK: - Genres
+                    // MARK: - Genres (NEU: interaktiv)
                     
                     Section {
                         VStack(alignment: .leading, spacing: 8) {
@@ -262,20 +273,29 @@ struct StatsView: View {
                                     spacing: 8
                                 ) {
                                     ForEach(moviesByGenre.prefix(30), id: \.genre) { entry in
-                                        HStack(spacing: 6) {
-                                            Text(entry.genre)
-                                                .font(.caption)
-                                                .lineLimit(1)
-                                            Text("(\(entry.count))")
-                                                .font(.caption2)
-                                                .foregroundStyle(.secondary)
+                                        Button {
+                                            genreChipTapped(entry.genre)
+                                        } label: {
+                                            HStack(spacing: 6) {
+                                                Text(entry.genre)
+                                                    .font(.caption)
+                                                    .lineLimit(1)
+                                                Text("(\(entry.count))")
+                                                    .font(.caption2)
+                                                    .foregroundStyle(.secondary)
+                                            }
+                                            .padding(.horizontal, 10)
+                                            .padding(.vertical, 6)
+                                            .background(Color.blue.opacity(0.12))
+                                            .clipShape(Capsule())
                                         }
-                                        .padding(.horizontal, 10)
-                                        .padding(.vertical, 6)
-                                        .background(Color.blue.opacity(0.12))
-                                        .clipShape(Capsule())
+                                        .buttonStyle(.plain)
                                     }
                                 }
+                                
+                                Text("Tippe ein Genre, um die passenden Filme im Zeitraum zu sehen.")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
                             }
                         }
                         .padding(.vertical, 4)
@@ -308,18 +328,23 @@ struct StatsView: View {
                                     spacing: 8
                                 ) {
                                     ForEach(actorsByCount.prefix(30), id: \.actor) { entry in
-                                        HStack(spacing: 6) {
-                                            Text(entry.actor)
-                                                .font(.caption)
-                                                .lineLimit(1)
-                                            Text("(\(entry.count))")
-                                                .font(.caption2)
-                                                .foregroundStyle(.secondary)
+                                        Button {
+                                            actorChipTapped(entry.actor)
+                                        } label: {
+                                            HStack(spacing: 6) {
+                                                Text(entry.actor)
+                                                    .font(.caption)
+                                                    .lineLimit(1)
+                                                Text("(\(entry.count))")
+                                                    .font(.caption2)
+                                                    .foregroundStyle(.secondary)
+                                            }
+                                            .padding(.horizontal, 10)
+                                            .padding(.vertical, 6)
+                                            .background(Color.blue.opacity(0.12))
+                                            .clipShape(Capsule())
                                         }
-                                        .padding(.horizontal, 10)
-                                        .padding(.vertical, 6)
-                                        .background(Color.blue.opacity(0.12))
-                                        .clipShape(Capsule())
+                                        .buttonStyle(.plain)
                                     }
                                 }
                             }
@@ -460,9 +485,17 @@ struct StatsView: View {
                 .navigationTitle("Statistiken")
             }
         }
+        // Actor-Sheet
+        .sheet(isPresented: $showingActorSheet) {
+            actorDetailSheet()
+        }
+        // Genre-Sheet
+        .sheet(isPresented: $showingGenreSheet) {
+            genreMoviesSheet()
+        }
     }
     
-    // MARK: - Kleine Helfer-View für Dashboard-Karten
+    // MARK: - Dashboard-Karte
     
     private func statsCard(
         title: String,
@@ -664,6 +697,312 @@ struct StatsView: View {
         let avg = total / Double(scores.count)
         return (movieIds.count, avg)
     }
+    
+    // MARK: - Actor-Interaction
+    
+    private func actorChipTapped(_ name: String) {
+        selectedActorName = name
+        selectedActorDetails = nil
+        actorError = nil
+        isLoadingActor = true
+        showingActorSheet = true
+        
+        Task {
+            do {
+                if let details = try await TMDbAPI.shared.fetchPersonDetailsByName(name) {
+                    await MainActor.run {
+                        self.selectedActorDetails = details
+                        self.isLoadingActor = false
+                    }
+                } else {
+                    await MainActor.run {
+                        self.actorError = "Keine Details zu „\(name)“ gefunden."
+                        self.isLoadingActor = false
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    self.actorError = "Fehler beim Laden der Personendaten."
+                    self.isLoadingActor = false
+                }
+            }
+        }
+    }
+    
+    @ViewBuilder
+    private func actorDetailSheet() -> some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    
+                    if isLoadingActor {
+                        HStack(spacing: 8) {
+                            ProgressView()
+                            Text("Lade Personendaten …")
+                                .font(.subheadline)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .padding(.top, 40)
+                    } else if let error = actorError {
+                        Text(error)
+                            .font(.subheadline)
+                            .foregroundStyle(.red)
+                            .padding(.top, 40)
+                    } else if let details = selectedActorDetails {
+                        
+                        // Profilbild
+                        if let path = details.profile_path,
+                           let url = URL(string: "https://image.tmdb.org/t/p/w300\(path)") {
+                            AsyncImage(url: url) { phase in
+                                switch phase {
+                                case .empty:
+                                    Rectangle()
+                                        .foregroundStyle(.gray.opacity(0.2))
+                                        .frame(height: 260)
+                                case .success(let image):
+                                    image
+                                        .resizable()
+                                        .scaledToFill()
+                                        .frame(height: 260)
+                                        .clipped()
+                                case .failure:
+                                    Rectangle()
+                                        .foregroundStyle(.gray.opacity(0.2))
+                                        .frame(height: 260)
+                                        .overlay {
+                                            Image(systemName: "person.crop.rectangle")
+                                                .font(.largeTitle)
+                                                .foregroundStyle(.secondary)
+                                        }
+                                @unknown default:
+                                    Rectangle()
+                                        .foregroundStyle(.gray.opacity(0.2))
+                                        .frame(height: 260)
+                                }
+                            }
+                            .clipShape(RoundedRectangle(cornerRadius: 18))
+                        }
+                        
+                        // Basisinfos
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(details.name)
+                                .font(.title2.bold())
+                            
+                            if let dept = details.known_for_department, !dept.isEmpty {
+                                Text(dept)
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                            }
+                            
+                            // Kleine Info-Chips
+                            HStack(spacing: 8) {
+                                if let birthday = details.birthday, !birthday.isEmpty {
+                                    Label(birthday, systemImage: "calendar")
+                                        .font(.caption)
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 4)
+                                        .background(Color.gray.opacity(0.12))
+                                        .clipShape(Capsule())
+                                }
+                                
+                                if let place = details.place_of_birth, !place.isEmpty {
+                                    Label(place, systemImage: "mappin.and.ellipse")
+                                        .font(.caption)
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 4)
+                                        .background(Color.gray.opacity(0.12))
+                                        .clipShape(Capsule())
+                                }
+                                
+                                if let popularity = details.popularity {
+                                    Label(String(format: "Popularity %.1f", popularity),
+                                          systemImage: "sparkles")
+                                    .font(.caption)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .background(Color.yellow.opacity(0.15))
+                                    .clipShape(Capsule())
+                                }
+                            }
+                        }
+                        
+                        // Aliases
+                        if let aliases = details.also_known_as,
+                           !aliases.isEmpty {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Auch bekannt als")
+                                    .font(.subheadline.weight(.semibold))
+                                Text(aliases.joined(separator: ", "))
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        
+                        // Biographie
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Biografie")
+                                .font(.headline)
+                            
+                            if let bio = details.biography,
+                               !bio.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                Text(bio)
+                                    .font(.body)
+                            } else {
+                                Text("Keine Biografie verfügbar.")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    } else {
+                        Text("Keine Personendaten geladen.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .padding(.top, 40)
+                    }
+                }
+                .padding()
+            }
+            .navigationTitle(selectedActorName ?? "Darsteller:in")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Schließen") {
+                        showingActorSheet = false
+                    }
+                }
+            }
+        }
+    }
+    
+    // MARK: - Genre-Interaction
+    
+    private func genreChipTapped(_ genre: String) {
+        selectedGenre = genre
+        showingGenreSheet = true
+    }
+    
+    private var moviesForSelectedGenre: [Movie] {
+        guard let genre = selectedGenre else { return [] }
+        return filteredMovies.filter { movie in
+            guard let genres = movie.genres else { return false }
+            return genres.contains { $0.trimmingCharacters(in: .whitespacesAndNewlines) == genre }
+        }
+    }
+    
+    @ViewBuilder
+    private func genreMoviesSheet() -> some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 0) {
+                if let genre = selectedGenre {
+                    List {
+                        Section {
+                            if moviesForSelectedGenre.isEmpty {
+                                Text("Keine Filme für dieses Genre im aktuell gewählten Zeitraum und Ort.")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                            } else {
+                                ForEach(moviesForSelectedGenre) { movie in
+                                    HStack(spacing: 12) {
+                                        // kleines Poster
+                                        if let url = movie.posterURL {
+                                            AsyncImage(url: url) { phase in
+                                                switch phase {
+                                                case .empty:
+                                                    Rectangle()
+                                                        .foregroundStyle(.gray.opacity(0.2))
+                                                case .success(let image):
+                                                    image
+                                                        .resizable()
+                                                        .scaledToFill()
+                                                case .failure:
+                                                    Rectangle()
+                                                        .foregroundStyle(.gray.opacity(0.2))
+                                                        .overlay {
+                                                            Image(systemName: "film")
+                                                        }
+                                                @unknown default:
+                                                    Rectangle()
+                                                        .foregroundStyle(.gray.opacity(0.2))
+                                                }
+                                            }
+                                            .frame(width: 40, height: 60)
+                                            .clipShape(RoundedRectangle(cornerRadius: 6))
+                                        } else {
+                                            Rectangle()
+                                                .foregroundStyle(.gray.opacity(0.1))
+                                                .frame(width: 40, height: 60)
+                                                .clipShape(RoundedRectangle(cornerRadius: 6))
+                                                .overlay {
+                                                    Image(systemName: "film")
+                                                        .foregroundStyle(.secondary)
+                                                }
+                                        }
+                                        
+                                        VStack(alignment: .leading, spacing: 3) {
+                                            Text(movie.title)
+                                                .font(.subheadline.weight(.semibold))
+                                                .lineLimit(2)
+                                            
+                                            HStack(spacing: 6) {
+                                                Text(movie.year)
+                                                    .font(.caption)
+                                                    .foregroundStyle(.secondary)
+                                                
+                                                if let dateText = movie.watchedDateText {
+                                                    Text("• \(dateText)")
+                                                        .font(.caption)
+                                                        .foregroundStyle(.secondary)
+                                                }
+                                                
+                                                if let loc = movie.watchedLocation, !loc.isEmpty {
+                                                    Text("• \(loc)")
+                                                        .font(.caption)
+                                                        .foregroundStyle(.secondary)
+                                                }
+                                            }
+                                        }
+                                        
+                                        Spacer()
+                                        
+                                        if let avg = movie.averageRating ?? movie.tmdbRating {
+                                            Text(String(format: "%.1f", avg))
+                                                .font(.caption.bold())
+                                                .padding(.horizontal, 6)
+                                                .padding(.vertical, 4)
+                                                .background(Color.blue.opacity(0.12))
+                                                .clipShape(RoundedRectangle(cornerRadius: 6))
+                                        }
+                                    }
+                                    .padding(.vertical, 4)
+                                }
+                            }
+                        } header: {
+                            if !moviesForSelectedGenre.isEmpty {
+                                Text("\(moviesForSelectedGenre.count) Filme in „\(genre)“")
+                            } else {
+                                Text("Keine Ergebnisse")
+                            }
+                        }
+                    }
+                    .listStyle(.insetGrouped)
+                } else {
+                    Text("Kein Genre ausgewählt.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .padding()
+                }
+            }
+            .navigationTitle(selectedGenre ?? "Genre")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Schließen") {
+                        showingGenreSheet = false
+                    }
+                }
+            }
+        }
+    }
 }
 
 #Preview {
@@ -673,4 +1012,3 @@ struct StatsView: View {
             .environmentObject(UserStore())
     }
 }
-

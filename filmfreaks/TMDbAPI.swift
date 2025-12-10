@@ -74,12 +74,42 @@ struct TMDbMovieDetails: Decodable {
     let vote_average: Double
     let poster_path: String?
 
-    let credits: TMDbCredits?             // NEU
-    let keywords: TMDbKeywordsResponse?   // NEU
-    let videos: TMDbVideosResponse?       // NEU
-    let genres: [TMDbGenre]?      // NEU
+    let credits: TMDbCredits?
+    let keywords: TMDbKeywordsResponse?
+    let videos: TMDbVideosResponse?
+    let genres: [TMDbGenre]?
 }
 
+// MARK: - PERSON-MODELLE (NEU)
+
+// Antwort für /search/person
+struct TMDbPersonSearchResponse: Decodable {
+    let results: [TMDbPersonSummary]
+}
+
+// Kurzfassung einer Person (für Suchergebnisse)
+struct TMDbPersonSummary: Decodable, Identifiable {
+    let id: Int
+    let name: String
+    let profile_path: String?
+    let known_for_department: String?
+    let popularity: Double?
+}
+
+// Detaildaten einer Person (für Overlay etc.)
+struct TMDbPersonDetails: Decodable {
+    let id: Int
+    let name: String
+    let biography: String?
+    let birthday: String?
+    let deathday: String?
+    let place_of_birth: String?
+    let profile_path: String?
+    let homepage: String?
+    let known_for_department: String?
+    let also_known_as: [String]?
+    let popularity: Double?
+}
 
 enum TMDbError: Error {
     case missingAPIKey
@@ -94,16 +124,17 @@ final class TMDbAPI {
     
     static let shared = TMDbAPI()
     
-    // TODO: Deinen echten API Key hier eintragen
+    // Deinen API-Key hier
     private let apiKey: String = "efb878777c3bf57a2d6e8710061cc945"
     
     private init() {}
     
-    // Suche nach Filmen
+    // MARK: - Film-Suche
+    
     func searchMovies(query: String) async throws -> [TMDbMovieResult] {
         let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedQuery.isEmpty else { return [] }
-        guard apiKey != "" else {
+        guard !apiKey.isEmpty else {
             throw TMDbError.missingAPIKey
         }
         
@@ -134,9 +165,10 @@ final class TMDbAPI {
         }
     }
     
-    // Details für einen konkreten Film
+    // MARK: - Film-Details
+    
     func fetchMovieDetails(id: Int) async throws -> TMDbMovieDetails {
-        guard apiKey != "DEIN_TMDB_API_KEY_HIER" else {
+        guard !apiKey.isEmpty else {
             throw TMDbError.missingAPIKey
         }
         
@@ -164,5 +196,85 @@ final class TMDbAPI {
         } catch {
             throw TMDbError.decodingFailed
         }
+    }
+    
+    // MARK: - PERSONEN (SCHAUSPIELER etc.) – NEU
+    
+    /// Sucht Personen (Schauspieler*innen, Regie etc.) nach Name.
+    /// Gibt die Liste der Treffer zurück (meist reicht dir später der erste).
+    func searchPerson(name: String) async throws -> [TMDbPersonSummary] {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return [] }
+        guard !apiKey.isEmpty else {
+            throw TMDbError.missingAPIKey
+        }
+        
+        var components = URLComponents(string: "https://api.themoviedb.org/3/search/person")
+        components?.queryItems = [
+            URLQueryItem(name: "api_key", value: apiKey),
+            URLQueryItem(name: "query", value: trimmed),
+            URLQueryItem(name: "language", value: "de-DE"),
+            URLQueryItem(name: "include_adult", value: "false")
+        ]
+        
+        guard let url = components?.url else {
+            throw TMDbError.invalidURL
+        }
+        
+        let (data, response) = try await URLSession.shared.data(from: url)
+        
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200..<300).contains(httpResponse.statusCode) else {
+            throw TMDbError.requestFailed
+        }
+        
+        do {
+            let decoded = try JSONDecoder().decode(TMDbPersonSearchResponse.self, from: data)
+            return decoded.results
+        } catch {
+            throw TMDbError.decodingFailed
+        }
+    }
+    
+    /// Holt Detaildaten für eine Person basierend auf der TMDb-Person-ID.
+    func fetchPersonDetails(id: Int) async throws -> TMDbPersonDetails {
+        guard !apiKey.isEmpty else {
+            throw TMDbError.missingAPIKey
+        }
+        
+        var components = URLComponents(string: "https://api.themoviedb.org/3/person/\(id)")
+        components?.queryItems = [
+            URLQueryItem(name: "api_key", value: apiKey),
+            URLQueryItem(name: "language", value: "de-DE")
+            // Wenn du später mehr willst: append_to_response=combined_credits,images,external_ids etc.
+        ]
+        
+        guard let url = components?.url else {
+            throw TMDbError.invalidURL
+        }
+        
+        let (data, response) = try await URLSession.shared.data(from: url)
+        
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200..<300).contains(httpResponse.statusCode) else {
+            throw TMDbError.requestFailed
+        }
+        
+        do {
+            let decoded = try JSONDecoder().decode(TMDbPersonDetails.self, from: data)
+            return decoded
+        } catch {
+            throw TMDbError.decodingFailed
+        }
+    }
+    
+    /// Komfort-Funktion: Person per Name suchen und gleich die Details holen.
+    /// Nimmst du später perfekt für die tippbaren Actor-Chips in der StatsView.
+    func fetchPersonDetailsByName(_ name: String) async throws -> TMDbPersonDetails? {
+        let results = try await searchPerson(name: name)
+        guard let first = results.first else {
+            return nil
+        }
+        return try await fetchPersonDetails(id: first.id)
     }
 }
