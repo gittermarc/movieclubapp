@@ -17,6 +17,7 @@ struct GroupSettingsView: View {
     @State private var newGroupName: String = ""
     @State private var joinCode: String = ""
     @State private var didCopyInviteCode: Bool = false
+    @State private var showLeaveAlert: Bool = false
     
     // MARK: - Aktuelle Gruppe
     
@@ -147,36 +148,59 @@ struct GroupSettingsView: View {
                                 .foregroundStyle(.white.opacity(0.85))
                             }
                             
-                            // Invite- & Copy-Aktionen
+                            // Invite- & Copy-Aktionen + Gruppe verlassen
                             if let id = movieStore.currentGroupId {
-                                HStack(spacing: 10) {
-                                    Spacer()
-                                    
-                                    ShareLink(
-                                        item: "Komm in unsere Filmgruppe in FilmFreaks! Invite-Code: \(id)",
-                                        subject: Text("FilmFreaks Invite-Code"),
-                                        message: Text("Mit diesem Code kannst du unserer Filmgruppe in FilmFreaks beitreten:\n\(id)")
-                                    ) {
-                                        Label("Invite-Code teilen", systemImage: "square.and.arrow.up")
-                                            .font(.footnote.weight(.semibold))
-                                            .padding(.horizontal, 10)
-                                            .padding(.vertical, 6)
-                                            .background(Color.white.opacity(0.18))
-                                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                                VStack(spacing: 6) {
+                                    HStack(spacing: 10) {
+                                        Spacer()
+                                        
+                                        ShareLink(
+                                            item: "Komm in unsere Filmgruppe in FilmFreaks! Invite-Code: \(id)",
+                                            subject: Text("FilmFreaks Invite-Code"),
+                                            message: Text("Mit diesem Code kannst du unserer Filmgruppe in FilmFreaks beitreten:\n\(id)")
+                                        ) {
+                                            Label("Invite-Code teilen", systemImage: "square.and.arrow.up")
+                                                .font(.footnote.weight(.semibold))
+                                                .padding(.horizontal, 10)
+                                                .padding(.vertical, 6)
+                                                .background(Color.white.opacity(0.18))
+                                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                                        }
+                                        
+                                        Button {
+                                            copyInviteCodeToClipboard(id)
+                                        } label: {
+                                            Label("Code kopieren", systemImage: "doc.on.doc")
+                                                .font(.footnote.weight(.semibold))
+                                                .padding(.horizontal, 10)
+                                                .padding(.vertical, 6)
+                                                .background(Color.white.opacity(0.18))
+                                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                                        }
+                                        
+                                        Spacer()
                                     }
                                     
-                                    Button {
-                                        copyInviteCodeToClipboard(id)
-                                    } label: {
-                                        Label("Code kopieren", systemImage: "doc.on.doc")
+                                    // 👇 NEU: Gruppe verlassen
+                                    HStack {
+                                        Spacer()
+                                        Button {
+                                            showLeaveAlert = true
+                                        } label: {
+                                            HStack(spacing: 6) {
+                                                Image(systemName: "rectangle.portrait.and.arrow.right")
+                                                Text("Gruppe verlassen")
+                                            }
                                             .font(.footnote.weight(.semibold))
-                                            .padding(.horizontal, 10)
+                                            .padding(.horizontal, 12)
                                             .padding(.vertical, 6)
-                                            .background(Color.white.opacity(0.18))
+                                            .background(Color.white.opacity(0.14))
+                                            .foregroundStyle(.white)
                                             .clipShape(RoundedRectangle(cornerRadius: 12))
+                                        }
+                                        .buttonStyle(.plain)
+                                        Spacer()
                                     }
-                                    
-                                    Spacer()
                                 }
                                 .padding(.top, 6)
                                 
@@ -268,12 +292,25 @@ struct GroupSettingsView: View {
                                 .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
                                 .listRowBackground(Color.clear)
                             }
+                            // 👇 NEU: Gruppen per Swipe löschen
+                            .onDelete { indexSet in
+                                let idsToDelete = indexSet.map { movieStore.knownGroups[$0].id }
+                                
+                                movieStore.knownGroups.remove(atOffsets: indexSet)
+                                
+                                // Falls die aktive Gruppe gelöscht wurde → auch verlassen
+                                if let currentId = movieStore.currentGroupId,
+                                   idsToDelete.contains(currentId) {
+                                    movieStore.leaveCurrentGroup()
+                                    userStore.loadUsers(forGroupId: movieStore.currentGroupId)
+                                }
+                            }
                         }
                     } header: {
                         Text("Bekannte Gruppen")
                     } footer: {
                         if !movieStore.knownGroups.isEmpty {
-                            Text("Tippe auf „Wechseln“, um deine Filmansicht auf eine andere Gruppe umzustellen.")
+                            Text("Tippe auf „Wechseln“, um deine Filmansicht auf eine andere Gruppe umzustellen. Streiche nach links, um eine Gruppe von diesem Gerät zu entfernen.")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
@@ -362,6 +399,16 @@ struct GroupSettingsView: View {
                             dismiss()
                         }
                     }
+                }
+                // 👇 NEU: Bestätigungsdialog für „Gruppe verlassen“
+                .alert("Gruppe verlassen?", isPresented: $showLeaveAlert) {
+                    Button("Abbrechen", role: .cancel) {}
+                    Button("Verlassen", role: .destructive) {
+                        movieStore.leaveCurrentGroup()
+                        userStore.loadUsers(forGroupId: movieStore.currentGroupId)
+                    }
+                } message: {
+                    Text("Du verlässt diese Gruppe auf diesem Gerät. Die Filme bleiben für andere Mitglieder in iCloud erhalten.")
                 }
             }
         }

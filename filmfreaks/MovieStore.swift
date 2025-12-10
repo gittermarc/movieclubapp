@@ -317,6 +317,31 @@ class MovieStore: ObservableObject {
         }
     }
     
+    /// Aktuelle Gruppe lokal verlassen (ohne Filme für andere zu löschen)
+    func leaveCurrentGroup() {
+        guard let oldId = currentGroupId else { return }
+        
+        print("MovieStore: leaving group with id \(oldId)")
+        
+        // Aus der bekannten Gruppenliste entfernen
+        knownGroups.removeAll { $0.id == oldId }
+        
+        // Gruppe zurücksetzen
+        currentGroupId = nil
+        currentGroupName = nil
+        
+        // Lokale Listen leeren, ohne Cloud-Löschungen auszulösen
+        isApplyingCloudUpdate = true
+        movies = []
+        backlogMovies = []
+        isApplyingCloudUpdate = false
+        
+        // Optional: Standard-/„nil“-Gruppe aus Cloud laden (falls es dort Daten gibt)
+        Task {
+            await self.loadFromCloud()
+        }
+    }
+    
     // MARK: - bekannte Gruppen verwalten
     
     private func addOrUpdateCurrentGroupInKnownGroups() {
