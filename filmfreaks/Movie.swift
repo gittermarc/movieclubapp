@@ -28,6 +28,9 @@ struct Rating: Identifiable, Codable {
     /// Sterne pro Kriterium (0–3)
     var scores: [RatingCriterion: Int]
     
+    /// Optionaler Freitext-Kommentar zur Bewertung
+    var comment: String? = nil
+    
     /// Durchschnitt über alle Kriterien in Sternen (0–3, ggf. z.B. 2.3)
     var averageStars: Double {
         guard !scores.isEmpty else { return 0 }

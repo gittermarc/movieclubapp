@@ -20,6 +20,7 @@ struct MovieDetailView: View {
     @State private var localWatchedLocation: String = ""
     @State private var localScores: [RatingCriterion: Int] = [:]
     @State private var localSuggestedBy: String = ""
+    @State private var localComment: String = ""   // 👈 NEU: Kommentar für aktuelle Bewertung
     
     // TMDb-Details
     @State private var details: TMDbMovieDetails?
@@ -334,7 +335,7 @@ struct MovieDetailView: View {
                         if !movie.ratings.isEmpty {
                             section(title: "Einzelbewertungen") {
                                 ForEach(movie.ratings) { rating in
-                                    VStack(alignment: .leading, spacing: 4) {
+                                    VStack(alignment: .leading, spacing: 6) {
                                         HStack {
                                             Text(rating.reviewerName)
                                                 .font(.subheadline)
@@ -353,6 +354,22 @@ struct MovieDetailView: View {
                                                 Spacer()
                                                 Text(value == 0 ? "–" : String(repeating: "★", count: value))
                                                     .font(.caption)
+                                            }
+                                        }
+                                        
+                                        // 👇 NEU: Kommentar anzeigen, wenn vorhanden
+                                        if let comment = rating.comment,
+                                           !comment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                            Divider()
+                                                .padding(.vertical, 4)
+                                            HStack(alignment: .top, spacing: 6) {
+                                                Image(systemName: "quote.opening")
+                                                    .font(.caption2)
+                                                    .foregroundStyle(.secondary)
+                                                    .padding(.top, 2)
+                                                Text(comment)
+                                                    .font(.caption)
+                                                    .foregroundStyle(.secondary)
                                             }
                                         }
                                     }
@@ -420,6 +437,18 @@ struct MovieDetailView: View {
                                             .frame(width: 200)
                                         }
                                     }
+                                }
+                                
+                                // 👇 NEU: Kommentarfeld
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("Kommentar (optional)")
+                                        .font(.subheadline)
+                                    
+                                    TextEditor(text: $localComment)
+                                        .frame(minHeight: 60, maxHeight: 120)
+                                        .padding(6)
+                                        .background(Color.gray.opacity(0.08))
+                                        .clipShape(RoundedRectangle(cornerRadius: 8))
                                 }
                                 
                                 Button {
@@ -583,7 +612,14 @@ struct MovieDetailView: View {
         }
         
         let name = selectedUser.name
-        let newRating = Rating(reviewerName: name, scores: scores)
+        let trimmedComment = localComment.trimmingCharacters(in: .whitespacesAndNewlines)
+        let finalComment: String? = trimmedComment.isEmpty ? nil : trimmedComment
+        
+        var newRating = Rating(
+            reviewerName: name,
+            scores: scores
+        )
+        newRating.comment = finalComment    // 👈 Kommentar anhängen
         
         if let index = movie.ratings.firstIndex(where: { $0.reviewerName.lowercased() == name.lowercased() }) {
             movie.ratings[index] = newRating
@@ -595,6 +631,7 @@ struct MovieDetailView: View {
     private func loadExistingRatingForSelectedUser() {
         guard let selectedUser = userStore.selectedUser else {
             localScores = [:]
+            localComment = ""
             return
         }
         
@@ -604,12 +641,14 @@ struct MovieDetailView: View {
                 scores[criterion] = rating.scores[criterion] ?? 0
             }
             localScores = scores
+            localComment = rating.comment ?? ""
         } else {
             var scores: [RatingCriterion: Int] = [:]
             for criterion in RatingCriterion.allCases {
                 scores[criterion] = 0
             }
             localScores = scores
+            localComment = ""
         }
     }
     
