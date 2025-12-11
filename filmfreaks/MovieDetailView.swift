@@ -20,7 +20,7 @@ struct MovieDetailView: View {
     @State private var localWatchedLocation: String = ""
     @State private var localScores: [RatingCriterion: Int] = [:]
     @State private var localSuggestedBy: String = ""
-    @State private var localComment: String = ""   // 👈 NEU: Kommentar für aktuelle Bewertung
+    @State private var localComment: String = ""   // Kommentar für aktuelle Bewertung
     
     // TMDb-Details
     @State private var details: TMDbMovieDetails?
@@ -357,7 +357,7 @@ struct MovieDetailView: View {
                                             }
                                         }
                                         
-                                        // 👇 NEU: Kommentar anzeigen, wenn vorhanden
+                                        // Kommentar anzeigen, wenn vorhanden
                                         if let comment = rating.comment,
                                            !comment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                                             Divider()
@@ -439,7 +439,7 @@ struct MovieDetailView: View {
                                     }
                                 }
                                 
-                                // 👇 NEU: Kommentarfeld
+                                // Kommentarfeld
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text("Kommentar (optional)")
                                         .font(.subheadline)
@@ -619,7 +619,7 @@ struct MovieDetailView: View {
             reviewerName: name,
             scores: scores
         )
-        newRating.comment = finalComment    // 👈 Kommentar anhängen
+        newRating.comment = finalComment    // Kommentar anhängen
         
         if let index = movie.ratings.firstIndex(where: { $0.reviewerName.lowercased() == name.lowercased() }) {
             movie.ratings[index] = newRating
@@ -708,10 +708,37 @@ struct MovieDetailView: View {
         
         do {
             let fetched = try await TMDbAPI.shared.fetchMovieDetails(id: id)
+            
             await MainActor.run {
+                // Details für die View merken
                 self.details = fetched
+                
+                // Movie mit Genres & Cast anreichern
+                let genreNames = fetched.genres?
+                    .map { $0.name.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { !$0.isEmpty }
+                
+                let castNames = fetched.credits?.cast
+                    .map { $0.name.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { !$0.isEmpty }
+                
+                if let genreNames, !genreNames.isEmpty {
+                    self.movie.genres = genreNames
+                }
+                
+                if let castNames, !castNames.isEmpty {
+                    self.movie.cast = castNames
+                }
+                
+                // Optional: TMDb-Rating & Poster aktualisieren, falls vorhanden
+                self.movie.tmdbRating = fetched.vote_average
+                if let posterPath = fetched.poster_path {
+                    self.movie.posterPath = posterPath
+                }
+                
                 self.isLoadingDetails = false
             }
+            
         } catch TMDbError.missingAPIKey {
             await MainActor.run {
                 self.detailsError = "TMDb API-Key fehlt. Bitte in TMDbAPI.swift eintragen."
@@ -725,6 +752,8 @@ struct MovieDetailView: View {
         }
     }
 }
+
+// MARK: - Preview
 
 #Preview {
     NavigationStack {
