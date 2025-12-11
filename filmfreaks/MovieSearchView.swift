@@ -169,39 +169,35 @@ struct MovieSearchView: View {
                     }
                 }
             }
-            .sheet(isPresented: $showingDetail) {
-                if let result = detailResult {
-                    let key = keyFor(result: result)
-                    let isWatched = localWatchedKeys.contains(key)
-                    let isBacklog = localBacklogKeys.contains(key)
-                    
-                    SearchResultDetailView(
-                        result: result,
-                        isInitiallyInWatched: isWatched,
-                        isInitiallyInBacklog: isBacklog,
-                        onAddToWatched: { movie in
-                            // erst in deine Listen
-                            onAddToWatched(movie)
-                            // dann lokalen Status in der Suche aktualisieren
-                            localWatchedKeys.insert(key)
-                        },
-                        onAddToBacklog: { movie in
-                            onAddToBacklog(movie)
-                            localBacklogKeys.insert(key)
-                        }
-                    )
-                }
-            }
-            // Toast-Overlay unten
-            .overlay(alignment: .bottom) {
-                if showToast, let toastMessage {
-                    toastView(message: toastMessage)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
-                        .padding(.bottom, 16)
-                }
-            }
-        }
-    }
+            .sheet(item: $detailResult) { result in
+                 let key = keyFor(result: result)
+                 let isWatched = localWatchedKeys.contains(key)
+                 let isBacklog = localBacklogKeys.contains(key)
+                 
+                 SearchResultDetailView(
+                     result: result,
+                     isInitiallyInWatched: isWatched,
+                     isInitiallyInBacklog: isBacklog,
+                     onAddToWatched: { movie in
+                         onAddToWatched(movie)
+                         localWatchedKeys.insert(key)
+                     },
+                     onAddToBacklog: { movie in
+                         onAddToBacklog(movie)
+                         localBacklogKeys.insert(key)
+                     }
+                 )
+             }
+             // 👇 Toast-Overlay unten
+             .overlay(alignment: .bottom) {
+                 if showToast, let toastMessage {
+                     toastView(message: toastMessage)
+                         .transition(.move(edge: .bottom).combined(with: .opacity))
+                         .padding(.bottom, 16)
+                 }
+             }
+         }
+     }
     
     // MARK: - Suchkopf
     
