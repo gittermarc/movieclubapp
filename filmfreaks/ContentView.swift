@@ -34,6 +34,7 @@ struct ContentView: View {
     @State private var showingSearchMovie = false
     @State private var showingUsers = false
     @State private var showingStats = false
+    @State private var showingGoals = false          // 👈 NEU: Ziele
     @State private var showingGroupSettings = false
     
     @State private var selectedMode: MovieListMode = .watched
@@ -249,6 +250,13 @@ struct ContentView: View {
                         Image(systemName: "chart.bar.fill")
                     }
                     
+                    // 👇 NEU: Ziele-Button (zwischen Stats und Mitglieder)
+                    Button {
+                        showingGoals = true
+                    } label: {
+                        Image(systemName: "target")
+                    }
+                    
                     Button {
                         showingUsers = true
                     } label: {
@@ -311,6 +319,10 @@ struct ContentView: View {
             }
             .sheet(isPresented: $showingStats) {
                 StatsView()
+            }
+            .sheet(isPresented: $showingGoals) {
+                GoalsView()                      // 👈 NEU
+                    .environmentObject(movieStore)
             }
             .sheet(isPresented: $showingGroupSettings) {
                 GroupSettingsView()
