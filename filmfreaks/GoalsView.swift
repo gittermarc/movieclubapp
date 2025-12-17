@@ -5,7 +5,6 @@
 //  Created by Marc Fechner on 17.12.25.
 //
 
-
 internal import SwiftUI
 
 struct GoalsView: View {
@@ -15,6 +14,7 @@ struct GoalsView: View {
     
     @State private var selectedYear: Int = Calendar.current.component(.year, from: Date())
     @State private var goalsByYear: [Int: Int] = [:]
+    @State private var isSyncingGoals: Bool = false
     
     private let storageKey = "ViewingGoalsByYear"
     private let defaultGoal = 50
@@ -80,6 +80,27 @@ struct GoalsView: View {
                     }
                     .padding()
                 }
+                
+                // Optional: kleiner Sync-Indikator für Ziele
+                if isSyncingGoals {
+                    VStack {
+                        Spacer()
+                        HStack {
+                            Spacer()
+                            HStack(spacing: 8) {
+                                ProgressView()
+                                Text("Ziele werden synchronisiert …")
+                                    .font(.caption)
+                            }
+                            .padding(8)
+                            .background(.ultraThinMaterial)
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                            .shadow(radius: 4)
+                            .padding()
+                        }
+                    }
+                    .transition(.opacity)
+                }
             }
             .navigationTitle("Ziele")
             .toolbar {
@@ -91,6 +112,8 @@ struct GoalsView: View {
             }
             .onAppear {
                 loadGoals()
+                
+                // Sicherstellen, dass ein Jahr gewählt ist, das es gibt
                 if !availableYears.contains(selectedYear),
                    let first = availableYears.first {
                     selectedYear = first
@@ -153,12 +176,13 @@ struct GoalsView: View {
                     let binding = Binding<Int>(
                         get: { targetForSelectedYear },
                         set: { newValue in
-                            goalsByYear[selectedYear] = max(newValue, 0)
-                            saveGoals()
+                            let clamped = max(newValue, 1)
+                            goalsByYear[selectedYear] = clamped
+                            goalChanged(forYear: selectedYear, target: clamped)
                         }
                     )
                     
-                    Stepper(value: binding, in: 0...500) {
+                    Stepper(value: binding, in: 1...500) {
                         Text("\(binding.wrappedValue) Filme")
                             .font(.subheadline)
                     }
@@ -294,20 +318,61 @@ struct GoalsView: View {
             }
     }
     
-    // MARK: - Persistence
+    // MARK: - Persistence (lokal + CloudKit)
     
+    /// Lokale Ziele laden + aus CloudKit nachziehen
     private func loadGoals() {
+        // 1. Lokal (Cache)
         if let data = UserDefaults.standard.data(forKey: storageKey),
            let decoded = try? JSONDecoder().decode([Int: Int].self, from: data) {
             goalsByYear = decoded
         } else {
             goalsByYear = [:]
         }
+        
+        // 2. CloudKit für aktuelle Gruppe
+        let groupId = movieStore.currentGroupId ?? ""
+        
+        isSyncingGoals = true
+        Task {
+            do {
+                let remote = try await CloudKitGoalStore.shared.fetchGoals(forGroupId: groupId)
+                await MainActor.run {
+                    self.goalsByYear = remote
+                    self.saveGoalsToCache()
+                    self.isSyncingGoals = false
+                }
+            } catch {
+                print("CloudKit ViewingGoal fetch error: \(error)")
+                await MainActor.run {
+                    self.isSyncingGoals = false
+                }
+            }
+        }
     }
     
-    private func saveGoals() {
+    /// Nur lokalen Cache aktualisieren
+    private func saveGoalsToCache() {
         if let data = try? JSONEncoder().encode(goalsByYear) {
             UserDefaults.standard.set(data, forKey: storageKey)
+        }
+    }
+    
+    /// Reagiert auf eine Änderung des Ziels für ein bestimmtes Jahr.
+    private func goalChanged(forYear year: Int, target: Int) {
+        saveGoalsToCache()
+        let groupId = movieStore.currentGroupId ?? ""
+        
+        isSyncingGoals = true
+        Task {
+            do {
+                try await CloudKitGoalStore.shared.saveGoal(year: year, target: target, groupId: groupId)
+            } catch {
+                print("CloudKit ViewingGoal save error: \(error)")
+            }
+            await MainActor.run {
+                self.isSyncingGoals = false
+            }
         }
     }
 }
