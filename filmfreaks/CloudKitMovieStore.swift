@@ -41,18 +41,34 @@ struct CloudKitMovieStore {
     ///   - nil    → Filme ohne Gruppe (alte / lokale Standard-Gruppe)
     ///   - String → Filme mit genau dieser Group-ID (Invite-Code)
     func fetchMovies(forGroupId groupId: String?) async throws -> [CloudMovieEntry] {
-        
-        let predicate: NSPredicate
-        
+        // Gruppe mit Invite-Code
         if let groupId {
-            // Nur Filme für diese Group-ID
-            predicate = NSPredicate(format: "%K == %@", groupIdKey, groupId)
+            // 1. Neuer, schneller Weg: nur Records mit gesetztem groupId-Feld
+            let fastPredicate = NSPredicate(format: "%K == %@", groupIdKey, groupId)
+            let fastEntries = try await fetchMovies(with: fastPredicate)
+            
+            if !fastEntries.isEmpty {
+                // Es gibt schon Records mit groupId-Feld → perfekt, direkt zurückgeben
+                return fastEntries
+            }
+            
+            // 2. Fallback für alte Datensätze:
+            //    Alle Movies laden und nach movie.groupId im Payload filtern.
+            //    So werden alte Einträge gefunden, bei denen groupId nur im JSON steckt.
+            let allEntries = try await fetchMovies(with: NSPredicate(value: true))
+            let legacyMatches = allEntries.filter { $0.movie.groupId == groupId }
+            return legacyMatches
+            
         } else {
-            // Alte / lokale Gruppe ohne Group-ID:
-            // Records, bei denen das Feld nicht gesetzt ist bzw. nil ist
-            predicate = NSPredicate(format: "%K == nil", groupIdKey)
+            // „Standardgruppe“ ohne Group-ID:
+            // Records, bei denen das Feld nicht gesetzt ist bzw. nil ist.
+            let predicate = NSPredicate(format: "%K == nil", groupIdKey)
+            return try await fetchMovies(with: predicate)
         }
-        
+    }
+    
+    /// Interne Helper-Funktion, die eine Query mit Paginierung ausführt.
+    private func fetchMovies(with predicate: NSPredicate) async throws -> [CloudMovieEntry] {
         let query = CKQuery(recordType: recordType, predicate: predicate)
         
         var entries: [CloudMovieEntry] = []
@@ -85,7 +101,6 @@ struct CloudKitMovieStore {
         
         return entries
     }
-
     
     // MARK: - Speichern (Upsert)
     
