@@ -6,7 +6,6 @@
 //
 
 internal import SwiftUI
-import UIKit
 
 struct GroupSettingsView: View {
     
@@ -16,7 +15,6 @@ struct GroupSettingsView: View {
     
     @State private var newGroupName: String = ""
     @State private var joinCode: String = ""
-    @State private var didCopyInviteCode: Bool = false
     @State private var showLeaveAlert: Bool = false
     
     // MARK: - Aktuelle Gruppe
@@ -100,18 +98,18 @@ struct GroupSettingsView: View {
                                             .foregroundStyle(.white.opacity(0.85))
                                     } else {
                                         Text("Standard-Gruppe ohne Invite-Code")
-                                            .font(.footnote)
-                                            .foregroundStyle(.white.opacity(0.85))
+                                        .font(.footnote)
+                                        .foregroundStyle(.white.opacity(0.85))
                                     }
                                 }
                                 
                                 Spacer()
                             }
                             
-                            // Stats-Chips zur Gruppe
+                            // Stats-Chips zur Gruppe – nur Zahlen + Icon
                             if totalMoviesInCurrentGroup > 0 {
                                 HStack(spacing: 8) {
-                                    Label("\(totalMoviesInCurrentGroup) Filme gesamt", systemImage: "film.stack")
+                                    Label("\(totalMoviesInCurrentGroup)", systemImage: "film.stack")
                                         .font(.caption)
                                         .foregroundStyle(.white)
                                         .padding(.horizontal, 8)
@@ -119,7 +117,7 @@ struct GroupSettingsView: View {
                                         .background(Color.white.opacity(0.16))
                                         .clipShape(Capsule())
                                     
-                                    Label("\(watchedCount) gesehen", systemImage: "checkmark.circle")
+                                    Label("\(watchedCount)", systemImage: "checkmark.circle")
                                         .font(.caption)
                                         .foregroundStyle(.white.opacity(0.95))
                                         .padding(.horizontal, 8)
@@ -127,7 +125,7 @@ struct GroupSettingsView: View {
                                         .background(Color.white.opacity(0.16))
                                         .clipShape(Capsule())
                                     
-                                    Label("\(backlogCount) im Backlog", systemImage: "tray.full")
+                                    Label("\(backlogCount)", systemImage: "tray.full")
                                         .font(.caption)
                                         .foregroundStyle(.white.opacity(0.95))
                                         .padding(.horizontal, 8)
@@ -148,9 +146,9 @@ struct GroupSettingsView: View {
                                 .foregroundStyle(.white.opacity(0.85))
                             }
                             
-                            // Invite- & Copy-Aktionen + Gruppe verlassen
+                            // Invite-Aktion + Gruppe verlassen
                             if let id = movieStore.currentGroupId {
-                                VStack(spacing: 6) {
+                                VStack(spacing: 10) {
                                     HStack(spacing: 10) {
                                         Spacer()
                                         
@@ -167,21 +165,10 @@ struct GroupSettingsView: View {
                                                 .clipShape(RoundedRectangle(cornerRadius: 12))
                                         }
                                         
-                                        Button {
-                                            copyInviteCodeToClipboard(id)
-                                        } label: {
-                                            Label("Code kopieren", systemImage: "doc.on.doc")
-                                                .font(.footnote.weight(.semibold))
-                                                .padding(.horizontal, 10)
-                                                .padding(.vertical, 6)
-                                                .background(Color.white.opacity(0.18))
-                                                .clipShape(RoundedRectangle(cornerRadius: 12))
-                                        }
-                                        
                                         Spacer()
                                     }
                                     
-                                    // 👇 NEU: Gruppe verlassen
+                                    // Gruppe verlassen – rot & auffällig
                                     HStack {
                                         Spacer()
                                         Button {
@@ -194,8 +181,12 @@ struct GroupSettingsView: View {
                                             .font(.footnote.weight(.semibold))
                                             .padding(.horizontal, 12)
                                             .padding(.vertical, 6)
-                                            .background(Color.white.opacity(0.14))
-                                            .foregroundStyle(.white)
+                                            .background(Color.white.opacity(0.06))
+                                            .foregroundStyle(Color.red)
+                                            .overlay(
+                                                RoundedRectangle(cornerRadius: 12)
+                                                    .stroke(Color.red.opacity(0.8), lineWidth: 1)
+                                            )
                                             .clipShape(RoundedRectangle(cornerRadius: 12))
                                         }
                                         .buttonStyle(.plain)
@@ -203,21 +194,6 @@ struct GroupSettingsView: View {
                                     }
                                 }
                                 .padding(.top, 6)
-                                
-                                if didCopyInviteCode {
-                                    HStack {
-                                        Spacer()
-                                        HStack(spacing: 4) {
-                                            Image(systemName: "checkmark.circle.fill")
-                                                .font(.caption2)
-                                            Text("Invite-Code kopiert")
-                                                .font(.caption2)
-                                        }
-                                        .foregroundStyle(.white.opacity(0.9))
-                                        Spacer()
-                                    }
-                                    .padding(.top, 2)
-                                }
                                 
                             } else {
                                 Text("Diese Gruppe ist nur auf deinem Gerät sichtbar. Erstelle eine neue Gruppe, um einen Invite-Code zu erhalten und gemeinsam mit anderen Filme zu verwalten.")
@@ -292,7 +268,7 @@ struct GroupSettingsView: View {
                                 .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
                                 .listRowBackground(Color.clear)
                             }
-                            // 👇 NEU: Gruppen per Swipe löschen
+                            // Gruppen per Swipe löschen
                             .onDelete { indexSet in
                                 let idsToDelete = indexSet.map { movieStore.knownGroups[$0].id }
                                 
@@ -400,7 +376,7 @@ struct GroupSettingsView: View {
                         }
                     }
                 }
-                // 👇 NEU: Bestätigungsdialog für „Gruppe verlassen“
+                // Bestätigungsdialog für „Gruppe verlassen“
                 .alert("Gruppe verlassen?", isPresented: $showLeaveAlert) {
                     Button("Abbrechen", role: .cancel) {}
                     Button("Verlassen", role: .destructive) {
@@ -410,20 +386,6 @@ struct GroupSettingsView: View {
                 } message: {
                     Text("Du verlässt diese Gruppe auf diesem Gerät. Die Filme bleiben für andere Mitglieder in iCloud erhalten.")
                 }
-            }
-        }
-    }
-    
-    // MARK: - Helper
-    
-    private func copyInviteCodeToClipboard(_ code: String) {
-        UIPasteboard.general.string = code
-        withAnimation {
-            didCopyInviteCode = true
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.8) {
-            withAnimation {
-                didCopyInviteCode = false
             }
         }
     }

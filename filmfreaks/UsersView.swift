@@ -10,11 +10,13 @@ internal import SwiftUI
 struct UsersView: View {
     
     @EnvironmentObject var userStore: UserStore
+    @EnvironmentObject var movieStore: MovieStore
     @State private var newUserName: String = ""
     
     var body: some View {
         NavigationStack {
             List {
+                // MARK: - Neue Person hinzufügen
                 Section("Neue Person hinzufügen") {
                     HStack {
                         TextField("Name", text: $newUserName)
@@ -29,6 +31,7 @@ struct UsersView: View {
                     }
                 }
                 
+                // MARK: - Mitglieder der Filmgruppe
                 Section("Mitglieder der Filmgruppe") {
                     if userStore.users.isEmpty {
                         Text("Noch keine Mitglieder hinzugefügt.")
@@ -37,6 +40,7 @@ struct UsersView: View {
                         ForEach(userStore.users) { user in
                             HStack {
                                 Text(user.name)
+                                
                                 if userStore.selectedUser == user {
                                     Spacer()
                                     Text("Aktiv")
@@ -54,6 +58,33 @@ struct UsersView: View {
                         .onDelete(perform: userStore.deleteUsers)
                     }
                 }
+                
+                // MARK: - Gruppenverwaltung
+                Section("Gruppenverwaltung") {
+                    NavigationLink {
+                        GroupSettingsView()
+                    } label: {
+                        HStack(spacing: 10) {
+                            Image(systemName: "person.3.sequence.fill")
+                                .foregroundStyle(Color.accentColor)
+                            
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Gruppen verwalten")
+                                    .font(.subheadline.weight(.semibold))
+                                
+                                if let name = movieStore.currentGroupName {
+                                    Text("Aktuelle Gruppe: \(name)")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                } else {
+                                    Text("Standard-Gruppe (ohne Invite-Code)")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                    }
+                }
             }
             .navigationTitle("Filmgruppe")
             .toolbar {
@@ -68,4 +99,5 @@ struct UsersView: View {
 #Preview {
     UsersView()
         .environmentObject(UserStore())
+        .environmentObject(MovieStore.preview())
 }
