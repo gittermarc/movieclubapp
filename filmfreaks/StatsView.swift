@@ -31,7 +31,7 @@ struct StatsView: View {
     @State private var actorError: String? = nil
     @State private var showingActorSheet: Bool = false
     
-    // MARK: - Genre-Sheet State (NEU)
+    // MARK: - Genre-Sheet State
     @State private var selectedGenre: String? = nil
     @State private var showingGenreSheet: Bool = false
     
@@ -246,7 +246,7 @@ struct StatsView: View {
                         .padding(.vertical, 4)
                     }
                     
-                    // MARK: - Genres (NEU: interaktiv)
+                    // MARK: - Genres (interaktiv)
                     
                     Section {
                         VStack(alignment: .leading, spacing: 8) {
@@ -698,6 +698,16 @@ struct StatsView: View {
         return (movieIds.count, avg)
     }
     
+    // MARK: - Filme für ausgewählten Schauspieler
+    
+    private var moviesForSelectedActor: [Movie] {
+        guard let actorName = selectedActorName?.lowercased() else { return [] }
+        return filteredMovies.filter { movie in
+            guard let cast = movie.cast else { return false }
+            return cast.contains { $0.lowercased() == actorName }
+        }
+    }
+    
     // MARK: - Actor-Interaction
     
     private func actorChipTapped(_ name: String) {
@@ -858,6 +868,98 @@ struct StatsView: View {
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                             .padding(.top, 40)
+                    }
+                    
+                    // 👇 NEU: Filme, in denen dieser Schauspieler in eurer Gruppe vorkommt
+                    if let name = selectedActorName,
+                       !moviesForSelectedActor.isEmpty {
+                        
+                        Divider()
+                            .padding(.vertical, 8)
+                        
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("In eurer Gruppe gesehen")
+                                .font(.headline)
+                            
+                            Text("Filme im aktuell gewählten Zeitraum und Ort, in denen \(name) mitspielt.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            
+                            ForEach(moviesForSelectedActor) { movie in
+                                HStack(spacing: 12) {
+                                    // kleines Poster
+                                    if let url = movie.posterURL {
+                                        AsyncImage(url: url) { phase in
+                                            switch phase {
+                                            case .empty:
+                                                Rectangle()
+                                                    .foregroundStyle(.gray.opacity(0.2))
+                                            case .success(let image):
+                                                image
+                                                    .resizable()
+                                                    .scaledToFill()
+                                            case .failure:
+                                                Rectangle()
+                                                    .foregroundStyle(.gray.opacity(0.2))
+                                                    .overlay {
+                                                        Image(systemName: "film")
+                                                    }
+                                            @unknown default:
+                                                Rectangle()
+                                                    .foregroundStyle(.gray.opacity(0.2))
+                                            }
+                                        }
+                                        .frame(width: 40, height: 60)
+                                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                                    } else {
+                                        Rectangle()
+                                            .foregroundStyle(.gray.opacity(0.1))
+                                            .frame(width: 40, height: 60)
+                                            .clipShape(RoundedRectangle(cornerRadius: 6))
+                                            .overlay {
+                                                Image(systemName: "film")
+                                                    .foregroundStyle(.secondary)
+                                            }
+                                    }
+                                    
+                                    VStack(alignment: .leading, spacing: 3) {
+                                        Text(movie.title)
+                                            .font(.subheadline.weight(.semibold))
+                                            .lineLimit(2)
+                                        
+                                        HStack(spacing: 6) {
+                                            Text(movie.year)
+                                                .font(.caption)
+                                                .foregroundStyle(.secondary)
+                                            
+                                            if let dateText = movie.watchedDateText {
+                                                Text("• \(dateText)")
+                                                    .font(.caption)
+                                                    .foregroundStyle(.secondary)
+                                            }
+                                            
+                                            if let loc = movie.watchedLocation, !loc.isEmpty {
+                                                Text("• \(loc)")
+                                                    .font(.caption)
+                                                    .foregroundStyle(.secondary)
+                                            }
+                                        }
+                                    }
+                                    
+                                    Spacer()
+                                    
+                                    if let avg = movie.averageRating ?? movie.tmdbRating {
+                                        Text(String(format: "%.1f", avg))
+                                            .font(.caption.bold())
+                                            .padding(.horizontal, 6)
+                                            .padding(.vertical, 4)
+                                            .background(Color.blue.opacity(0.12))
+                                            .clipShape(RoundedRectangle(cornerRadius: 6))
+                                    }
+                                }
+                                .padding(.vertical, 4)
+                            }
+                        }
                     }
                 }
                 .padding()
