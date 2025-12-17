@@ -10,6 +10,7 @@ internal import SwiftUI
 struct GoalsView: View {
     
     @EnvironmentObject var movieStore: MovieStore
+    @EnvironmentObject var userStore: UserStore
     @Environment(\.dismiss) private var dismiss
     
     @State private var selectedYear: Int = Calendar.current.component(.year, from: Date())
@@ -169,7 +170,7 @@ struct GoalsView: View {
             
             // Ziel-Definition
             VStack(alignment: .leading, spacing: 8) {
-                Text("Ziel für \(selectedYear)")
+                Text("Ziel für \(selectedYear.formatted(.number.grouping(.never)))")
                     .font(.headline)
                 
                 HStack {
@@ -231,7 +232,7 @@ struct GoalsView: View {
     
     private var gridSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Filme in \(selectedYear)")
+            Text("Filme in \(selectedYear.formatted(.number.grouping(.never)))")
                 .font(.headline)
             
             let seenMovies = moviesInSelectedYear
@@ -242,14 +243,27 @@ struct GoalsView: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             } else {
+                // Adaptive Spalten, damit Poster immer im typischen Portrait-Format bleiben
                 LazyVGrid(
-                    columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 4),
-                    spacing: 8
+                    columns: [GridItem(.adaptive(minimum: 80, maximum: 110), spacing: 8)],
+                    spacing: 12
                 ) {
                     ForEach(0..<target, id: \.self) { index in
                         if index < seenMovies.count {
                             let movie = seenMovies[index]
-                            posterTile(for: movie)
+                            
+                            if let binding = binding(for: movie) {
+                                NavigationLink {
+                                    MovieDetailView(movie: binding, isBacklog: false)
+                                } label: {
+                                    posterTile(for: movie)
+                                }
+                                .buttonStyle(.plain)
+                            } else {
+                                // Fallback: wenn wir aus irgendeinem Grund kein Binding finden
+                                posterTile(for: movie)
+                            }
+                            
                         } else {
                             placeholderTile()
                         }
@@ -257,6 +271,17 @@ struct GoalsView: View {
                 }
             }
         }
+    }
+    
+    // MARK: - Binding-Helfer
+    
+    /// Sucht den Movie im Store und gibt ein Binding darauf zurück,
+    /// damit Änderungen in der Detail-View sauber im Store landen.
+    private func binding(for movie: Movie) -> Binding<Movie>? {
+        guard let index = movieStore.movies.firstIndex(where: { $0.id == movie.id }) else {
+            return nil
+        }
+        return $movieStore.movies[index]
     }
     
     // MARK: - Kacheln
@@ -286,12 +311,13 @@ struct GoalsView: View {
                             .foregroundStyle(.gray.opacity(0.2))
                     }
                 }
-                .frame(height: 90)
+                // Typisches Movie-Cover: 2:3 Portrait-Format
+                .aspectRatio(2.0 / 3.0, contentMode: .fill)
                 .clipShape(RoundedRectangle(cornerRadius: 8))
             } else {
                 Rectangle()
                     .foregroundStyle(.gray.opacity(0.15))
-                    .frame(height: 90)
+                    .aspectRatio(2.0 / 3.0, contentMode: .fill)
                     .clipShape(RoundedRectangle(cornerRadius: 8))
                     .overlay {
                         Image(systemName: "film")
@@ -305,7 +331,7 @@ struct GoalsView: View {
     private func placeholderTile() -> some View {
         Rectangle()
             .foregroundStyle(.gray.opacity(0.08))
-            .frame(height: 90)
+            .aspectRatio(2.0 / 3.0, contentMode: .fill)
             .clipShape(RoundedRectangle(cornerRadius: 8))
             .overlay {
                 VStack(spacing: 4) {
@@ -380,4 +406,5 @@ struct GoalsView: View {
 #Preview {
     GoalsView()
         .environmentObject(MovieStore.preview())
+        .environmentObject(UserStore())
 }

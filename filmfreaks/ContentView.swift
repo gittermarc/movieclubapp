@@ -323,6 +323,7 @@ struct ContentView: View {
             .sheet(isPresented: $showingGoals) {
                 GoalsView()                      // 👈 NEU
                     .environmentObject(movieStore)
+                    .environmentObject(userStore)
             }
             .sheet(isPresented: $showingGroupSettings) {
                 GroupSettingsView()
