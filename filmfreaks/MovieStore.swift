@@ -163,42 +163,32 @@ class MovieStore: ObservableObject {
         }
         
         do {
-            let entries = try await cloudStore.fetchAllMovies()
-            print("CloudKit: fetchAllMovies returned \(entries.count) entries (all groups)")
+            let entries = try await cloudStore.fetchMovies(forGroupId: currentGroupId)
+            print("CloudKit: fetchMovies(forGroupId:) returned \(entries.count) entries")
             
-            // Nach Gruppe filtern
-            let filteredEntries: [CloudMovieEntry]
-            if let groupId = currentGroupId {
-                filteredEntries = entries.filter { entry in
-                    entry.movie.groupId == groupId
-                }
-            } else {
-                filteredEntries = entries.filter { entry in
-                    entry.movie.groupId == nil
-                }
-            }
-            
-            let watched = filteredEntries
+            let watched = entries
                 .filter { !$0.isBacklog }
                 .map { $0.movie }
-            let backlog = filteredEntries
+            let backlog = entries
                 .filter { $0.isBacklog }
                 .map { $0.movie }
             
             // Gruppennamen aus Daten ableiten (falls gesetzt)
-            let nameFromData = filteredEntries
+            let nameFromData = entries
                 .compactMap { $0.movie.groupName }
                 .first
             
             isApplyingCloudUpdate = true
             self.movies = watched
             self.backlogMovies = backlog
-            self.currentGroupName = nameFromData
+            if let nameFromData, !(nameFromData.isEmpty) {
+                self.currentGroupName = nameFromData
+            }
             isApplyingCloudUpdate = false
             
             print("CloudKit: applied group data → watched: \(watched.count), backlog: \(backlog.count)")
             
-            // Falls die komplette DB leer ist → initialer Upload
+            // Falls die komplette DB (für diese Gruppe) leer ist → initialer Upload
             if entries.isEmpty {
                 try await initialUploadIfNeeded(using: cloudStore)
             }
@@ -207,6 +197,7 @@ class MovieStore: ObservableObject {
             print("Fehler beim Laden aus CloudKit: \(error)")
         }
     }
+
     
     private func initialUploadIfNeeded(using cloudStore: CloudKitMovieStore) async throws {
         print("CloudKit: initial upload starting (watched: \(movies.count), backlog: \(backlogMovies.count))")
@@ -249,10 +240,15 @@ class MovieStore: ObservableObject {
         
         print("CloudKit: syncChanges START (isBacklog = \(isBacklog), newCount = \(newList.count), oldCount = \(oldList.count))")
         
-        let oldIDs = Set(oldList.map { $0.id })
-        let newIDs = Set(newList.map { $0.id })
-        let removedIDs = oldIDs.subtracting(newIDs)
+        // Indexe nach ID
+        let oldById = Dictionary(uniqueKeysWithValues: oldList.map { ($0.id, $0) })
+        let newById = Dictionary(uniqueKeysWithValues: newList.map { ($0.id, $0) })
         
+        let oldIDs = Set(oldById.keys)
+        let newIDs = Set(newById.keys)
+        
+        // 1) Gelöschte Filme: in CloudKit löschen
+        let removedIDs = oldIDs.subtracting(newIDs)
         for id in removedIDs {
             do {
                 try await cloudStore.delete(movieID: id)
@@ -262,8 +258,26 @@ class MovieStore: ObservableObject {
             }
         }
         
+        // 2) Nur neue ODER geänderte Filme speichern
+        //    - neu: existiert nicht in oldById
+        //    - geändert: oldMovie != newMovie (Movie ist Equatable)
+        let changedMovies: [Movie] = newList.filter { movie in
+            guard let oldMovie = oldById[movie.id] else {
+                return true // neu
+            }
+            return oldMovie != movie // nur schreiben, wenn sich wirklich etwas geändert hat
+        }
+        
+        if changedMovies.isEmpty {
+            print("CloudKit: syncChanges – no changed movies to upload")
+            print("CloudKit: syncChanges END (isBacklog = \(isBacklog))")
+            return
+        }
+        
+        print("CloudKit: syncChanges – will upload \(changedMovies.count) movies (isBacklog = \(isBacklog))")
+        
         await withTaskGroup(of: Void.self) { group in
-            for movie in newList {
+            for movie in changedMovies {
                 group.addTask {
                     do {
                         try await cloudStore.save(movie: movie, isBacklog: isBacklog)
@@ -277,6 +291,8 @@ class MovieStore: ObservableObject {
         
         print("CloudKit: syncChanges END (isBacklog = \(isBacklog))")
     }
+
+
     
     // MARK: - Gruppen-API
     

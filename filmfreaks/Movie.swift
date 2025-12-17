@@ -9,7 +9,7 @@ import Foundation
 
 // MARK: - Kriterien
 
-enum RatingCriterion: String, CaseIterable, Identifiable, Codable {
+enum RatingCriterion: String, CaseIterable, Identifiable, Codable, Hashable {
     case action = "Action"
     case suspense = "Spannung"
     case music = "Musik"
@@ -21,7 +21,7 @@ enum RatingCriterion: String, CaseIterable, Identifiable, Codable {
 
 // MARK: - Rating
 
-struct Rating: Identifiable, Codable {
+struct Rating: Identifiable, Codable, Equatable {
     var id = UUID()
     var reviewerName: String
     
@@ -46,7 +46,7 @@ struct Rating: Identifiable, Codable {
 
 // MARK: - Movie
 
-struct Movie: Identifiable, Codable {
+struct Movie: Identifiable, Codable, Equatable {
     var id: UUID
     var title: String
     var year: String

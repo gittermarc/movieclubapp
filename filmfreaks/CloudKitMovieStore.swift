@@ -23,11 +23,11 @@ struct CloudKitMovieStore {
         container.publicCloudDatabase
     }
     
-    private let recordType = "Movie"          // Record-Typ in CloudKit
-    private let payloadKey = "payload"        // Data (codierter Movie)
-    private let isBacklogKey = "isBacklog"    // Bool
-    private let updatedAtKey = "updatedAt"    // Date
-    
+    private let recordType   = "Movie"       // Record-Typ in CloudKit
+    private let payloadKey   = "payload"     // Data (codierter Movie)
+    private let isBacklogKey = "isBacklog"   // Bool
+    private let updatedAtKey = "updatedAt"   // Date
+    private let groupIdKey   = "groupId"     // String: aktuelle Gruppen-ID (Invite-Code) oder leer
     
     init(container: CKContainer = .default()) {
         self.container = container
@@ -35,30 +35,57 @@ struct CloudKitMovieStore {
     
     // MARK: - Laden
     
-    /// Holt alle Movie-Records aus der privaten Datenbank.
-    func fetchAllMovies() async throws -> [CloudMovieEntry] {
-        let predicate = NSPredicate(value: true)
+    /// Holt alle Movie-Records für eine bestimmte Gruppe.
+    ///
+    /// - Parameter groupId:
+    ///   - nil    → Filme ohne Gruppe (alte / lokale Standard-Gruppe)
+    ///   - String → Filme mit genau dieser Group-ID (Invite-Code)
+    func fetchMovies(forGroupId groupId: String?) async throws -> [CloudMovieEntry] {
+        
+        let predicate: NSPredicate
+        
+        if let groupId {
+            // Nur Filme für diese Group-ID
+            predicate = NSPredicate(format: "%K == %@", groupIdKey, groupId)
+        } else {
+            // Alte / lokale Gruppe ohne Group-ID:
+            // Records, bei denen das Feld nicht gesetzt ist bzw. nil ist
+            predicate = NSPredicate(format: "%K == nil", groupIdKey)
+        }
+        
         let query = CKQuery(recordType: recordType, predicate: predicate)
         
         var entries: [CloudMovieEntry] = []
+        var cursor: CKQueryOperation.Cursor? = nil
         
-        // Neue async-API: liefert ein Dictionary mit Match-Resultaten zurück
-        let (matchResults, _) = try await database.records(matching: query)
-        
-        for (_, result) in matchResults {
-            switch result {
-            case .success(let record):
-                if let entry = try decodeMovie(from: record) {
-                    entries.append(entry)
-                }
-            case .failure(let error):
-                // Für's erste nur ausgeben – später kann man das feiner behandeln
-                print("CloudKit fetch error for record: \(error)")
+        repeat {
+            // Dein SDK liefert hier ein Array von Tupeln + Cursor zurück
+            let result: ([(CKRecord.ID, Result<CKRecord, any Error>)], CKQueryOperation.Cursor?)
+            
+            if let c = cursor {
+                result = try await database.records(continuingMatchFrom: c)
+            } else {
+                result = try await database.records(matching: query)
             }
-        }
+            
+            let (matchResults, newCursor) = result
+            cursor = newCursor
+            
+            for (_, recordResult) in matchResults {
+                switch recordResult {
+                case .success(let record):
+                    if let entry = try decodeMovie(from: record) {
+                        entries.append(entry)
+                    }
+                case .failure(let error):
+                    print("CloudKit fetch error for record: \(error)")
+                }
+            }
+        } while cursor != nil
         
         return entries
     }
+
     
     // MARK: - Speichern (Upsert)
     
@@ -66,12 +93,19 @@ struct CloudKitMovieStore {
     func save(movie: Movie, isBacklog: Bool) async throws {
         let recordID = CKRecord.ID(recordName: movie.id.uuidString)
         
-        // Hilfsfunktion: unsere Daten in den Record schreiben
         func applyFields(on record: CKRecord) throws -> CKRecord {
             let data = try JSONEncoder().encode(movie)
             record[payloadKey]   = data as CKRecordValue
             record[isBacklogKey] = isBacklog as CKRecordValue
             record[updatedAtKey] = Date() as CKRecordValue
+            
+            // Gruppen-ID extra als Feld speichern, damit wir nach Gruppen filtern können
+            if let gid = movie.groupId, !gid.isEmpty {
+                record[groupIdKey] = gid as CKRecordValue
+            } else {
+                // Feld entfernen, falls keine Gruppe
+                record[groupIdKey] = nil
+            }
             return record
         }
         
@@ -98,10 +132,9 @@ struct CloudKitMovieStore {
                 do {
                     _ = try await database.save(updatedRecord)
                 } catch {
-                    // Wenn hier *nochmal* ein serverRecordChanged kommt,
-                    // ignorieren wir das – Server-Version gewinnt.
                     if let second = error as? CKError,
                        second.code == .serverRecordChanged {
+                        // Server-Version gewinnt – einfach akzeptieren
                         return
                     } else {
                         throw error
@@ -110,12 +143,9 @@ struct CloudKitMovieStore {
                 return
             }
             
-            // andere Fehler normal weitergeben
             throw error
         }
     }
-
-
     
     // MARK: - Löschen
     
@@ -132,8 +162,13 @@ struct CloudKitMovieStore {
             return nil
         }
         
-        let decoded = try JSONDecoder().decode(Movie.self, from: data)
+        var decoded = try JSONDecoder().decode(Movie.self, from: data)
         let isBacklog = (record[isBacklogKey] as? Bool) ?? false
+        
+        // Defensive: groupId im Model ggf. aus Feld nachziehen
+        if let gid = record[groupIdKey] as? String, !gid.isEmpty {
+            decoded.groupId = gid
+        }
         
         return CloudMovieEntry(movie: decoded, isBacklog: isBacklog)
     }
