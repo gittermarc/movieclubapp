@@ -47,6 +47,11 @@ struct StatsView: View {
     @State private var selectedRange: StatsTimeRange = .all
     @State private var selectedLocationFilter: String? = nil
     
+    // MARK: - Actor-Popularity Cache (für Sortierung nach Bekanntheit)
+    @State private var actorPopularity: [String: Double] = [:]
+    @State private var actorPopularityFetchInFlight: Set<String> = []
+
+    
 
     // MARK: - Drilldown-Sheet State (Monat / Ort / Vorschlag)
     @State private var selectedDrilldown: StatsDrilldown? = nil
@@ -527,6 +532,18 @@ struct StatsView: View {
                 .navigationTitle("Statistiken")
             }
         }
+        .onAppear {
+            triggerActorPopularityPreload()
+        }
+        .onChange(of: selectedRange) {
+            triggerActorPopularityPreload()
+        }
+        .onChange(of: selectedLocationFilter) {
+            triggerActorPopularityPreload()
+        }
+        .onChange(of: movieStore.movies.count) {
+            triggerActorPopularityPreload()
+        }
         // Actor-Sheet
         .sheet(isPresented: $showingActorSheet) {
             actorDetailSheet()
@@ -672,7 +689,8 @@ struct StatsView: View {
             .sorted { $0.count > $1.count }
     }
     
-    private var actorsByCount: [(actor: String, count: Int)] {
+    /// Rohdaten: Nur Häufigkeit pro Darsteller (ohne Popularitäts-Sortierung)
+    private var actorsByCountRaw: [(actor: String, count: Int)] {
         var counts: [String: Int] = [:]
         
         for movie in filteredMovies {
@@ -684,9 +702,26 @@ struct StatsView: View {
             }
         }
         
+        // stabile Basis-Sortierung: Häufigkeit -> Name
         return counts
             .map { (actor: $0.key, count: $0.value) }
-            .sorted { $0.count > $1.count }
+            .sorted {
+                if $0.count != $1.count { return $0.count > $1.count }
+                return $0.actor.localizedCaseInsensitiveCompare($1.actor) == .orderedAscending
+            }
+    }
+    
+    /// Finale Sortierung: Erst Häufigkeit, dann Popularität (TMDb), dann Name
+    private var actorsByCount: [(actor: String, count: Int)] {
+        actorsByCountRaw.sorted { a, b in
+            if a.count != b.count { return a.count > b.count }
+            
+            let popA = actorPopularity[actorPopularityKey(a.actor)] ?? 0
+            let popB = actorPopularity[actorPopularityKey(b.actor)] ?? 0
+            if popA != popB { return popA > popB }
+            
+            return a.actor.localizedCaseInsensitiveCompare(b.actor) == .orderedAscending
+        }
     }
     
     private var moviesByLocation: [(location: String, count: Int)] {
@@ -754,6 +789,71 @@ struct StatsView: View {
         }
     }
     
+    // MARK: - Actor-Popularity (TMDb) – Cache & Preload
+    
+    private func actorPopularityKey(_ name: String) -> String {
+        name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+    
+    private func triggerActorPopularityPreload() {
+        Task {
+            await preloadActorPopularityIfNeeded()
+        }
+    }
+    
+    /// Lädt Popularitätswerte (TMDb) für die aktuell relevanten Darsteller vor,
+    /// damit die Sortierung bei gleicher Häufigkeit die bekannteren Personen bevorzugt.
+    private func preloadActorPopularityIfNeeded() async {
+        // Wir laden bewusst nur einen begrenzten Teil vor, um unnötige API-Calls zu vermeiden.
+        let candidates = actorsByCountRaw.prefix(80).map { $0.actor }
+        if candidates.isEmpty { return }
+        
+        let missingPairs: [(name: String, key: String)] = candidates.compactMap { name in
+            let key = actorPopularityKey(name)
+            if key.isEmpty { return nil }
+            if actorPopularity[key] != nil { return nil }
+            if actorPopularityFetchInFlight.contains(key) { return nil }
+            return (name: name, key: key)
+        }
+        
+        if missingPairs.isEmpty { return }
+        
+        await MainActor.run {
+            for p in missingPairs {
+                actorPopularityFetchInFlight.insert(p.key)
+            }
+        }
+        
+        // In kleinen Batches (Rate-Limit/Netzwerk freundlich)
+        let batchSize = 6
+        var idx = 0
+        while idx < missingPairs.count {
+            let end = min(idx + batchSize, missingPairs.count)
+            let batch = Array(missingPairs[idx..<end])
+            idx = end
+            
+            await withTaskGroup(of: (String, Double?).self) { group in
+                for p in batch {
+                    group.addTask {
+                        do {
+                            let details = try await TMDbAPI.shared.fetchPersonDetailsByName(p.name)
+                            return (p.key, details?.popularity)
+                        } catch {
+                            return (p.key, nil)
+                        }
+                    }
+                }
+                
+                for await (key, popularity) in group {
+                    await MainActor.run {
+                        actorPopularity[key] = popularity ?? 0
+                        actorPopularityFetchInFlight.remove(key)
+                    }
+                }
+            }
+        }
+    }
+    
     // MARK: - Actor-Interaction
     
     private func actorChipTapped(_ name: String) {
@@ -768,6 +868,8 @@ struct StatsView: View {
                 if let details = try await TMDbAPI.shared.fetchPersonDetailsByName(name) {
                     await MainActor.run {
                         self.selectedActorDetails = details
+                        // Cache für Sortierung: wenn wir Details eh schon laden, Popularität direkt merken
+                        self.actorPopularity[self.actorPopularityKey(name)] = details.popularity ?? 0
                         self.isLoadingActor = false
                     }
                 } else {
