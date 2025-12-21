@@ -16,6 +16,29 @@ enum StatsTimeRange: String, CaseIterable, Identifiable {
     var id: Self { self }
 }
 
+
+
+enum StatsDrilldown: Identifiable {
+    case month(Date)
+    case location(String)
+    case suggestedBy(String)
+
+    var id: String {
+        switch self {
+        case .month(let date):
+            // stabile ID über Year-Month
+            let comps = Calendar.current.dateComponents([.year, .month], from: date)
+            let y = comps.year ?? 0
+            let m = comps.month ?? 0
+            return "month_\(y)_\(m)"
+        case .location(let loc):
+            return "location_\(loc)"
+        case .suggestedBy(let name):
+            return "suggestedBy_\(name)"
+        }
+    }
+}
+
 struct StatsView: View {
     
     @EnvironmentObject var movieStore: MovieStore
@@ -24,6 +47,10 @@ struct StatsView: View {
     @State private var selectedRange: StatsTimeRange = .all
     @State private var selectedLocationFilter: String? = nil
     
+
+    // MARK: - Drilldown-Sheet State (Monat / Ort / Vorschlag)
+    @State private var selectedDrilldown: StatsDrilldown? = nil
+
     // MARK: - Actor-Sheet State
     @State private var selectedActorName: String? = nil
     @State private var selectedActorDetails: TMDbPersonDetails? = nil
@@ -232,12 +259,17 @@ struct StatsView: View {
                                     HStack {
                                         Text(monthFormatter.string(from: entry.date))
                                         Spacer()
-                                        Text("\(entry.count) Filme")
-                                            .font(.footnote)
-                                            .padding(.horizontal, 8)
-                                            .padding(.vertical, 4)
-                                            .background(Color.blue.opacity(0.12))
-                                            .clipShape(Capsule())
+                                        Button {
+                                            selectedDrilldown = .month(entry.date)
+                                        } label: {
+                                            Text("\(entry.count) Filme")
+                                                .font(.footnote)
+                                                .padding(.horizontal, 8)
+                                                .padding(.vertical, 4)
+                                                .background(Color.blue.opacity(0.12))
+                                                .clipShape(Capsule())
+                                        }
+                                        .buttonStyle(.plain)
                                     }
                                     .padding(.vertical, 2)
                                 }
@@ -373,12 +405,17 @@ struct StatsView: View {
                                     HStack {
                                         Text(entry.location)
                                         Spacer()
-                                        Text("\(entry.count)")
-                                            .font(.footnote)
-                                            .padding(.horizontal, 8)
-                                            .padding(.vertical, 4)
-                                            .background(Color.gray.opacity(0.12))
-                                            .clipShape(Capsule())
+                                        Button {
+                                            selectedDrilldown = .location(entry.location)
+                                        } label: {
+                                            Text("\(entry.count)")
+                                                .font(.footnote)
+                                                .padding(.horizontal, 8)
+                                                .padding(.vertical, 4)
+                                                .background(Color.gray.opacity(0.12))
+                                                .clipShape(Capsule())
+                                        }
+                                        .buttonStyle(.plain)
                                     }
                                     .padding(.vertical, 2)
                                 }
@@ -408,12 +445,17 @@ struct StatsView: View {
                                     HStack {
                                         Text(entry.name)
                                         Spacer()
-                                        Text("\(entry.count)")
-                                            .font(.footnote)
-                                            .padding(.horizontal, 8)
-                                            .padding(.vertical, 4)
-                                            .background(Color.orange.opacity(0.15))
-                                            .clipShape(Capsule())
+                                        Button {
+                                            selectedDrilldown = .suggestedBy(entry.name)
+                                        } label: {
+                                            Text("\(entry.count)")
+                                                .font(.footnote)
+                                                .padding(.horizontal, 8)
+                                                .padding(.vertical, 4)
+                                                .background(Color.orange.opacity(0.15))
+                                                .clipShape(Capsule())
+                                        }
+                                        .buttonStyle(.plain)
                                     }
                                     .padding(.vertical, 2)
                                 }
@@ -492,6 +534,10 @@ struct StatsView: View {
         // Genre-Sheet
         .sheet(isPresented: $showingGenreSheet) {
             genreMoviesSheet()
+        }
+        // Drilldown-Sheet (Monat / Ort / Vorschlag)
+        .sheet(item: $selectedDrilldown) { drilldown in
+            drilldownMoviesSheet(drilldown)
         }
     }
     
@@ -1004,79 +1050,8 @@ struct StatsView: View {
                                     .foregroundStyle(.secondary)
                             } else {
                                 ForEach(moviesForSelectedGenre) { movie in
-                                    HStack(spacing: 12) {
-                                        // kleines Poster
-                                        if let url = movie.posterURL {
-                                            AsyncImage(url: url) { phase in
-                                                switch phase {
-                                                case .empty:
-                                                    Rectangle()
-                                                        .foregroundStyle(.gray.opacity(0.2))
-                                                case .success(let image):
-                                                    image
-                                                        .resizable()
-                                                        .scaledToFill()
-                                                case .failure:
-                                                    Rectangle()
-                                                        .foregroundStyle(.gray.opacity(0.2))
-                                                        .overlay {
-                                                            Image(systemName: "film")
-                                                        }
-                                                @unknown default:
-                                                    Rectangle()
-                                                        .foregroundStyle(.gray.opacity(0.2))
-                                                }
-                                            }
-                                            .frame(width: 40, height: 60)
-                                            .clipShape(RoundedRectangle(cornerRadius: 6))
-                                        } else {
-                                            Rectangle()
-                                                .foregroundStyle(.gray.opacity(0.1))
-                                                .frame(width: 40, height: 60)
-                                                .clipShape(RoundedRectangle(cornerRadius: 6))
-                                                .overlay {
-                                                    Image(systemName: "film")
-                                                        .foregroundStyle(.secondary)
-                                                }
-                                        }
-                                        
-                                        VStack(alignment: .leading, spacing: 3) {
-                                            Text(movie.title)
-                                                .font(.subheadline.weight(.semibold))
-                                                .lineLimit(2)
-                                            
-                                            HStack(spacing: 6) {
-                                                Text(movie.year)
-                                                    .font(.caption)
-                                                    .foregroundStyle(.secondary)
-                                                
-                                                if let dateText = movie.watchedDateText {
-                                                    Text("• \(dateText)")
-                                                        .font(.caption)
-                                                        .foregroundStyle(.secondary)
-                                                }
-                                                
-                                                if let loc = movie.watchedLocation, !loc.isEmpty {
-                                                    Text("• \(loc)")
-                                                        .font(.caption)
-                                                        .foregroundStyle(.secondary)
-                                                }
-                                            }
-                                        }
-                                        
-                                        Spacer()
-                                        
-                                        if let avg = movie.averageRating ?? movie.tmdbRating {
-                                            Text(String(format: "%.1f", avg))
-                                                .font(.caption.bold())
-                                                .padding(.horizontal, 6)
-                                                .padding(.vertical, 4)
-                                                .background(Color.blue.opacity(0.12))
-                                                .clipShape(RoundedRectangle(cornerRadius: 6))
-                                        }
-                                    }
-                                    .padding(.vertical, 4)
-                                }
+                                compactMovieRow(movie)
+                            }
                             }
                         } header: {
                             if !moviesForSelectedGenre.isEmpty {
@@ -1105,6 +1080,165 @@ struct StatsView: View {
             }
         }
     }
+
+    // MARK: - Drilldown (Monat / Ort / Vorschlag)
+
+    private func normalizedSuggestedBy(for movie: Movie) -> String {
+        let trimmed = (movie.suggestedBy ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "Ohne Angabe" : trimmed
+    }
+
+    private func movies(for drilldown: StatsDrilldown) -> [Movie] {
+        let calendar = Calendar.current
+
+        switch drilldown {
+        case .month(let monthDate):
+            return filteredMovies.filter { movie in
+                guard let date = movie.watchedDate else { return false }
+                return calendar.isDate(date, equalTo: monthDate, toGranularity: .month)
+            }
+
+        case .location(let location):
+            return filteredMovies.filter { normalizedLocation(for: $0) == location }
+
+        case .suggestedBy(let name):
+            let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+            let target = trimmed.isEmpty ? "Ohne Angabe" : trimmed
+            return filteredMovies.filter { normalizedSuggestedBy(for: $0) == target }
+        }
+    }
+
+    private func drilldownNavigationTitle(_ drilldown: StatsDrilldown) -> String {
+        switch drilldown {
+        case .month(let date):
+            return monthFormatter.string(from: date)
+        case .location(let location):
+            return "Ort: \(location)"
+        case .suggestedBy(let name):
+            return "Vorschlag: \(name)"
+        }
+    }
+
+    @ViewBuilder
+    private func drilldownMoviesSheet(_ drilldown: StatsDrilldown) -> some View {
+        let movies = movies(for: drilldown)
+
+        NavigationStack {
+            List {
+                Section {
+                    if movies.isEmpty {
+                        Text("Keine Filme für diese Auswahl im aktuell gewählten Zeitraum und Ort.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(movies) { movie in
+                            compactMovieRow(movie)
+                        }
+                    }
+                } header: {
+                    if movies.isEmpty {
+                        Text("Keine Ergebnisse")
+                    } else {
+                        Text("\(movies.count) Filme")
+                    }
+                }
+            }
+            .listStyle(.insetGrouped)
+            .navigationTitle(drilldownNavigationTitle(drilldown))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Schließen") {
+                        selectedDrilldown = nil
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func compactMovieRow(_ movie: Movie) -> some View {
+        HStack(spacing: 12) {
+            // kleines Poster
+            if let url = movie.posterURL {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .empty:
+                        Rectangle()
+                            .foregroundStyle(.gray.opacity(0.2))
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .scaledToFill()
+                    case .failure:
+                        Rectangle()
+                            .foregroundStyle(.gray.opacity(0.2))
+                            .overlay {
+                                Image(systemName: "film")
+                            }
+                    @unknown default:
+                        Rectangle()
+                            .foregroundStyle(.gray.opacity(0.2))
+                    }
+                }
+                .frame(width: 40, height: 60)
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+            } else {
+                Rectangle()
+                    .foregroundStyle(.gray.opacity(0.1))
+                    .frame(width: 40, height: 60)
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                    .overlay {
+                        Image(systemName: "film")
+                            .foregroundStyle(.secondary)
+                    }
+            }
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(movie.title)
+                    .font(.subheadline.weight(.semibold))
+                    .lineLimit(2)
+
+                HStack(spacing: 6) {
+                    Text(movie.year)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    if let dateText = movie.watchedDateText {
+                        Text("• \(dateText)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    if let loc = movie.watchedLocation, !loc.isEmpty {
+                        Text("• \(loc)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                if let sugg = movie.suggestedBy,
+                   !sugg.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text("Vorgeschlagen von: \(sugg)")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Spacer()
+
+            if let avg = movie.averageRating ?? movie.tmdbRating {
+                Text(String(format: "%.1f", avg))
+                    .font(.caption.bold())
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 4)
+                    .background(Color.blue.opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
 }
 
 #Preview {
