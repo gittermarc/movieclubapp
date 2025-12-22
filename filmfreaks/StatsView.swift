@@ -55,6 +55,18 @@ struct StatsView: View {
     @State private var actorPopularity: [String: Double] = [:]
     @State private var actorPopularityFetchInFlight: Set<String> = []
 
+    // MARK: - Darsteller-UI (stabile Anzeige + "Mehr anzeigen")
+    @State private var showAllActors: Bool = false
+    @State private var actorDisplayOrder: [(actor: String, count: Int)] = []
+    @State private var actorSortGeneration: UUID = UUID()
+
+    // MARK: - Genres-UI (stabile Anzeige)
+    @State private var genreDisplayOrder: [(genre: String, count: Int)] = []
+    @State private var genreSortGeneration: UUID = UUID()
+
+    private let collapsedActorsCount: Int = 25
+    private let expandedActorsCount: Int = 50
+
     // MARK: - Drilldown-Sheet State (Monat / Ort / Vorschlag)
     @State private var selectedDrilldown: StatsDrilldown? = nil
 
@@ -296,7 +308,7 @@ struct StatsView: View {
                                     .foregroundStyle(.secondary)
                             }
 
-                            if moviesByGenre.isEmpty {
+                            if genresDisplaySource.isEmpty {
                                 Text("Keine Genres im ausgewählten Zeitraum/Ort.")
                                     .font(.subheadline)
                                     .foregroundStyle(.secondary)
@@ -310,7 +322,7 @@ struct StatsView: View {
                                     alignment: .leading,
                                     spacing: 8
                                 ) {
-                                    ForEach(moviesByGenre.prefix(30), id: \.genre) { entry in
+                                    ForEach(genresDisplaySource.prefix(30), id: \.genre) { entry in
                                         Button {
                                             genreChipTapped(entry.genre)
                                         } label: {
@@ -330,6 +342,7 @@ struct StatsView: View {
                                         .buttonStyle(.plain)
                                     }
                                 }
+                                .transaction { $0.animation = nil }
 
                                 Text("Tippe ein Genre, um die passenden Filme im Zeitraum zu sehen.")
                                     .font(.caption)
@@ -360,12 +373,16 @@ struct StatsView: View {
                                     .font(.subheadline)
                                     .foregroundStyle(.secondary)
 
+                                let actorSource = actorsDisplaySource
+                                let limit = showAllActors ? expandedActorsCount : collapsedActorsCount
+                                let displayedActors = Array(actorSource.prefix(limit))
+
                                 LazyVGrid(
                                     columns: [GridItem(.adaptive(minimum: 120), spacing: 8)],
                                     alignment: .leading,
                                     spacing: 8
                                 ) {
-                                    ForEach(actorsByCount.prefix(30), id: \.actor) { entry in
+                                    ForEach(displayedActors, id: \.actor) { entry in
                                         Button {
                                             actorChipTapped(entry.actor)
                                         } label: {
@@ -384,6 +401,24 @@ struct StatsView: View {
                                         }
                                         .buttonStyle(.plain)
                                     }
+                                }
+                                .transaction { $0.animation = nil }
+
+                                if actorSource.count > collapsedActorsCount {
+                                    Button {
+                                        showAllActors.toggle()
+                                    } label: {
+                                        HStack(spacing: 6) {
+                                            Text(showAllActors ? "Weniger anzeigen" : "Mehr anzeigen")
+                                                .font(.footnote.weight(.semibold))
+                                            Image(systemName: showAllActors ? "chevron.up" : "chevron.down")
+                                                .font(.caption)
+                                                .foregroundStyle(.secondary)
+                                        }
+                                        .frame(maxWidth: .infinity, alignment: .center)
+                                        .padding(.vertical, 6)
+                                    }
+                                    .buttonStyle(.plain)
                                 }
                             }
                         }
@@ -534,15 +569,22 @@ struct StatsView: View {
             }
         }
         .onAppear {
+            setGenreDisplayOrderNow()
             triggerActorPopularityPreload()
         }
         .onChange(of: selectedRange) {
+            setGenreDisplayOrderNow()
             triggerActorPopularityPreload()
         }
         .onChange(of: selectedLocationFilter) {
+            setGenreDisplayOrderNow()
             triggerActorPopularityPreload()
         }
         .onChange(of: movieStore.movies.count) {
+            triggerGenreDisplayRecomputeDebounced()
+            triggerActorPopularityPreload()
+        }
+        .onChange(of: showAllActors) {
             triggerActorPopularityPreload()
         }
         // Actor-Sheet
@@ -673,7 +715,7 @@ struct StatsView: View {
             .sorted { $0.date > $1.date }
     }
 
-    private var moviesByGenre: [(genre: String, count: Int)] {
+    private var moviesByGenreRaw: [(genre: String, count: Int)] {
         var counts: [String: Int] = [:]
 
         for movie in filteredMovies {
@@ -687,7 +729,17 @@ struct StatsView: View {
 
         return counts
             .map { (genre: $0.key, count: $0.value) }
-            .sorted { $0.count > $1.count }
+            .sorted {
+                if $0.count != $1.count { return $0.count > $1.count }
+                return $0.genre.localizedCaseInsensitiveCompare($1.genre) == .orderedAscending
+            }
+    }
+
+
+    /// Quelle für die UI: Wir „frieren“ die Reihenfolge ein, damit Genres während des initialen Ladens
+    /// nicht ständig neu sortiert werden.
+    private var genresDisplaySource: [(genre: String, count: Int)] {
+        genreDisplayOrder.isEmpty ? moviesByGenreRaw : genreDisplayOrder
     }
 
     /// Rohdaten: Nur Häufigkeit pro Darsteller (ohne Popularitäts-Sortierung)
@@ -710,6 +762,26 @@ struct StatsView: View {
                 if $0.count != $1.count { return $0.count > $1.count }
                 return $0.actor.localizedCaseInsensitiveCompare($1.actor) == .orderedAscending
             }
+    }
+
+    /// Quelle für die UI: Wir „frieren“ die Reihenfolge ein, damit Chips nicht während
+    /// des Popularity-Preloads ständig neu sortiert werden.
+    private var actorsDisplaySource: [(actor: String, count: Int)] {
+        actorDisplayOrder.isEmpty ? actorsByCountRaw : actorDisplayOrder
+    }
+
+    /// Sortierung: Häufigkeit, dann Popularität (falls bekannt), dann Name
+    private func computeActorsSortedUsingPopularity() -> [(actor: String, count: Int)] {
+        let raw = actorsByCountRaw
+        return raw.sorted { a, b in
+            if a.count != b.count { return a.count > b.count }
+
+            let popA = actorPopularity[actorPopularityKey(a.actor)] ?? 0
+            let popB = actorPopularity[actorPopularityKey(b.actor)] ?? 0
+            if popA != popB { return popA > popB }
+
+            return a.actor.localizedCaseInsensitiveCompare(b.actor) == .orderedAscending
+        }
     }
 
     /// Finale Sortierung: Erst Häufigkeit, dann Popularität (TMDb), dann Name
@@ -796,8 +868,72 @@ struct StatsView: View {
         name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }
 
-    private func triggerActorPopularityPreload() {
+    /// Deterministischer Hash, um Kandidaten ohne Alphabet-Bias zu „mischen“.
+    /// (Swift-Hasher ist pro Prozess gesalzen und daher nicht stabil.)
+    private func stableDeterministicHash(_ name: String) -> UInt64 {
+        let s = actorPopularityKey(name)
+        var hash: UInt64 = 1469598103934665603 // FNV-1a Offset Basis
+        for b in s.utf8 {
+            hash ^= UInt64(b)
+            hash &*= 1099511628211
+        }
+        return hash
+    }
+
+
+    // MARK: - Genre-UI Stabilisierung
+
+    /// Setzt die Genre-Reihenfolge sofort anhand der aktuellen Daten (z.B. wenn der User Filter ändert).
+    private func setGenreDisplayOrderNow() {
+        let gen = UUID()
+        genreSortGeneration = gen
+        genreDisplayOrder = moviesByGenreRaw
+    }
+
+    /// Debounced-Update für den Fall, dass movieStore.movies während des initialen Ladens
+    /// „stückweise“ wächst. So vermeiden wir, dass die Genre-Chips sichtbar „rumtanzen“.
+    private func triggerGenreDisplayRecomputeDebounced() {
+        let gen = UUID()
+        genreSortGeneration = gen
+
         Task {
+            // kurzer „Ruhe“-Zeitraum: wenn in der Zeit noch Updates kommen, wird dieser Lauf verworfen
+            try? await Task.sleep(nanoseconds: 350_000_000)
+
+            await MainActor.run {
+                guard genreSortGeneration == gen else { return }
+                genreDisplayOrder = moviesByGenreRaw
+            }
+        }
+    }
+
+    private func triggerActorPopularityPreload() {
+        // Grund: Während Popularity-Requests reinkommen, ändert sich actorPopularity laufend.
+        // Wenn die Sortierung direkt davon abhängt, springen die Chips „wild“ herum.
+        // Lösung: Erst eine stabile Basis-Reihenfolge setzen (Häufigkeit -> Name),
+        // Popularity für die sichtbaren Chips vorladen, dann genau EINMAL final einsortieren.
+
+        let generation = UUID()
+        actorSortGeneration = generation
+
+        let base = actorsByCountRaw
+        actorDisplayOrder = base
+
+        Task {
+            let visibleLimit = showAllActors ? expandedActorsCount : collapsedActorsCount
+            let visibleNames = Array(base.prefix(visibleLimit)).map { $0.actor }
+
+            // 1) Für sichtbare Darsteller Popularity vorladen
+            await preloadActorPopularity(for: visibleNames)
+
+            // 2) Dann einmalig final sortieren (wenn diese Task noch aktuell ist)
+            await MainActor.run {
+                guard actorSortGeneration == generation else { return }
+                actorDisplayOrder = computeActorsSortedUsingPopularity()
+            }
+
+            // 3) Optional: mehr Popularities für bessere „Tie-Breaks“ nachladen,
+            // ohne die UI-Reihenfolge erneut zu ändern.
             await preloadActorPopularityIfNeeded()
         }
     }
@@ -806,7 +942,45 @@ struct StatsView: View {
     /// damit die Sortierung bei gleicher Häufigkeit die bekannteren Personen bevorzugt.
     private func preloadActorPopularityIfNeeded() async {
         // Wir laden bewusst nur einen begrenzten Teil vor, um unnötige API-Calls zu vermeiden.
-        let candidates = actorsByCountRaw.prefix(80).map { $0.actor }
+        // Wichtig: Wenn sehr viele Darsteller nur 1x vorkommen, darf die Auswahl der Kandidaten
+        // nicht alphabetisch „kleben“ (sonst sieht man nur A/B, obwohl S/T populär wären).
+        let prefetchLimit = 120
+
+        let raw = actorsByCountRaw
+        if raw.isEmpty { return }
+
+        // 1) Alles mit count > 1 zuerst (am relevantesten, da häufiger gesehen)
+        var candidates: [String] = raw
+            .filter { $0.count > 1 }
+            .map { $0.actor }
+
+        // 2) Falls wir noch Platz haben: count == 1 in deterministisch „durchmischter“ Reihenfolge auffüllen,
+        //    damit wir bei der Popularitäts-Sortierung überhaupt eine Chance haben, bekannte Namen nach oben zu ziehen.
+        if candidates.count < prefetchLimit {
+            let remaining = prefetchLimit - candidates.count
+            let already = Set(candidates.map { actorPopularityKey($0) })
+
+            let oneCount = raw
+                .filter { $0.count == 1 }
+                .map { $0.actor }
+                .filter { !already.contains(actorPopularityKey($0)) }
+                .sorted { stableDeterministicHash($0) < stableDeterministicHash($1) }
+
+            candidates.append(contentsOf: oneCount.prefix(remaining))
+        }
+
+        candidates = Array(candidates.prefix(prefetchLimit))
+        if candidates.isEmpty { return }
+
+        await preloadActorPopularity(for: candidates)
+    }
+
+    /// Lädt Popularitätswerte (TMDb) für eine vorgegebene Liste von Namen.
+    /// Achtung: Diese Funktion aktualisiert nur den Cache, sie ändert NICHT die Reihenfolge in der UI.
+    private func preloadActorPopularity(for names: [String]) async {
+        let candidates = Array(Set(names.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }))
+            .filter { !$0.isEmpty }
+
         if candidates.isEmpty { return }
 
         let missingPairs: [(name: String, key: String)] = candidates.compactMap { name in
