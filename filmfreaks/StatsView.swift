@@ -24,7 +24,6 @@ enum StatsDrilldown: Identifiable {
     var id: String {
         switch self {
         case .month(let date):
-            // stabile ID über Year-Month
             let comps = Calendar.current.dateComponents([.year, .month], from: date)
             let y = comps.year ?? 0
             let m = comps.month ?? 0
@@ -37,10 +36,16 @@ enum StatsDrilldown: Identifiable {
     }
 }
 
-/// ✅ Genre-Drilldown als Item für sheet(item:)
 private struct GenreDrilldown: Identifiable, Hashable {
     let genre: String
-    var id: String { genre } // stabil & reicht völlig
+    var id: String { genre }
+}
+
+private struct ActorEntry: Identifiable, Hashable {
+    let personId: Int
+    let name: String
+    let count: Int
+    var id: Int { personId }
 }
 
 struct StatsView: View {
@@ -51,57 +56,49 @@ struct StatsView: View {
     @State private var selectedRange: StatsTimeRange = .all
     @State private var selectedLocationFilter: String? = nil
 
-    // MARK: - Actor-Popularity Cache (für Sortierung nach Bekanntheit)
-    @State private var actorPopularity: [String: Double] = [:]
-    @State private var actorPopularityFetchInFlight: Set<String> = []
+    // ✅ Popularity Store (persistiert + TTL)
+    @ObservedObject private var popularityStore = PersonPopularityStore.shared
 
-    // MARK: - Darsteller-UI (stabile Anzeige + "Mehr anzeigen")
+    // Darsteller UI
     @State private var showAllActors: Bool = false
-    @State private var actorDisplayOrder: [(actor: String, count: Int)] = []
+    @State private var actorDisplayOrder: [ActorEntry] = []
     @State private var actorSortGeneration: UUID = UUID()
 
-    // MARK: - Genres-UI (stabile Anzeige)
+    // Genres UI
     @State private var genreDisplayOrder: [(genre: String, count: Int)] = []
     @State private var genreSortGeneration: UUID = UUID()
 
     private let collapsedActorsCount: Int = 25
     private let expandedActorsCount: Int = 50
 
-    // MARK: - Drilldown-Sheet State (Monat / Ort / Vorschlag)
+    // Drilldown
     @State private var selectedDrilldown: StatsDrilldown? = nil
 
-    // MARK: - Actor-Sheet State
-    @State private var selectedActorName: String? = nil
+    // Actor Sheet
+    @State private var selectedActor: ActorEntry? = nil
     @State private var selectedActorDetails: TMDbPersonDetails? = nil
     @State private var isLoadingActor: Bool = false
     @State private var actorError: String? = nil
     @State private var showingActorSheet: Bool = false
 
-    // MARK: - Genre-Sheet State (✅ über sheet(item:))
+    // Genre Sheet
     @State private var selectedGenreDrilldown: GenreDrilldown? = nil
 
-    // Eigener Formatter für das "Zuletzt geschaut"-Feld
     private static let recentDateFormatter: DateFormatter = {
         let df = DateFormatter()
         df.dateStyle = .medium
         return df
     }()
 
-    // MARK: - Body
-
     var body: some View {
         NavigationStack {
             ZStack {
-                Color(.systemGroupedBackground)
-                    .ignoresSafeArea()
+                Color(.systemGroupedBackground).ignoresSafeArea()
 
                 List {
-                    // MARK: - Kontext & Filter
-
                     Section {
                         VStack(alignment: .leading, spacing: 12) {
 
-                            // Aktuelle Gruppe / Kontext
                             if let groupName = movieStore.currentGroupName {
                                 Text("Statistiken für „\(groupName)“")
                                     .font(.footnote)
@@ -112,13 +109,11 @@ struct StatsView: View {
                                     .foregroundStyle(.secondary)
                             }
 
-                            // Filter-Panel
                             VStack(alignment: .leading, spacing: 10) {
                                 Text("Filter")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
 
-                                // Zeitraum als Chips
                                 Text("Zeitraum")
                                     .font(.subheadline)
 
@@ -127,29 +122,18 @@ struct StatsView: View {
                                         ForEach(StatsTimeRange.allCases) { range in
                                             let isSelected = (range == selectedRange)
 
-                                            Button {
-                                                selectedRange = range
-                                            } label: {
+                                            Button { selectedRange = range } label: {
                                                 Text(range.rawValue)
                                                     .font(.caption)
                                                     .padding(.horizontal, 12)
                                                     .padding(.vertical, 6)
                                                     .background(
                                                         RoundedRectangle(cornerRadius: 999)
-                                                            .fill(
-                                                                isSelected
-                                                                ? Color.accentColor.opacity(0.18)
-                                                                : Color.gray.opacity(0.12)
-                                                            )
+                                                            .fill(isSelected ? Color.accentColor.opacity(0.18) : Color.gray.opacity(0.12))
                                                     )
                                                     .overlay(
                                                         RoundedRectangle(cornerRadius: 999)
-                                                            .strokeBorder(
-                                                                isSelected
-                                                                ? Color.accentColor
-                                                                : Color.clear,
-                                                                lineWidth: 1
-                                                            )
+                                                            .strokeBorder(isSelected ? Color.accentColor : Color.clear, lineWidth: 1)
                                                     )
                                                     .foregroundStyle(isSelected ? Color.accentColor : Color.primary)
                                             }
@@ -158,9 +142,7 @@ struct StatsView: View {
                                 }
 
                                 HStack {
-                                    Text("Ort")
-                                        .font(.subheadline)
-
+                                    Text("Ort").font(.subheadline)
                                     Spacer()
 
                                     Menu {
@@ -198,16 +180,10 @@ struct StatsView: View {
                         .padding(.vertical, 4)
                     }
 
-                    // MARK: - Dashboard
-
+                    // Dashboard
                     Section {
                         LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-                            statsCard(
-                                title: "Filme",
-                                subtitle: "im Zeitraum",
-                                value: "\(filteredMovies.count)",
-                                icon: "film"
-                            )
+                            statsCard(title: "Filme", subtitle: "im Zeitraum", value: "\(filteredMovies.count)", icon: "film")
 
                             statsCard(
                                 title: "Ø Bewertung",
@@ -223,26 +199,18 @@ struct StatsView: View {
                                 icon: "clock"
                             )
 
-                            statsCard(
-                                title: "Orte",
-                                subtitle: "im Zeitraum",
-                                value: "\(moviesByLocation.count)",
-                                icon: "mappin.and.ellipse"
-                            )
+                            statsCard(title: "Orte", subtitle: "im Zeitraum", value: "\(moviesByLocation.count)", icon: "mappin.and.ellipse")
                         }
                         .padding(.vertical, 6)
                     }
 
-                    // MARK: - Filme pro Monat
-
+                    // Filme pro Monat
                     Section {
                         VStack(alignment: .leading, spacing: 8) {
                             HStack {
-                                Text("Filme pro Monat")
-                                    .font(.headline)
+                                Text("Filme pro Monat").font(.headline)
                                 Spacer()
-                                Image(systemName: "calendar")
-                                    .foregroundStyle(.secondary)
+                                Image(systemName: "calendar").foregroundStyle(.secondary)
                             }
 
                             if moviesPerMonth.isEmpty {
@@ -273,16 +241,13 @@ struct StatsView: View {
                         .padding(.vertical, 4)
                     }
 
-                    // MARK: - Genres (interaktiv)
-
+                    // Genres
                     Section {
                         VStack(alignment: .leading, spacing: 8) {
                             HStack {
-                                Text("Genres")
-                                    .font(.headline)
+                                Text("Genres").font(.headline)
                                 Spacer()
-                                Image(systemName: "square.stack.3d.up")
-                                    .foregroundStyle(.secondary)
+                                Image(systemName: "square.stack.3d.up").foregroundStyle(.secondary)
                             }
 
                             if genresDisplaySource.isEmpty {
@@ -329,16 +294,13 @@ struct StatsView: View {
                         .padding(.vertical, 4)
                     }
 
-                    // MARK: - Darsteller
-
+                    // Darsteller (✅ personId-basiert)
                     Section {
                         VStack(alignment: .leading, spacing: 8) {
                             HStack {
-                                Text("Darsteller")
-                                    .font(.headline)
+                                Text("Darsteller").font(.headline)
                                 Spacer()
-                                Image(systemName: "person.2.fill")
-                                    .foregroundStyle(.secondary)
+                                Image(systemName: "person.2.fill").foregroundStyle(.secondary)
                             }
 
                             if actorsByCountRaw.isEmpty {
@@ -359,12 +321,12 @@ struct StatsView: View {
                                     alignment: .leading,
                                     spacing: 8
                                 ) {
-                                    ForEach(displayedActors, id: \.actor) { entry in
+                                    ForEach(displayedActors) { entry in
                                         Button {
-                                            actorChipTapped(entry.actor)
+                                            actorChipTapped(entry)
                                         } label: {
                                             HStack(spacing: 6) {
-                                                Text(entry.actor)
+                                                Text(entry.name)
                                                     .font(.caption)
                                                     .lineLimit(1)
                                                 Text("(\(entry.count))")
@@ -402,16 +364,13 @@ struct StatsView: View {
                         .padding(.vertical, 4)
                     }
 
-                    // MARK: - Orte
-
+                    // Orte
                     Section {
                         VStack(alignment: .leading, spacing: 8) {
                             HStack {
-                                Text("Orte")
-                                    .font(.headline)
+                                Text("Orte").font(.headline)
                                 Spacer()
-                                Image(systemName: "mappin.and.ellipse")
-                                    .foregroundStyle(.secondary)
+                                Image(systemName: "mappin.and.ellipse").foregroundStyle(.secondary)
                             }
 
                             if moviesByLocation.isEmpty {
@@ -423,9 +382,7 @@ struct StatsView: View {
                                     HStack {
                                         Text(entry.location)
                                         Spacer()
-                                        Button {
-                                            selectedDrilldown = .location(entry.location)
-                                        } label: {
+                                        Button { selectedDrilldown = .location(entry.location) } label: {
                                             Text("\(entry.count)")
                                                 .font(.footnote)
                                                 .padding(.horizontal, 8)
@@ -442,16 +399,13 @@ struct StatsView: View {
                         .padding(.vertical, 4)
                     }
 
-                    // MARK: - Vorgeschlagen von
-
+                    // Vorgeschlagen von
                     Section {
                         VStack(alignment: .leading, spacing: 8) {
                             HStack {
-                                Text("Vorgeschlagen von")
-                                    .font(.headline)
+                                Text("Vorgeschlagen von").font(.headline)
                                 Spacer()
-                                Image(systemName: "person.fill.questionmark")
-                                    .foregroundStyle(.secondary)
+                                Image(systemName: "person.fill.questionmark").foregroundStyle(.secondary)
                             }
 
                             if suggestionsByUser.isEmpty {
@@ -463,9 +417,7 @@ struct StatsView: View {
                                     HStack {
                                         Text(entry.name)
                                         Spacer()
-                                        Button {
-                                            selectedDrilldown = .suggestedBy(entry.name)
-                                        } label: {
+                                        Button { selectedDrilldown = .suggestedBy(entry.name) } label: {
                                             Text("\(entry.count)")
                                                 .font(.footnote)
                                                 .padding(.horizontal, 8)
@@ -482,16 +434,13 @@ struct StatsView: View {
                         .padding(.vertical, 4)
                     }
 
-                    // MARK: - Pro Person
-
+                    // Pro Person
                     Section {
                         VStack(alignment: .leading, spacing: 8) {
                             HStack {
-                                Text("Bewertungen pro Person")
-                                    .font(.headline)
+                                Text("Bewertungen pro Person").font(.headline)
                                 Spacer()
-                                Image(systemName: "person.3.sequence.fill")
-                                    .foregroundStyle(.secondary)
+                                Image(systemName: "person.3.sequence.fill").foregroundStyle(.secondary)
                             }
 
                             if userStore.users.isEmpty {
@@ -564,28 +513,20 @@ struct StatsView: View {
         .onChange(of: showAllActors) {
             preloadPopularityForVisibleActors()
         }
-        // Actor-Sheet
         .sheet(isPresented: $showingActorSheet) {
             actorDetailSheet()
         }
-        // ✅ Genre-Sheet (über Item – kein „erstes Mal leer“-Glitch mehr)
         .sheet(item: $selectedGenreDrilldown) { selection in
             genreMoviesSheet(for: selection.genre)
         }
-        // Drilldown-Sheet (Monat / Ort / Vorschlag)
         .sheet(item: $selectedDrilldown) { drilldown in
             drilldownMoviesSheet(drilldown)
         }
     }
 
-    // MARK: - Dashboard-Karte
+    // MARK: - Dashboard Karte
 
-    private func statsCard(
-        title: String,
-        subtitle: String,
-        value: String,
-        icon: String
-    ) -> some View {
+    private func statsCard(title: String, subtitle: String, value: String, icon: String) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
                 Image(systemName: icon)
@@ -595,12 +536,8 @@ struct StatsView: View {
                     .font(.subheadline.weight(.semibold))
             }
 
-            Text(value)
-                .font(.title2.bold())
-
-            Text(subtitle)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            Text(value).font(.title2.bold())
+            Text(subtitle).font(.caption).foregroundStyle(.secondary)
         }
         .padding()
         .background(
@@ -622,19 +559,13 @@ struct StatsView: View {
             case .all:
                 return movie
             case .thisYear:
-                if calendar.isDate(date, equalTo: today, toGranularity: .year) {
-                    return movie
-                }
+                if calendar.isDate(date, equalTo: today, toGranularity: .year) { return movie }
             case .last30:
                 if let from = calendar.date(byAdding: .day, value: -30, to: today),
-                   date >= from {
-                    return movie
-                }
+                   date >= from { return movie }
             case .last90:
                 if let from = calendar.date(byAdding: .day, value: -90, to: today),
-                   date >= from {
-                    return movie
-                }
+                   date >= from { return movie }
             }
             return nil
         }
@@ -654,9 +585,7 @@ struct StatsView: View {
     }
 
     private func normalizedLocation(for movie: Movie) -> String {
-        let trimmed = movie.watchedLocation?.trimmingCharacters(
-            in: .whitespacesAndNewlines
-        ) ?? ""
+        let trimmed = movie.watchedLocation?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return trimmed.isEmpty ? "Ohne Angabe" : trimmed
     }
 
@@ -672,8 +601,7 @@ struct StatsView: View {
     }
 
     private var mostRecentWatchedDate: Date? {
-        let dates = filteredMovies.compactMap { $0.watchedDate }
-        return dates.max()
+        filteredMovies.compactMap { $0.watchedDate }.max()
     }
 
     private var moviesPerMonth: [(date: Date, count: Int)] {
@@ -712,51 +640,53 @@ struct StatsView: View {
             }
     }
 
-    /// Quelle für die UI: Wir „frieren“ die Reihenfolge ein, damit Genres während des initialen Ladens
-    /// nicht ständig neu sortiert werden.
     private var genresDisplaySource: [(genre: String, count: Int)] {
         genreDisplayOrder.isEmpty ? moviesByGenreRaw : genreDisplayOrder
     }
 
-    /// Rohdaten: Nur Häufigkeit pro Darsteller (ohne Popularitäts-Sortierung)
-    private var actorsByCountRaw: [(actor: String, count: Int)] {
-        var counts: [String: Int] = [:]
+    /// ✅ Rohdaten: Häufigkeit pro Darsteller – personId-basiert
+    private var actorsByCountRaw: [ActorEntry] {
+        var counts: [Int: (name: String, count: Int)] = [:]
 
         for movie in filteredMovies {
             guard let cast = movie.cast else { continue }
-            for name in cast {
-                let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+            for member in cast {
+                let trimmed = member.name.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !trimmed.isEmpty else { continue }
-                counts[trimmed, default: 0] += 1
+
+                if var existing = counts[member.personId] {
+                    existing.count += 1
+                    // Namen behalten wir stabil (erster gewinnt)
+                    counts[member.personId] = existing
+                } else {
+                    counts[member.personId] = (name: trimmed, count: 1)
+                }
             }
         }
 
-        // stabile Basis-Sortierung: Häufigkeit -> Name
         return counts
-            .map { (actor: $0.key, count: $0.value) }
+            .map { ActorEntry(personId: $0.key, name: $0.value.name, count: $0.value.count) }
             .sorted {
                 if $0.count != $1.count { return $0.count > $1.count }
-                return $0.actor.localizedCaseInsensitiveCompare($1.actor) == .orderedAscending
+                return $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
             }
     }
 
-    /// Quelle für die UI: Wir „frieren“ die Reihenfolge ein, damit Chips nicht während
-    /// des Popularity-Preloads ständig neu sortiert werden.
-    private var actorsDisplaySource: [(actor: String, count: Int)] {
+    private var actorsDisplaySource: [ActorEntry] {
         actorDisplayOrder.isEmpty ? actorsByCountRaw : actorDisplayOrder
     }
 
-    /// Sortierung: Häufigkeit, dann Popularität (falls bekannt), dann Name
-    private func computeActorsSortedUsingPopularity() -> [(actor: String, count: Int)] {
+    /// Sortierung: Häufigkeit, dann Popularität (per personId), dann Name
+    private func computeActorsSortedUsingPopularity() -> [ActorEntry] {
         let raw = actorsByCountRaw
         return raw.sorted { a, b in
             if a.count != b.count { return a.count > b.count }
 
-            let popA = actorPopularity[actorPopularityKey(a.actor)] ?? 0
-            let popB = actorPopularity[actorPopularityKey(b.actor)] ?? 0
+            let popA = popularityStore.popularityValue(for: a.personId)
+            let popB = popularityStore.popularityValue(for: b.personId)
             if popA != popB { return popA > popB }
 
-            return a.actor.localizedCaseInsensitiveCompare(b.actor) == .orderedAscending
+            return a.name.localizedCaseInsensitiveCompare(b.name) == .orderedAscending
         }
     }
 
@@ -806,62 +736,37 @@ struct StatsView: View {
             }
         }
 
-        guard !scores.isEmpty else {
-            return (movieIds.count, nil)
-        }
+        guard !scores.isEmpty else { return (movieIds.count, nil) }
 
         let total = scores.reduce(0, +)
         let avg = total / Double(scores.count)
         return (movieIds.count, avg)
     }
 
-    // MARK: - Filme für ausgewählten Schauspieler
+    // MARK: - Actor Filme
 
     private var moviesForSelectedActor: [Movie] {
-        guard let actorName = selectedActorName?.lowercased() else { return [] }
+        guard let actor = selectedActor else { return [] }
         return filteredMovies.filter { movie in
             guard let cast = movie.cast else { return false }
-            return cast.contains { $0.lowercased() == actorName }
+            return cast.contains(where: { $0.personId == actor.personId })
         }
     }
 
-    // MARK: - Actor-Popularity (TMDb) – Cache & Preload
+    // MARK: - Genre UI Stabilisierung
 
-    private func actorPopularityKey(_ name: String) -> String {
-        name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-    }
-
-    /// Deterministischer Hash, um Kandidaten ohne Alphabet-Bias zu „mischen“.
-    /// (Swift-Hasher ist pro Prozess gesalzen und daher nicht stabil.)
-    private func stableDeterministicHash(_ name: String) -> UInt64 {
-        let s = actorPopularityKey(name)
-        var hash: UInt64 = 1469598103934665603 // FNV-1a Offset Basis
-        for b in s.utf8 {
-            hash ^= UInt64(b)
-            hash &*= 1099511628211
-        }
-        return hash
-    }
-
-    // MARK: - Genre-UI Stabilisierung
-
-    /// Setzt die Genre-Reihenfolge sofort anhand der aktuellen Daten (z.B. wenn der User Filter ändert).
     private func setGenreDisplayOrderNow() {
         let gen = UUID()
         genreSortGeneration = gen
         genreDisplayOrder = moviesByGenreRaw
     }
 
-    /// Debounced-Update für den Fall, dass movieStore.movies während des initialen Ladens
-    /// „stückweise“ wächst. So vermeiden wir, dass die Genre-Chips sichtbar „rumtanzen“.
     private func triggerGenreDisplayRecomputeDebounced() {
         let gen = UUID()
         genreSortGeneration = gen
 
         Task {
-            // kurzer „Ruhe“-Zeitraum: wenn in der Zeit noch Updates kommen, wird dieser Lauf verworfen
             try? await Task.sleep(nanoseconds: 350_000_000)
-
             await MainActor.run {
                 guard genreSortGeneration == gen else { return }
                 genreDisplayOrder = moviesByGenreRaw
@@ -869,12 +774,9 @@ struct StatsView: View {
         }
     }
 
-    private func triggerActorPopularityPreload() {
-        // Ziel:
-        // - stabile Reihenfolge (keine „rumtanzenden“ Chips)
-        // - finale Sortierung: Häufigkeit → Popularität → Name
-        // - und: ALLE Darsteller aus den gefilterten Filmen bekommen einen Popularitätswert
+    // MARK: - Popularity Preload (✅ nur /person/{id}, TTL-Cache)
 
+    private func triggerActorPopularityPreload() {
         let generation = UUID()
         actorSortGeneration = generation
 
@@ -882,17 +784,13 @@ struct StatsView: View {
         actorDisplayOrder = base
 
         Task {
-            // 1) Sichtbare Namen zuerst (schneller „gute“ Ergebnisse & Actor-Sheet)
             let visibleLimit = showAllActors ? expandedActorsCount : collapsedActorsCount
-            let visibleNames = Array(base.prefix(visibleLimit)).map { $0.actor }
-            await preloadActorPopularity(for: visibleNames)
+            let visibleIds = Array(base.prefix(visibleLimit)).map { $0.personId }
+            await popularityStore.preloadPopularity(for: visibleIds)
 
-            // 2) Dann konsequent ALLE Namen aus den gefilterten Filmen
-            //    (garantiert, dass bei gleicher Häufigkeit wirklich nach Popularität sortiert wird)
-            let allNames = base.map { $0.actor }
-            await preloadActorPopularity(for: allNames)
+            let allIds = base.map { $0.personId }
+            await popularityStore.preloadPopularity(for: allIds)
 
-            // 3) Genau EINMAL final einsortieren (wenn dieser Lauf noch aktuell ist)
             await MainActor.run {
                 guard actorSortGeneration == generation else { return }
                 actorDisplayOrder = computeActorsSortedUsingPopularity()
@@ -900,97 +798,34 @@ struct StatsView: View {
         }
     }
 
-    /// Lädt Popularity nur für die aktuell sichtbaren Chips nach (z.B. wenn „Mehr anzeigen“ getoggled wird),
-    /// ohne die UI-Reihenfolge neu zu berechnen.
     private func preloadPopularityForVisibleActors() {
         let base = actorsByCountRaw
         if base.isEmpty { return }
 
         let visibleLimit = showAllActors ? expandedActorsCount : collapsedActorsCount
-        let visibleNames = Array(base.prefix(visibleLimit)).map { $0.actor }
+        let visibleIds = Array(base.prefix(visibleLimit)).map { $0.personId }
 
         Task {
-            await preloadActorPopularity(for: visibleNames)
+            await popularityStore.preloadPopularity(for: visibleIds)
         }
     }
 
-    /// Lädt Popularitätswerte (TMDb) für eine vorgegebene Liste von Namen.
-    /// Achtung: Diese Funktion aktualisiert nur den Cache, sie ändert NICHT die Reihenfolge in der UI.
-    private func preloadActorPopularity(for names: [String]) async {
-        let candidates = Array(Set(names.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }))
-            .filter { !$0.isEmpty }
+    // MARK: - Actor Interaction
 
-        if candidates.isEmpty { return }
-
-        let missingPairs: [(name: String, key: String)] = candidates.compactMap { name in
-            let key = actorPopularityKey(name)
-            if key.isEmpty { return nil }
-            if actorPopularity[key] != nil { return nil }
-            if actorPopularityFetchInFlight.contains(key) { return nil }
-            return (name: name, key: key)
-        }
-
-        if missingPairs.isEmpty { return }
-
-        await MainActor.run {
-            for p in missingPairs {
-                actorPopularityFetchInFlight.insert(p.key)
-            }
-        }
-
-        // In kleinen Batches (Rate-Limit/Netzwerk freundlich)
-        let batchSize = 6
-        var idx = 0
-        while idx < missingPairs.count {
-            let end = min(idx + batchSize, missingPairs.count)
-            let batch = Array(missingPairs[idx..<end])
-            idx = end
-
-            await withTaskGroup(of: (String, Double?).self) { group in
-                for p in batch {
-                    group.addTask {
-                        do {
-                            let details = try await TMDbAPI.shared.fetchPersonDetailsByName(p.name)
-                            return (p.key, details?.popularity)
-                        } catch {
-                            return (p.key, nil)
-                        }
-                    }
-                }
-
-                for await (key, popularity) in group {
-                    await MainActor.run {
-                        actorPopularity[key] = popularity ?? 0
-                        actorPopularityFetchInFlight.remove(key)
-                    }
-                }
-            }
-        }
-    }
-
-    // MARK: - Actor-Interaction
-
-    private func actorChipTapped(_ name: String) {
-        selectedActorName = name
+    private func actorChipTapped(_ actor: ActorEntry) {
+        selectedActor = actor
         selectedActorDetails = nil
         actorError = nil
         isLoadingActor = true
         showingActorSheet = true
 
+        // ✅ Actor-Sheet lädt Details per ID (keine Suche)
         Task {
             do {
-                if let details = try await TMDbAPI.shared.fetchPersonDetailsByName(name) {
-                    await MainActor.run {
-                        self.selectedActorDetails = details
-                        // Cache für Sortierung: wenn wir Details eh schon laden, Popularität direkt merken
-                        self.actorPopularity[self.actorPopularityKey(name)] = details.popularity ?? 0
-                        self.isLoadingActor = false
-                    }
-                } else {
-                    await MainActor.run {
-                        self.actorError = "Keine Details zu „\(name)“ gefunden."
-                        self.isLoadingActor = false
-                    }
+                let details = try await TMDbAPI.shared.fetchPersonDetails(id: actor.personId)
+                await MainActor.run {
+                    self.selectedActorDetails = details
+                    self.isLoadingActor = false
                 }
             } catch {
                 await MainActor.run {
@@ -1015,14 +850,15 @@ struct StatsView: View {
                         }
                         .frame(maxWidth: .infinity, alignment: .center)
                         .padding(.top, 40)
+
                     } else if let error = actorError {
                         Text(error)
                             .font(.subheadline)
                             .foregroundStyle(.red)
                             .padding(.top, 40)
+
                     } else if let details = selectedActorDetails {
 
-                        // Profilbild
                         if let path = details.profile_path,
                            let url = URL(string: "https://image.tmdb.org/t/p/w300\(path)") {
                             AsyncImage(url: url) { phase in
@@ -1055,7 +891,6 @@ struct StatsView: View {
                             .clipShape(RoundedRectangle(cornerRadius: 18))
                         }
 
-                        // Basisinfos
                         VStack(alignment: .leading, spacing: 6) {
                             Text(details.name)
                                 .font(.title2.bold())
@@ -1097,9 +932,7 @@ struct StatsView: View {
                             }
                         }
 
-                        // Aliases
-                        if let aliases = details.also_known_as,
-                           !aliases.isEmpty {
+                        if let aliases = details.also_known_as, !aliases.isEmpty {
                             VStack(alignment: .leading, spacing: 4) {
                                 Text("Auch bekannt als")
                                     .font(.subheadline.weight(.semibold))
@@ -1109,21 +942,19 @@ struct StatsView: View {
                             }
                         }
 
-                        // Biographie
                         VStack(alignment: .leading, spacing: 8) {
-                            Text("Biografie")
-                                .font(.headline)
+                            Text("Biografie").font(.headline)
 
                             if let bio = details.biography,
                                !bio.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                Text(bio)
-                                    .font(.body)
+                                Text(bio).font(.body)
                             } else {
                                 Text("Keine Biografie verfügbar.")
                                     .font(.subheadline)
                                     .foregroundStyle(.secondary)
                             }
                         }
+
                     } else {
                         Text("Keine Personendaten geladen.")
                             .font(.subheadline)
@@ -1131,18 +962,16 @@ struct StatsView: View {
                             .padding(.top, 40)
                     }
 
-                    // 👇 NEU: Filme, in denen dieser Schauspieler in eurer Gruppe vorkommt
-                    if let name = selectedActorName,
+                    if let actor = selectedActor,
                        !moviesForSelectedActor.isEmpty {
 
-                        Divider()
-                            .padding(.vertical, 8)
+                        Divider().padding(.vertical, 8)
 
                         VStack(alignment: .leading, spacing: 8) {
                             Text("In eurer Gruppe gesehen")
                                 .font(.headline)
 
-                            Text("Filme im aktuell gewählten Zeitraum und Ort, in denen \(name) mitspielt.")
+                            Text("Filme im aktuell gewählten Zeitraum und Ort, in denen \(actor.name) mitspielt.")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
 
@@ -1157,15 +986,13 @@ struct StatsView: View {
             .navigationTitle("Darsteller")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Fertig") {
-                        showingActorSheet = false
-                    }
+                    Button("Fertig") { showingActorSheet = false }
                 }
             }
         }
     }
 
-    // MARK: - Genre-Interaction
+    // MARK: - Genre Interaction
 
     private func genreChipTapped(_ genre: String) {
         selectedGenreDrilldown = GenreDrilldown(genre: genre)
@@ -1191,15 +1018,13 @@ struct StatsView: View {
             .navigationTitle(genre)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Fertig") {
-                        selectedGenreDrilldown = nil
-                    }
+                    Button("Fertig") { selectedGenreDrilldown = nil }
                 }
             }
         }
     }
 
-    // MARK: - Drilldown-Sheets (Monat / Ort / Vorschlag)
+    // MARK: - Drilldown Sheets
 
     @ViewBuilder
     private func drilldownMoviesSheet(_ drilldown: StatsDrilldown) -> some View {
@@ -1240,9 +1065,7 @@ struct StatsView: View {
             .navigationTitle(monthFormatter.string(from: date))
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Fertig") {
-                        selectedDrilldown = nil
-                    }
+                    Button("Fertig") { selectedDrilldown = nil }
                 }
             }
         }
@@ -1266,9 +1089,7 @@ struct StatsView: View {
             .navigationTitle(loc)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Fertig") {
-                        selectedDrilldown = nil
-                    }
+                    Button("Fertig") { selectedDrilldown = nil }
                 }
             }
         }
@@ -1292,9 +1113,7 @@ struct StatsView: View {
             .navigationTitle("Vorgeschlagen von")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Fertig") {
-                        selectedDrilldown = nil
-                    }
+                    Button("Fertig") { selectedDrilldown = nil }
                 }
             }
         }
@@ -1309,21 +1128,15 @@ struct StatsView: View {
                 AsyncImage(url: url) { phase in
                     switch phase {
                     case .empty:
-                        Rectangle()
-                            .foregroundStyle(.gray.opacity(0.2))
+                        Rectangle().foregroundStyle(.gray.opacity(0.2))
                     case .success(let image):
-                        image
-                            .resizable()
-                            .scaledToFill()
+                        image.resizable().scaledToFill()
                     case .failure:
                         Rectangle()
                             .foregroundStyle(.gray.opacity(0.2))
-                            .overlay {
-                                Image(systemName: "film")
-                            }
+                            .overlay { Image(systemName: "film") }
                     @unknown default:
-                        Rectangle()
-                            .foregroundStyle(.gray.opacity(0.2))
+                        Rectangle().foregroundStyle(.gray.opacity(0.2))
                     }
                 }
                 .frame(width: 40, height: 60)
@@ -1333,10 +1146,7 @@ struct StatsView: View {
                     .foregroundStyle(.gray.opacity(0.1))
                     .frame(width: 40, height: 60)
                     .clipShape(RoundedRectangle(cornerRadius: 6))
-                    .overlay {
-                        Image(systemName: "film")
-                            .foregroundStyle(.secondary)
-                    }
+                    .overlay { Image(systemName: "film").foregroundStyle(.secondary) }
             }
 
             VStack(alignment: .leading, spacing: 3) {
@@ -1345,20 +1155,14 @@ struct StatsView: View {
                     .lineLimit(2)
 
                 HStack(spacing: 6) {
-                    Text(movie.year)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    Text(movie.year).font(.caption).foregroundStyle(.secondary)
 
                     if let dateText = movie.watchedDateText {
-                        Text("• \(dateText)")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                        Text("• \(dateText)").font(.caption).foregroundStyle(.secondary)
                     }
 
                     if let loc = movie.watchedLocation, !loc.isEmpty {
-                        Text("• \(loc)")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                        Text("• \(loc)").font(.caption).foregroundStyle(.secondary)
                     }
                 }
 

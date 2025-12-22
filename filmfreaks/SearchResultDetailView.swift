@@ -451,10 +451,18 @@ struct SearchResultDetailView: View {
         if let d = details {
             let year = releaseYear(from: d.release_date) ?? "n/a"
             let genreNames = d.genres?.map { $0.name }
-            let castNames = d.credits?.cast
-                .map { $0.name }
-                .filter { !$0.isEmpty }
-            
+
+            // ✅ NEU: Cast als [CastMember] statt [String]
+            let castMembers: [CastMember]? = d.credits?.cast
+                .prefix(30)
+                .map {
+                    CastMember(
+                        personId: $0.id,
+                        name: $0.name.trimmingCharacters(in: .whitespacesAndNewlines)
+                    )
+                }
+                .filter { !$0.name.isEmpty }
+
             return Movie(
                 title: d.title,
                 year: year,
@@ -466,7 +474,7 @@ struct SearchResultDetailView: View {
                 tmdbId: d.id,
                 genres: genreNames,
                 suggestedBy: nil,
-                cast: castNames
+                cast: (castMembers?.isEmpty == true) ? nil : castMembers
             )
         } else {
             let year = releaseYear(from: result.release_date) ?? "n/a"
