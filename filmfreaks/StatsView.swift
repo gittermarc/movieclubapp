@@ -161,99 +161,76 @@ struct StatsView: View {
                                     Text("Ort")
                                         .font(.subheadline)
 
+                                    Spacer()
+
                                     Menu {
-                                        Button("Alle") {
+                                        Button {
                                             selectedLocationFilter = nil
+                                        } label: {
+                                            Label("Alle Orte", systemImage: selectedLocationFilter == nil ? "checkmark" : "")
                                         }
 
-                                        if availableLocations.isEmpty {
-                                            Text("Keine Orte im Zeitraum")
-                                        } else {
-                                            ForEach(availableLocations, id: \.self) { loc in
-                                                Button(loc) {
-                                                    selectedLocationFilter = loc
-                                                }
+                                        Divider()
+
+                                        ForEach(availableLocations, id: \.self) { loc in
+                                            Button {
+                                                selectedLocationFilter = loc
+                                            } label: {
+                                                Label(loc, systemImage: selectedLocationFilter == loc ? "checkmark" : "")
                                             }
                                         }
                                     } label: {
-                                        HStack {
-                                            Text(selectedLocationFilter ?? "Alle")
-                                            Image(systemName: "chevron.down")
+                                        HStack(spacing: 6) {
+                                            Text(selectedLocationFilter ?? "Alle Orte")
                                                 .font(.caption)
+                                            Image(systemName: "chevron.up.chevron.down")
+                                                .font(.caption2)
+                                                .foregroundStyle(.secondary)
                                         }
                                         .padding(.horizontal, 10)
                                         .padding(.vertical, 6)
                                         .background(Color.gray.opacity(0.12))
-                                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                                        .clipShape(Capsule())
                                     }
-
-                                    Spacer()
                                 }
-
-                                Text("Diese Filter wirken auf alle Statistiken unten.")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
                             }
-                            .padding(12)
-                            .background(
-                                RoundedRectangle(cornerRadius: 14)
-                                    .fill(Color(.secondarySystemBackground))
-                            )
                         }
                         .padding(.vertical, 4)
                     }
 
-                    // MARK: - Dashboard-Überblick
+                    // MARK: - Dashboard
 
                     Section {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Überblick")
-                                .font(.headline)
+                        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                            statsCard(
+                                title: "Filme",
+                                subtitle: "im Zeitraum",
+                                value: "\(filteredMovies.count)",
+                                icon: "film"
+                            )
 
-                            LazyVGrid(
-                                columns: [GridItem(.flexible()), GridItem(.flexible())],
-                                spacing: 12
-                            ) {
-                                // Gesehene Filme
-                                statsCard(
-                                    title: "Gesehene Filme",
-                                    subtitle: "mit Datum im Zeitraum",
-                                    value: "\(filteredMovies.count)",
-                                    icon: "film"
-                                )
+                            statsCard(
+                                title: "Ø Bewertung",
+                                subtitle: "im Zeitraum",
+                                value: overallAverageRating != nil ? String(format: "%.1f", overallAverageRating!) : "–",
+                                icon: "star.fill"
+                            )
 
-                                // Backlog
-                                statsCard(
-                                    title: "Backlog",
-                                    subtitle: "offene Filme",
-                                    value: "\(movieStore.backlogMovies.count)",
-                                    icon: "tray.full"
-                                )
+                            statsCard(
+                                title: "Zuletzt",
+                                subtitle: "gesehen",
+                                value: mostRecentWatchedDate != nil ? Self.recentDateFormatter.string(from: mostRecentWatchedDate!) : "–",
+                                icon: "clock"
+                            )
 
-                                // Durchschnitt
-                                statsCard(
-                                    title: "Ø Bewertung",
-                                    subtitle: "aller Ratings",
-                                    value: overallAverageRating.map { String(format: "%.1f", $0) } ?? "–",
-                                    icon: "star.leadinghalf.filled"
-                                )
-
-                                // Zuletzt geschaut
-                                statsCard(
-                                    title: "Zuletzt geschaut",
-                                    subtitle: "mit Datum",
-                                    value: mostRecentWatchedDate.map { Self.recentDateFormatter.string(from: $0) } ?? "–",
-                                    icon: "clock.arrow.circlepath"
-                                )
-                            }
-
-                            if let loc = selectedLocationFilter {
-                                Text("Gefiltert nach Ort: \(loc)")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
+                            statsCard(
+                                title: "Orte",
+                                subtitle: "im Zeitraum",
+                                value: "\(moviesByLocation.count)",
+                                icon: "mappin.and.ellipse"
+                            )
                         }
-                        .padding(.vertical, 4)
+                        .padding(.vertical, 6)
                     }
 
                     // MARK: - Filme pro Monat
@@ -269,7 +246,7 @@ struct StatsView: View {
                             }
 
                             if moviesPerMonth.isEmpty {
-                                Text("Keine Filme im ausgewählten Zeitraum/Ort.")
+                                Text("Keine Filme im ausgewählten Zeitraum.")
                                     .font(.subheadline)
                                     .foregroundStyle(.secondary)
                             } else {
@@ -280,11 +257,11 @@ struct StatsView: View {
                                         Button {
                                             selectedDrilldown = .month(entry.date)
                                         } label: {
-                                            Text("\(entry.count) Filme")
+                                            Text("\(entry.count)")
                                                 .font(.footnote)
                                                 .padding(.horizontal, 8)
                                                 .padding(.vertical, 4)
-                                                .background(Color.blue.opacity(0.12))
+                                                .background(Color.gray.opacity(0.12))
                                                 .clipShape(Capsule())
                                         }
                                         .buttonStyle(.plain)
@@ -364,7 +341,7 @@ struct StatsView: View {
                                     .foregroundStyle(.secondary)
                             }
 
-                            if actorsByCount.isEmpty {
+                            if actorsByCountRaw.isEmpty {
                                 Text("Keine Cast-Daten im ausgewählten Zeitraum/Ort.")
                                     .font(.subheadline)
                                     .foregroundStyle(.secondary)
@@ -585,7 +562,7 @@ struct StatsView: View {
             triggerActorPopularityPreload()
         }
         .onChange(of: showAllActors) {
-            triggerActorPopularityPreload()
+            preloadPopularityForVisibleActors()
         }
         // Actor-Sheet
         .sheet(isPresented: $showingActorSheet) {
@@ -735,7 +712,6 @@ struct StatsView: View {
             }
     }
 
-
     /// Quelle für die UI: Wir „frieren“ die Reihenfolge ein, damit Genres während des initialen Ladens
     /// nicht ständig neu sortiert werden.
     private var genresDisplaySource: [(genre: String, count: Int)] {
@@ -774,19 +750,6 @@ struct StatsView: View {
     private func computeActorsSortedUsingPopularity() -> [(actor: String, count: Int)] {
         let raw = actorsByCountRaw
         return raw.sorted { a, b in
-            if a.count != b.count { return a.count > b.count }
-
-            let popA = actorPopularity[actorPopularityKey(a.actor)] ?? 0
-            let popB = actorPopularity[actorPopularityKey(b.actor)] ?? 0
-            if popA != popB { return popA > popB }
-
-            return a.actor.localizedCaseInsensitiveCompare(b.actor) == .orderedAscending
-        }
-    }
-
-    /// Finale Sortierung: Erst Häufigkeit, dann Popularität (TMDb), dann Name
-    private var actorsByCount: [(actor: String, count: Int)] {
-        actorsByCountRaw.sorted { a, b in
             if a.count != b.count { return a.count > b.count }
 
             let popA = actorPopularity[actorPopularityKey(a.actor)] ?? 0
@@ -880,7 +843,6 @@ struct StatsView: View {
         return hash
     }
 
-
     // MARK: - Genre-UI Stabilisierung
 
     /// Setzt die Genre-Reihenfolge sofort anhand der aktuellen Daten (z.B. wenn der User Filter ändert).
@@ -908,10 +870,10 @@ struct StatsView: View {
     }
 
     private func triggerActorPopularityPreload() {
-        // Grund: Während Popularity-Requests reinkommen, ändert sich actorPopularity laufend.
-        // Wenn die Sortierung direkt davon abhängt, springen die Chips „wild“ herum.
-        // Lösung: Erst eine stabile Basis-Reihenfolge setzen (Häufigkeit -> Name),
-        // Popularity für die sichtbaren Chips vorladen, dann genau EINMAL final einsortieren.
+        // Ziel:
+        // - stabile Reihenfolge (keine „rumtanzenden“ Chips)
+        // - finale Sortierung: Häufigkeit → Popularität → Name
+        // - und: ALLE Darsteller aus den gefilterten Filmen bekommen einen Popularitätswert
 
         let generation = UUID()
         actorSortGeneration = generation
@@ -920,59 +882,36 @@ struct StatsView: View {
         actorDisplayOrder = base
 
         Task {
+            // 1) Sichtbare Namen zuerst (schneller „gute“ Ergebnisse & Actor-Sheet)
             let visibleLimit = showAllActors ? expandedActorsCount : collapsedActorsCount
             let visibleNames = Array(base.prefix(visibleLimit)).map { $0.actor }
-
-            // 1) Für sichtbare Darsteller Popularity vorladen
             await preloadActorPopularity(for: visibleNames)
 
-            // 2) Dann einmalig final sortieren (wenn diese Task noch aktuell ist)
+            // 2) Dann konsequent ALLE Namen aus den gefilterten Filmen
+            //    (garantiert, dass bei gleicher Häufigkeit wirklich nach Popularität sortiert wird)
+            let allNames = base.map { $0.actor }
+            await preloadActorPopularity(for: allNames)
+
+            // 3) Genau EINMAL final einsortieren (wenn dieser Lauf noch aktuell ist)
             await MainActor.run {
                 guard actorSortGeneration == generation else { return }
                 actorDisplayOrder = computeActorsSortedUsingPopularity()
             }
-
-            // 3) Optional: mehr Popularities für bessere „Tie-Breaks“ nachladen,
-            // ohne die UI-Reihenfolge erneut zu ändern.
-            await preloadActorPopularityIfNeeded()
         }
     }
 
-    /// Lädt Popularitätswerte (TMDb) für die aktuell relevanten Darsteller vor,
-    /// damit die Sortierung bei gleicher Häufigkeit die bekannteren Personen bevorzugt.
-    private func preloadActorPopularityIfNeeded() async {
-        // Wir laden bewusst nur einen begrenzten Teil vor, um unnötige API-Calls zu vermeiden.
-        // Wichtig: Wenn sehr viele Darsteller nur 1x vorkommen, darf die Auswahl der Kandidaten
-        // nicht alphabetisch „kleben“ (sonst sieht man nur A/B, obwohl S/T populär wären).
-        let prefetchLimit = 120
+    /// Lädt Popularity nur für die aktuell sichtbaren Chips nach (z.B. wenn „Mehr anzeigen“ getoggled wird),
+    /// ohne die UI-Reihenfolge neu zu berechnen.
+    private func preloadPopularityForVisibleActors() {
+        let base = actorsByCountRaw
+        if base.isEmpty { return }
 
-        let raw = actorsByCountRaw
-        if raw.isEmpty { return }
+        let visibleLimit = showAllActors ? expandedActorsCount : collapsedActorsCount
+        let visibleNames = Array(base.prefix(visibleLimit)).map { $0.actor }
 
-        // 1) Alles mit count > 1 zuerst (am relevantesten, da häufiger gesehen)
-        var candidates: [String] = raw
-            .filter { $0.count > 1 }
-            .map { $0.actor }
-
-        // 2) Falls wir noch Platz haben: count == 1 in deterministisch „durchmischter“ Reihenfolge auffüllen,
-        //    damit wir bei der Popularitäts-Sortierung überhaupt eine Chance haben, bekannte Namen nach oben zu ziehen.
-        if candidates.count < prefetchLimit {
-            let remaining = prefetchLimit - candidates.count
-            let already = Set(candidates.map { actorPopularityKey($0) })
-
-            let oneCount = raw
-                .filter { $0.count == 1 }
-                .map { $0.actor }
-                .filter { !already.contains(actorPopularityKey($0)) }
-                .sorted { stableDeterministicHash($0) < stableDeterministicHash($1) }
-
-            candidates.append(contentsOf: oneCount.prefix(remaining))
+        Task {
+            await preloadActorPopularity(for: visibleNames)
         }
-
-        candidates = Array(candidates.prefix(prefetchLimit))
-        if candidates.isEmpty { return }
-
-        await preloadActorPopularity(for: candidates)
     }
 
     /// Lädt Popularitätswerte (TMDb) für eine vorgegebene Liste von Namen.
@@ -1127,10 +1066,9 @@ struct StatsView: View {
                                     .foregroundStyle(.secondary)
                             }
 
-                            // Kleine Info-Chips
-                            HStack(spacing: 8) {
+                            HStack(spacing: 10) {
                                 if let birthday = details.birthday, !birthday.isEmpty {
-                                    Label(birthday, systemImage: "calendar")
+                                    Label(birthday, systemImage: "gift.fill")
                                         .font(.caption)
                                         .padding(.horizontal, 8)
                                         .padding(.vertical, 4)
@@ -1150,11 +1088,11 @@ struct StatsView: View {
                                 if let popularity = details.popularity {
                                     Label(String(format: "Popularity %.1f", popularity),
                                           systemImage: "sparkles")
-                                    .font(.caption)
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 4)
-                                    .background(Color.yellow.opacity(0.15))
-                                    .clipShape(Capsule())
+                                        .font(.caption)
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 4)
+                                        .background(Color.yellow.opacity(0.15))
+                                        .clipShape(Capsule())
                                 }
                             }
                         }
@@ -1209,89 +1147,17 @@ struct StatsView: View {
                                 .foregroundStyle(.secondary)
 
                             ForEach(moviesForSelectedActor) { movie in
-                                HStack(spacing: 12) {
-                                    // kleines Poster
-                                    if let url = movie.posterURL {
-                                        AsyncImage(url: url) { phase in
-                                            switch phase {
-                                            case .empty:
-                                                Rectangle()
-                                                    .foregroundStyle(.gray.opacity(0.2))
-                                            case .success(let image):
-                                                image
-                                                    .resizable()
-                                                    .scaledToFill()
-                                            case .failure:
-                                                Rectangle()
-                                                    .foregroundStyle(.gray.opacity(0.2))
-                                                    .overlay {
-                                                        Image(systemName: "film")
-                                                    }
-                                            @unknown default:
-                                                Rectangle()
-                                                    .foregroundStyle(.gray.opacity(0.2))
-                                            }
-                                        }
-                                        .frame(width: 40, height: 60)
-                                        .clipShape(RoundedRectangle(cornerRadius: 6))
-                                    } else {
-                                        Rectangle()
-                                            .foregroundStyle(.gray.opacity(0.1))
-                                            .frame(width: 40, height: 60)
-                                            .clipShape(RoundedRectangle(cornerRadius: 6))
-                                            .overlay {
-                                                Image(systemName: "film")
-                                                    .foregroundStyle(.secondary)
-                                            }
-                                    }
-
-                                    VStack(alignment: .leading, spacing: 3) {
-                                        Text(movie.title)
-                                            .font(.subheadline.weight(.semibold))
-                                            .lineLimit(2)
-
-                                        HStack(spacing: 6) {
-                                            Text(movie.year)
-                                                .font(.caption)
-                                                .foregroundStyle(.secondary)
-
-                                            if let dateText = movie.watchedDateText {
-                                                Text("• \(dateText)")
-                                                    .font(.caption)
-                                                    .foregroundStyle(.secondary)
-                                            }
-
-                                            if let loc = movie.watchedLocation, !loc.isEmpty {
-                                                Text("• \(loc)")
-                                                    .font(.caption)
-                                                    .foregroundStyle(.secondary)
-                                            }
-                                        }
-                                    }
-
-                                    Spacer()
-
-                                    if let avg = movie.averageRating ?? movie.tmdbRating {
-                                        Text(String(format: "%.1f", avg))
-                                            .font(.caption.bold())
-                                            .padding(.horizontal, 6)
-                                            .padding(.vertical, 4)
-                                            .background(Color.blue.opacity(0.12))
-                                            .clipShape(RoundedRectangle(cornerRadius: 6))
-                                    }
-                                }
-                                .padding(.vertical, 4)
+                                movieRow(movie)
                             }
                         }
                     }
                 }
                 .padding()
             }
-            .navigationTitle(selectedActorName ?? "Darsteller:in")
-            .navigationBarTitleDisplayMode(.inline)
+            .navigationTitle("Darsteller")
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Schließen") {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Fertig") {
                         showingActorSheet = false
                     }
                 }
@@ -1302,53 +1168,30 @@ struct StatsView: View {
     // MARK: - Genre-Interaction
 
     private func genreChipTapped(_ genre: String) {
-        // ✅ Das Item setzt direkt den Sheet-Trigger
         selectedGenreDrilldown = GenreDrilldown(genre: genre)
-    }
-
-    private func moviesForGenre(_ genre: String) -> [Movie] {
-        let target = genre.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !target.isEmpty else { return [] }
-
-        return filteredMovies.filter { movie in
-            guard let genres = movie.genres else { return false }
-            return genres.contains { g in
-                g.trimmingCharacters(in: .whitespacesAndNewlines)
-                    .localizedCaseInsensitiveCompare(target) == .orderedSame
-            }
-        }
     }
 
     @ViewBuilder
     private func genreMoviesSheet(for genre: String) -> some View {
-        let movies = moviesForGenre(genre)
-
         NavigationStack {
             List {
-                Section {
-                    if movies.isEmpty {
-                        Text("Keine Filme für dieses Genre im aktuell gewählten Zeitraum und Ort.")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    } else {
-                        ForEach(movies) { movie in
-                            compactMovieRow(movie)
-                        }
-                    }
-                } header: {
-                    if movies.isEmpty {
-                        Text("Keine Ergebnisse")
-                    } else {
-                        Text("\(movies.count) Filme in „\(genre)“")
+                let movies = filteredMovies.filter { movie in
+                    (movie.genres ?? []).contains(where: { $0.lowercased() == genre.lowercased() })
+                }
+
+                if movies.isEmpty {
+                    Text("Keine Filme für „\(genre)“ im aktuellen Filter.")
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(movies) { movie in
+                        movieRow(movie)
                     }
                 }
             }
-            .listStyle(.insetGrouped)
             .navigationTitle(genre)
-            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Schließen") {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Fertig") {
                         selectedGenreDrilldown = nil
                     }
                 }
@@ -1356,74 +1199,48 @@ struct StatsView: View {
         }
     }
 
-    // MARK: - Drilldown (Monat / Ort / Vorschlag)
+    // MARK: - Drilldown-Sheets (Monat / Ort / Vorschlag)
 
-    private func normalizedSuggestedBy(for movie: Movie) -> String {
-        let trimmed = (movie.suggestedBy ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? "Ohne Angabe" : trimmed
-    }
-
-    private func movies(for drilldown: StatsDrilldown) -> [Movie] {
-        let calendar = Calendar.current
-
-        switch drilldown {
-        case .month(let monthDate):
-            return filteredMovies.filter { movie in
-                guard let date = movie.watchedDate else { return false }
-                return calendar.isDate(date, equalTo: monthDate, toGranularity: .month)
-            }
-
-        case .location(let location):
-            return filteredMovies.filter { normalizedLocation(for: $0) == location }
-
-        case .suggestedBy(let name):
-            let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-            let target = trimmed.isEmpty ? "Ohne Angabe" : trimmed
-            return filteredMovies.filter { normalizedSuggestedBy(for: $0) == target }
-        }
-    }
-
-    private func drilldownNavigationTitle(_ drilldown: StatsDrilldown) -> String {
+    @ViewBuilder
+    private func drilldownMoviesSheet(_ drilldown: StatsDrilldown) -> some View {
         switch drilldown {
         case .month(let date):
-            return monthFormatter.string(from: date)
-        case .location(let location):
-            return "Ort: \(location)"
+            drilldownMoviesSheetMonth(date)
+        case .location(let loc):
+            drilldownMoviesSheetLocation(loc)
         case .suggestedBy(let name):
-            return "Vorschlag: \(name)"
+            drilldownMoviesSheetSuggestedBy(name)
         }
     }
 
     @ViewBuilder
-    private func drilldownMoviesSheet(_ drilldown: StatsDrilldown) -> some View {
-        let movies = movies(for: drilldown)
+    private func drilldownMoviesSheetMonth(_ date: Date) -> some View {
+        let calendar = Calendar.current
+        let comps = calendar.dateComponents([.year, .month], from: date)
+        let year = comps.year ?? 0
+        let month = comps.month ?? 0
+
+        let movies = filteredMovies.filter { movie in
+            guard let d = movie.watchedDate else { return false }
+            let c = calendar.dateComponents([.year, .month], from: d)
+            return (c.year == year && c.month == month)
+        }
 
         NavigationStack {
             List {
-                Section {
-                    if movies.isEmpty {
-                        Text("Keine Filme für diese Auswahl im aktuell gewählten Zeitraum und Ort.")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    } else {
-                        ForEach(movies) { movie in
-                            compactMovieRow(movie)
-                        }
-                    }
-                } header: {
-                    if movies.isEmpty {
-                        Text("Keine Ergebnisse")
-                    } else {
-                        Text("\(movies.count) Filme")
+                if movies.isEmpty {
+                    Text("Keine Filme in diesem Monat.")
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(movies) { movie in
+                        movieRow(movie)
                     }
                 }
             }
-            .listStyle(.insetGrouped)
-            .navigationTitle(drilldownNavigationTitle(drilldown))
-            .navigationBarTitleDisplayMode(.inline)
+            .navigationTitle(monthFormatter.string(from: date))
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Schließen") {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Fertig") {
                         selectedDrilldown = nil
                     }
                 }
@@ -1432,9 +1249,62 @@ struct StatsView: View {
     }
 
     @ViewBuilder
-    private func compactMovieRow(_ movie: Movie) -> some View {
+    private func drilldownMoviesSheetLocation(_ loc: String) -> some View {
+        let movies = filteredMovies.filter { normalizedLocation(for: $0) == loc }
+
+        NavigationStack {
+            List {
+                if movies.isEmpty {
+                    Text("Keine Filme an diesem Ort.")
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(movies) { movie in
+                        movieRow(movie)
+                    }
+                }
+            }
+            .navigationTitle(loc)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Fertig") {
+                        selectedDrilldown = nil
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func drilldownMoviesSheetSuggestedBy(_ name: String) -> some View {
+        let movies = filteredMovies.filter { ($0.suggestedBy ?? "").lowercased() == name.lowercased() }
+
+        NavigationStack {
+            List {
+                if movies.isEmpty {
+                    Text("Keine Filme für diese Person.")
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(movies) { movie in
+                        movieRow(movie)
+                    }
+                }
+            }
+            .navigationTitle("Vorgeschlagen von")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Fertig") {
+                        selectedDrilldown = nil
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Movie Row
+
+    @ViewBuilder
+    private func movieRow(_ movie: Movie) -> some View {
         HStack(spacing: 12) {
-            // kleines Poster
             if let url = movie.posterURL {
                 AsyncImage(url: url) { phase in
                     switch phase {
