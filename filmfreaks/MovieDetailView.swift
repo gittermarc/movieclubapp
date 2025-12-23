@@ -70,6 +70,14 @@ struct MovieDetailView: View {
         return nil
     }
 
+    // MARK: - Bewertungen (Übersicht)
+
+    private var sortedRatings: [Rating] {
+        movie.ratings.sorted {
+            $0.reviewerName.localizedCaseInsensitiveCompare($1.reviewerName) == .orderedAscending
+        }
+    }
+
     // MARK: - Body
 
     var body: some View {
@@ -140,7 +148,7 @@ struct MovieDetailView: View {
                         }
                     }
 
-                    // ✅ Wieder drin: Gesehen / Ort / Vorgeschlagen von (und Backlog-CTA)
+                    // ✅ Gesehen / Ort / Vorgeschlagen von (und Backlog-CTA)
                     section(title: isBacklog ? "Backlog" : "Gesehen") {
                         VStack(alignment: .leading, spacing: 12) {
 
@@ -352,7 +360,7 @@ struct MovieDetailView: View {
                         }
                     }
 
-                    // ✅ Wieder drin: Rating-Sektion
+                    // ✅ Rating Eingabe
                     section(title: "Bewertung") {
                         if userStore.selectedUser == nil {
                             Text("Bitte wähle oben in der App eine Person aus, um zu bewerten.")
@@ -390,6 +398,21 @@ struct MovieDetailView: View {
                                     .clipShape(RoundedRectangle(cornerRadius: 12))
                                 }
                                 .buttonStyle(.plain)
+                            }
+                        }
+                    }
+
+                    // ✅ NEU: Liste der Einzelbewertungen (wer hat was bewertet?)
+                    section(title: "Einzelbewertungen") {
+                        if sortedRatings.isEmpty {
+                            Text("Noch keine Bewertungen vorhanden.")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            VStack(alignment: .leading, spacing: 10) {
+                                ForEach(sortedRatings) { rating in
+                                    ratingSummaryCard(rating)
+                                }
                             }
                         }
                     }
@@ -441,7 +464,6 @@ struct MovieDetailView: View {
             }
         }
         .onChange(of: userStore.selectedUser?.id) { _, _ in
-            // Wenn der User wechselt, soll die UI die passende Bewertung laden
             loadExistingRatingForSelectedUser()
         }
     }
@@ -480,6 +502,69 @@ struct MovieDetailView: View {
         .padding(10)
         .background(Color(.secondarySystemBackground))
         .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+
+    // ✅ NEU: Card für eine Einzelbewertung
+    @ViewBuilder
+    private func ratingSummaryCard(_ rating: Rating) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(rating.reviewerName)
+                    .font(.subheadline.weight(.semibold))
+
+                Spacer()
+
+                Text(String(format: "%.1f / 10", rating.averageScoreNormalizedTo10))
+                    .font(.caption.weight(.semibold))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.blue.opacity(0.12))
+                    .clipShape(Capsule())
+            }
+
+            // Kriterien als Mini-Zeilen
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(RatingCriterion.allCases) { criterion in
+                    let score = rating.scores[criterion] ?? 0
+                    HStack(spacing: 8) {
+                        Text(criterion.rawValue)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .frame(width: 90, alignment: .leading)
+
+                        starsView(score: score)
+
+                        Spacer()
+
+                        Text("\(score)/3")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+
+            if let comment = rating.comment,
+               !comment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Text(comment)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.top, 2)
+            }
+        }
+        .padding(10)
+        .background(Color(.secondarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+
+    @ViewBuilder
+    private func starsView(score: Int) -> some View {
+        HStack(spacing: 3) {
+            ForEach(0..<3, id: \.self) { idx in
+                Image(systemName: idx < score ? "star.fill" : "star")
+                    .font(.caption)
+                    .foregroundStyle(idx < score ? Color.yellow : Color.secondary)
+            }
+        }
     }
 
     // MARK: - Helper Views / Funktionen
