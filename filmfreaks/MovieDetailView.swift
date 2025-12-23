@@ -27,6 +27,9 @@ struct MovieDetailView: View {
     @State private var isLoadingDetails = false
     @State private var detailsError: String?
 
+    // ✅ NEU: Aufklapp-Status der Einzelbewertungen
+    @State private var expandedRatingIds: Set<UUID> = []
+
     // MARK: - Metadaten aus TMDb
 
     private var director: String? {
@@ -402,7 +405,7 @@ struct MovieDetailView: View {
                         }
                     }
 
-                    // ✅ NEU: Liste der Einzelbewertungen (wer hat was bewertet?)
+                    // ✅ Kompakt: Einzelbewertungen (Ø/10 + Kommentar; Kriterien erst bei Tap)
                     section(title: "Einzelbewertungen") {
                         if sortedRatings.isEmpty {
                             Text("Noch keine Bewertungen vorhanden.")
@@ -411,7 +414,7 @@ struct MovieDetailView: View {
                         } else {
                             VStack(alignment: .leading, spacing: 10) {
                                 ForEach(sortedRatings) { rating in
-                                    ratingSummaryCard(rating)
+                                    ratingSummaryCardCompact(rating)
                                 }
                             }
                         }
@@ -468,7 +471,7 @@ struct MovieDetailView: View {
         }
     }
 
-    // MARK: - Rating UI
+    // MARK: - Rating UI (Eingabe)
 
     @ViewBuilder
     private func ratingRow(for criterion: RatingCriterion) -> some View {
@@ -504,51 +507,79 @@ struct MovieDetailView: View {
         .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 
-    // ✅ NEU: Card für eine Einzelbewertung
-    @ViewBuilder
-    private func ratingSummaryCard(_ rating: Rating) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(rating.reviewerName)
-                    .font(.subheadline.weight(.semibold))
+    // MARK: - Einzelbewertungen (kompakt + aufklappbar)
 
-                Spacer()
-
-                Text(String(format: "%.1f / 10", rating.averageScoreNormalizedTo10))
-                    .font(.caption.weight(.semibold))
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(Color.blue.opacity(0.12))
-                    .clipShape(Capsule())
-            }
-
-            // Kriterien als Mini-Zeilen
-            VStack(alignment: .leading, spacing: 6) {
-                ForEach(RatingCriterion.allCases) { criterion in
-                    let score = rating.scores[criterion] ?? 0
-                    HStack(spacing: 8) {
-                        Text(criterion.rawValue)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .frame(width: 90, alignment: .leading)
-
-                        starsView(score: score)
-
-                        Spacer()
-
-                        Text("\(score)/3")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
+    private func isExpandedBinding(for rating: Rating) -> Binding<Bool> {
+        Binding(
+            get: { expandedRatingIds.contains(rating.id) },
+            set: { newValue in
+                if newValue {
+                    expandedRatingIds.insert(rating.id)
+                } else {
+                    expandedRatingIds.remove(rating.id)
                 }
             }
+        )
+    }
 
-            if let comment = rating.comment,
-               !comment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                Text(comment)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .padding(.top, 2)
+    @ViewBuilder
+    private func ratingSummaryCardCompact(_ rating: Rating) -> some View {
+        let comment = (rating.comment ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let hasComment = !comment.isEmpty
+
+        DisclosureGroup(isExpanded: isExpandedBinding(for: rating)) {
+            // Inhalt: Kriterien + voller Kommentar (nur wenn expanded)
+            VStack(alignment: .leading, spacing: 10) {
+
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(RatingCriterion.allCases) { criterion in
+                        let score = rating.scores[criterion] ?? 0
+                        HStack(spacing: 8) {
+                            Text(criterion.rawValue)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .frame(width: 90, alignment: .leading)
+
+                            starsView(score: score)
+
+                            Spacer()
+
+                            Text("\(score)/3")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+
+                if hasComment {
+                    Text(comment)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(.top, 8)
+        } label: {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(rating.reviewerName)
+                        .font(.subheadline.weight(.semibold))
+
+                    Spacer()
+
+                    Text(String(format: "%.1f / 10", rating.averageScoreNormalizedTo10))
+                        .font(.caption.weight(.semibold))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.blue.opacity(0.12))
+                        .clipShape(Capsule())
+                }
+
+                if hasComment {
+                    Text(comment)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
             }
         }
         .padding(10)
