@@ -118,7 +118,7 @@ struct MovieDetailView: View {
                             .clipShape(RoundedRectangle(cornerRadius: 16))
                     }
 
-                    // Titel & Basisinfos als Card
+                    // Titel & Basisinfos
                     section {
                         VStack(alignment: .leading, spacing: 6) {
                             Text(movie.title)
@@ -140,6 +140,116 @@ struct MovieDetailView: View {
                         }
                     }
 
+                    // ✅ Wieder drin: Gesehen / Ort / Vorgeschlagen von (und Backlog-CTA)
+                    section(title: isBacklog ? "Backlog" : "Gesehen") {
+                        VStack(alignment: .leading, spacing: 12) {
+
+                            if isBacklog {
+                                Text("Dieser Film ist noch im Backlog.")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+
+                                Button {
+                                    markAsWatched()
+                                } label: {
+                                    HStack {
+                                        Image(systemName: "checkmark.circle.fill")
+                                        Text("Als gesehen markieren")
+                                    }
+                                    .font(.subheadline.weight(.semibold))
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 10)
+                                    .frame(maxWidth: .infinity)
+                                    .background(Color.green.opacity(0.18))
+                                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                                }
+                                .buttonStyle(.plain)
+                            } else {
+                                DatePicker(
+                                    "Gesehen am",
+                                    selection: $localWatchedDate,
+                                    displayedComponents: .date
+                                )
+                                .datePickerStyle(.compact)
+                            }
+
+                            // Ort
+                            HStack {
+                                Text("Ort")
+                                    .font(.subheadline.weight(.semibold))
+                                Spacer()
+
+                                Menu {
+                                    Button {
+                                        localWatchedLocation = ""
+                                    } label: {
+                                        Label("Ohne Angabe", systemImage: localWatchedLocation.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "checkmark" : "")
+                                    }
+
+                                    Divider()
+
+                                    ForEach(locationOptions, id: \.self) { loc in
+                                        Button {
+                                            localWatchedLocation = loc
+                                        } label: {
+                                            Label(loc, systemImage: localWatchedLocation == loc ? "checkmark" : "")
+                                        }
+                                    }
+                                } label: {
+                                    HStack(spacing: 6) {
+                                        Text(localWatchedLocation.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Ohne Angabe" : localWatchedLocation)
+                                            .font(.caption)
+                                        Image(systemName: "chevron.up.chevron.down")
+                                            .font(.caption2)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 6)
+                                    .background(Color.gray.opacity(0.12))
+                                    .clipShape(Capsule())
+                                }
+                            }
+
+                            // Vorgeschlagen von
+                            HStack {
+                                Text("Vorgeschlagen von")
+                                    .font(.subheadline.weight(.semibold))
+                                Spacer()
+
+                                Menu {
+                                    Button {
+                                        localSuggestedBy = ""
+                                    } label: {
+                                        Label("Ohne Angabe", systemImage: localSuggestedBy.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "checkmark" : "")
+                                    }
+
+                                    Divider()
+
+                                    ForEach(suggestedByOptions, id: \.self) { name in
+                                        Button {
+                                            localSuggestedBy = name
+                                        } label: {
+                                            Label(name, systemImage: localSuggestedBy == name ? "checkmark" : "")
+                                        }
+                                    }
+                                } label: {
+                                    HStack(spacing: 6) {
+                                        Text(localSuggestedBy.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Ohne Angabe" : localSuggestedBy)
+                                            .font(.caption)
+                                        Image(systemName: "chevron.up.chevron.down")
+                                            .font(.caption2)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 6)
+                                    .background(Color.gray.opacity(0.12))
+                                    .clipShape(Capsule())
+                                }
+                            }
+                        }
+                    }
+
+                    // TMDb Infos
                     if isLoadingDetails {
                         section {
                             HStack {
@@ -242,8 +352,47 @@ struct MovieDetailView: View {
                         }
                     }
 
-                    // (Rest der Datei unverändert – Bewertungen etc.)
-                    // ... (dein vorhandener Code bleibt, ich lasse ihn vollständig drin)
+                    // ✅ Wieder drin: Rating-Sektion
+                    section(title: "Bewertung") {
+                        if userStore.selectedUser == nil {
+                            Text("Bitte wähle oben in der App eine Person aus, um zu bewerten.")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            VStack(alignment: .leading, spacing: 12) {
+                                ForEach(RatingCriterion.allCases) { criterion in
+                                    ratingRow(for: criterion)
+                                }
+
+                                VStack(alignment: .leading, spacing: 6) {
+                                    Text("Kommentar (optional)")
+                                        .font(.subheadline.weight(.semibold))
+
+                                    TextEditor(text: $localComment)
+                                        .frame(minHeight: 80)
+                                        .padding(8)
+                                        .background(Color.gray.opacity(0.10))
+                                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                                }
+
+                                Button {
+                                    saveRating()
+                                } label: {
+                                    HStack {
+                                        Image(systemName: "square.and.arrow.down")
+                                        Text("Bewertung speichern")
+                                    }
+                                    .font(.subheadline.weight(.semibold))
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 10)
+                                    .frame(maxWidth: .infinity)
+                                    .background(Color.blue.opacity(0.16))
+                                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
 
                     Spacer()
                 }
@@ -291,6 +440,46 @@ struct MovieDetailView: View {
                 movie.suggestedBy = newValue
             }
         }
+        .onChange(of: userStore.selectedUser?.id) { _, _ in
+            // Wenn der User wechselt, soll die UI die passende Bewertung laden
+            loadExistingRatingForSelectedUser()
+        }
+    }
+
+    // MARK: - Rating UI
+
+    @ViewBuilder
+    private func ratingRow(for criterion: RatingCriterion) -> some View {
+        let current = localScores[criterion] ?? 0
+
+        VStack(alignment: .leading, spacing: 6) {
+            Text(criterion.rawValue)
+                .font(.subheadline.weight(.semibold))
+
+            HStack(spacing: 10) {
+                ForEach(0..<4, id: \.self) { value in
+                    Button {
+                        localScores[criterion] = value
+                        saveRating()
+                    } label: {
+                        Image(systemName: value <= current ? "star.fill" : "star")
+                            .font(.title3)
+                            .foregroundStyle(value <= current ? Color.yellow : Color.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("\(criterion.rawValue) \(value) von 3")
+                }
+
+                Spacer()
+
+                Text("\(current) / 3")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(10)
+        .background(Color(.secondarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 
     // MARK: - Helper Views / Funktionen
@@ -428,7 +617,7 @@ struct MovieDetailView: View {
                     .map { $0.name.trimmingCharacters(in: .whitespacesAndNewlines) }
                     .filter { !$0.isEmpty }
 
-                // ✅ Cast jetzt als {personId, name} persistieren (und leicht begrenzen)
+                // ✅ Cast als {personId, name} persistieren
                 let castMembers = fetched.credits?.cast
                     .prefix(30)
                     .map {
