@@ -47,6 +47,19 @@ struct ContentView: View {
         !movieStore.movies.isEmpty || !movieStore.backlogMovies.isEmpty
     }
 
+    private var filterLabelText: String {
+        filterByUser?.name ?? "Alle"
+    }
+
+    private var filterHintText: String? {
+        guard filterByUser != nil else { return nil }
+        if selectedMode == .watched {
+            return "Filter zeigt nur Filme, in denen diese Person bewertet hat."
+        } else {
+            return "Filter zeigt nur Filme, die von dieser Person vorgeschlagen wurden."
+        }
+    }
+
     var body: some View {
         NavigationStack {
             ZStack {
@@ -120,88 +133,83 @@ struct ContentView: View {
                     .pickerStyle(.segmented)
                     .padding([.horizontal, .top])
 
-                    // Sortieren
-                    HStack {
-                        Text("Sortieren:")
-                            .font(.subheadline)
-
-                        Menu {
-                            ForEach(MovieSortOption.allCases) { option in
-                                Button(option.rawValue) {
-                                    selectedSort = option
-                                }
-                            }
-                        } label: {
-                            HStack {
-                                Text(selectedSort.rawValue)
-                                Image(systemName: "chevron.up.chevron.down")
-                                    .font(.caption)
-                            }
-                            .padding(6)
-                            .background(Color.gray.opacity(0.1))
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
-                        }
-
-                        Spacer()
-                    }
-                    .padding(.horizontal)
-                    .padding(.bottom, 4)
-
-                    // Filter nach Person
-                    HStack {
-                        Text("Filter:")
-                            .font(.subheadline)
-
-                        Menu {
-                            Button("Alle") {
-                                filterByUser = nil
-                            }
-
-                            if userStore.users.isEmpty {
-                                Text("Keine Mitglieder")
-                            } else {
-                                ForEach(userStore.users) { user in
-                                    Button(user.name) {
-                                        filterByUser = user
+                    // ✅ Kompakte, gebündelte Sortier-/Filter-Leiste
+                    VStack(spacing: 8) {
+                        HStack(spacing: 10) {
+                            // Sortieren
+                            Menu {
+                                ForEach(MovieSortOption.allCases) { option in
+                                    Button(option.rawValue) {
+                                        selectedSort = option
                                     }
                                 }
+                            } label: {
+                                controlChip(
+                                    icon: "arrow.up.arrow.down",
+                                    title: selectedSort.rawValue
+                                )
                             }
-                        } label: {
-                            HStack {
-                                if let user = filterByUser {
-                                    Text(user.name)
-                                } else {
-                                    Text("Alle")
+
+                            // Filter
+                            Menu {
+                                Button("Alle") {
+                                    filterByUser = nil
                                 }
-                                Image(systemName: "chevron.down")
-                                    .font(.caption)
+
+                                if userStore.users.isEmpty {
+                                    Text("Keine Mitglieder")
+                                } else {
+                                    ForEach(userStore.users) { user in
+                                        Button(user.name) {
+                                            filterByUser = user
+                                        }
+                                    }
+                                }
+                            } label: {
+                                controlChip(
+                                    icon: "line.3.horizontal.decrease.circle",
+                                    title: filterLabelText
+                                )
                             }
-                            .padding(6)
-                            .background(Color.gray.opacity(0.1))
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
+
+                            // Reset-Button nur wenn Filter aktiv
+                            if filterByUser != nil {
+                                Button {
+                                    filterByUser = nil
+                                } label: {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .font(.title3)
+                                        .foregroundStyle(.secondary)
+                                        .accessibilityLabel("Filter zurücksetzen")
+                                }
+                                .buttonStyle(.plain)
+                            }
+
+                            Spacer(minLength: 0)
                         }
 
-                        Spacer()
+                        if let hint = filterHintText {
+                            Divider()
+                                .opacity(0.7)
+
+                            Text(hint)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
                     }
+                    .padding(10)
+                    .background(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .fill(Color(.secondarySystemBackground))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .stroke(Color.black.opacity(0.06), lineWidth: 1)
+                    )
                     .padding(.horizontal)
+                    .padding(.top, 6)
                     .padding(.bottom, 4)
-
-                    // Hinweis, wie der Filter gerade funktioniert
-                    if let _ = filterByUser {
-                        if selectedMode == .watched {
-                            Text("Filter zeigt nur Filme, in denen diese Person bewertet hat.")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .padding(.horizontal)
-                                .padding(.bottom, 4)
-                        } else {
-                            Text("Filter zeigt nur Filme, die von dieser Person vorgeschlagen wurden.")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .padding(.horizontal)
-                                .padding(.bottom, 4)
-                        }
-                    }
 
                     // MARK: - Inhalt: entweder Empty State oder Listen
                     if hasAnyMoviesInCurrentGroup {
@@ -342,6 +350,29 @@ struct ContentView: View {
                 GroupSettingsView()
             }
         }
+    }
+
+    // MARK: - Compact Controls UI
+
+    @ViewBuilder
+    private func controlChip(icon: String, title: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: icon)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Text(title)
+                .font(.subheadline)
+                .lineLimit(1)
+
+            Image(systemName: "chevron.down")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(Color.black.opacity(0.05))
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
     // MARK: - Empty State View
