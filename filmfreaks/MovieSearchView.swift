@@ -484,65 +484,63 @@ struct MovieSearchView: View {
         let isInBacklog = localBacklogKeys.contains(key)
 
         VStack(alignment: .leading, spacing: 10) {
-            ZStack(alignment: .topTrailing) {
-                // Tappable Area (Poster + Infos)
-                HStack(alignment: .top, spacing: 12) {
-                    posterThumbnail(for: result)
+            HStack(alignment: .top, spacing: 10) {
 
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(result.title)
-                            .font(.headline)
-                            .lineLimit(2)
+                // ✅ Content als Button: nimmt den verfügbaren Platz, Menu sitzt daneben (kein Overlap mehr)
+                Button {
+                    openDetail(result)
+                } label: {
+                    HStack(alignment: .top, spacing: 12) {
+                        posterThumbnail(for: result)
 
-                        HStack(spacing: 10) {
-                            if let year = releaseYear(from: result.release_date) {
-                                Label(year, systemImage: "calendar")
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(result.title)
+                                .font(.headline)
+                                .lineLimit(2)
+                                .multilineTextAlignment(.leading)
+
+                            HStack(spacing: 10) {
+                                if let year = releaseYear(from: result.release_date) {
+                                    Label(year, systemImage: "calendar")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+
+                                Label(String(format: "%.1f / 10", result.vote_average), systemImage: "star.fill")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
 
-                            Label(String(format: "%.1f / 10", result.vote_average), systemImage: "star.fill")
-                                .font(.caption)
+                            // Markierung, wenn schon in Listen
+                            if isInWatched || isInBacklog {
+                                HStack(spacing: 6) {
+                                    if isInWatched {
+                                        Label("In „Gesehen“", systemImage: "checkmark.circle.fill")
+                                            .font(.caption2)
+                                    }
+                                    if isInBacklog {
+                                        Label("Im Backlog", systemImage: "tray.full.fill")
+                                            .font(.caption2)
+                                    }
+                                }
                                 .foregroundStyle(.secondary)
-                        }
-
-                        // Markierung, wenn schon in Listen
-                        if isInWatched || isInBacklog {
-                            HStack(spacing: 6) {
-                                if isInWatched {
-                                    Label("In „Gesehen“", systemImage: "checkmark.circle.fill")
-                                        .font(.caption2)
-                                }
-                                if isInBacklog {
-                                    Label("Im Backlog", systemImage: "tray.full.fill")
-                                        .font(.caption2)
-                                }
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
+                                .background(Color.blue.opacity(0.08))
+                                .clipShape(Capsule())
                             }
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 6)
-                            .background(Color.blue.opacity(0.08))
-                            .clipShape(Capsule())
-                        }
 
-                        // dezenter Hint
-                        HStack(spacing: 6) {
-                            Image(systemName: "info.circle")
-                                .font(.caption)
-                            Text("Tippen für Details")
-                                .font(.caption)
+                            // ✅ subtiler Chevron + Material-Glow statt „Tippen für Details“
+                            detailsHintChip
+                                .padding(.top, 4)
                         }
-                        .foregroundStyle(.blue)
-                        .padding(.top, 2)
                     }
-                    .padding(.trailing, 48) // Platz für das + Menu oben rechts
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
                 }
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    openDetail(result)
-                }
+                .buttonStyle(.plain)
 
-                // + Menu (Add / Details)
+                // + Menu (Add / Details) – sitzt jetzt als eigene Spalte, kollidiert nicht mit dem Titel
                 Menu {
                     Button {
                         openDetail(result)
@@ -595,6 +593,28 @@ struct MovieSearchView: View {
         .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
     }
 
+    // ✅ neuer „Details“-Chip (Chevron + Material-Glow)
+    private var detailsHintChip: some View {
+        HStack(spacing: 6) {
+            Text("Details")
+                .font(.caption.weight(.semibold))
+            Image(systemName: "chevron.right")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+        }
+        .foregroundStyle(.blue)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(.ultraThinMaterial)
+        .clipShape(Capsule())
+        .overlay {
+            Capsule()
+                .stroke(Color.blue.opacity(0.20), lineWidth: 1)
+        }
+        .shadow(color: Color.blue.opacity(0.14), radius: 10, x: 0, y: 2)   // „Glow“, aber subtil
+        .shadow(color: Color.blue.opacity(0.08), radius: 18, x: 0, y: 8)   // weicher Nachglow
+    }
+
     private func openDetail(_ result: TMDbMovieResult) {
         detailResult = result
         showingDetail = true
@@ -639,7 +659,6 @@ struct MovieSearchView: View {
                         .frame(maxWidth: 170)
                         .padding(.top, 2)
                 }
-                .padding(.trailing, 48)
             }
         }
         .padding(12)
