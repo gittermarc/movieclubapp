@@ -66,6 +66,10 @@ struct GoalsView: View {
             .sorted { ($0.watchedDate ?? .distantPast) > ($1.watchedDate ?? .distantPast) }
     }
 
+    private var customGoalsForSelectedYear: [ViewingCustomGoal] {
+        customGoals.filter { $0.isActive(in: selectedYear) }
+    }
+
     private var yearlyTarget: Int {
         goalsByYear[selectedYear] ?? defaultYearlyGoal
     }
@@ -153,7 +157,9 @@ struct GoalsView: View {
                             goalBeingEdited = ViewingCustomGoal(
                                 type: .decade,
                                 rule: .releaseDecade(availableDecades.last ?? 2000),
-                                target: 10
+                                target: 10,
+                                startYear: selectedYear,
+                                durationYears: 1
                             )
                         } label: {
                             Label("Decade-Ziel", systemImage: ViewingCustomGoalType.decade.systemImage)
@@ -222,6 +228,8 @@ struct GoalsView: View {
             .sheet(item: $goalBeingEdited) { goal in
                 CustomGoalEditorView(
                     initialGoal: goal,
+                    contextYear: selectedYear,
+                    availableYears: Array(Set(yearOptions() + [goal.startYear])).sorted(by: >),
                     availableDecades: availableDecades,
                     actorSuggestions: actorSuggestions,
                     directorSuggestions: directorSuggestions,
@@ -341,12 +349,15 @@ struct GoalsView: View {
     }
 
     private var customGoalsSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        let visibleGoals = sortedCustomGoals()
+        let otherYearsCount = max(0, customGoals.count - visibleGoals.count)
+
+        return VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Text("Custom Goals")
                     .font(.headline)
                 Spacer()
-                Text("\(customGoals.count)")
+                Text("\(visibleGoals.count)")
                     .font(.caption.weight(.semibold))
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
@@ -354,13 +365,25 @@ struct GoalsView: View {
                     .clipShape(Capsule())
             }
 
-            if customGoals.isEmpty {
-                Text("Leg dir Ziele an wie „10 Filme aus den 50ern“ oder „15 Filme von Nolan“ – und tracke sie wie dein Jahresziel.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+            if visibleGoals.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("In \(selectedYear) sind noch keine Custom Goals angelegt.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+
+                    if otherYearsCount > 0 {
+                        Text("Du hast \(otherYearsCount) Ziel(e) in anderen Jahren – die siehst du, wenn du oben das Jahr wechselst.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Text("Beispiele: „10 Filme aus den 50ern“, „15 Filme von Nolan“, „8 Filme mit time travel“.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             } else {
                 VStack(spacing: 12) {
-                    ForEach(sortedCustomGoals()) { goal in
+                    ForEach(visibleGoals) { goal in
                         customGoalCard(goal)
                     }
                 }
@@ -380,6 +403,10 @@ struct GoalsView: View {
                     Text(goal.title)
                         .font(.subheadline.weight(.semibold))
                         .lineLimit(2)
+
+                    Text(goal.validityLabel)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
 
                     Text("\(matches.count) / \(goal.target)")
                         .font(.caption)
@@ -600,8 +627,20 @@ struct GoalsView: View {
     // MARK: - Yearly Goal Persist/Sync
 
     private func yearOptions() -> [Int] {
-        let current = Calendar.current.component(.year, from: Date())
-        return Array((current - 5)...(current + 1)).reversed()
+        let cal = Calendar.current
+        let current = cal.component(.year, from: Date())
+
+        let yearsFromMovies: [Int] = movieStore.movies.compactMap { m in
+            guard let d = m.watchedDate else { return nil }
+            return cal.component(.year, from: d)
+        }
+
+        var set = Set<Int>(yearsFromMovies)
+        set.formUnion(goalsByYear.keys)
+        set.insert(current)
+        set.insert(selectedYear)
+
+        return Array(set).sorted(by: >)
     }
 
     private func loadYearlyGoals() {
@@ -639,7 +678,7 @@ struct GoalsView: View {
     // MARK: - Custom Goals Persist/Sync
 
     private func sortedCustomGoals() -> [ViewingCustomGoal] {
-        customGoals.sorted { a, b in
+        customGoalsForSelectedYear.sorted { a, b in
             if a.type != b.type { return a.type.rawValue < b.type.rawValue }
             return a.createdAt < b.createdAt
         }
@@ -798,7 +837,7 @@ struct GoalsView: View {
     private func triggerMetadataEnrichmentIfNeeded() async {
         if isEnrichingMetadata { return }
 
-        let typesNeeded = Set(customGoals.map { $0.type })
+        let typesNeeded = Set(customGoalsForSelectedYear.map { $0.type })
             .intersection([.director, .genre, .keyword])
 
         guard !typesNeeded.isEmpty else { return }
@@ -1016,6 +1055,8 @@ private struct GoalDetailView: View {
 private struct CustomGoalEditorView: View {
 
     let initialGoal: ViewingCustomGoal
+    let contextYear: Int
+    let availableYears: [Int]
     let availableDecades: [Int]
     let actorSuggestions: [PersonSuggestion]
     let directorSuggestions: [PersonSuggestion]
@@ -1027,6 +1068,10 @@ private struct CustomGoalEditorView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var target: Int = 10
+
+    // validity
+    @State private var startYear: Int = Calendar.current.component(.year, from: Date())
+    @State private var durationYears: Int = 1
 
     // decade
     @State private var decadeStart: Int = 2000
@@ -1052,6 +1097,8 @@ private struct CustomGoalEditorView: View {
 
     init(
         initialGoal: ViewingCustomGoal,
+        contextYear: Int,
+        availableYears: [Int],
         availableDecades: [Int],
         actorSuggestions: [PersonSuggestion],
         directorSuggestions: [PersonSuggestion],
@@ -1060,6 +1107,8 @@ private struct CustomGoalEditorView: View {
         onSave: @escaping (ViewingCustomGoal) -> Void
     ) {
         self.initialGoal = initialGoal
+        self.contextYear = contextYear
+        self.availableYears = availableYears
         self.availableDecades = availableDecades
         self.actorSuggestions = actorSuggestions
         self.directorSuggestions = directorSuggestions
@@ -1068,6 +1117,8 @@ private struct CustomGoalEditorView: View {
         self.onSave = onSave
 
         _target = State(initialValue: initialGoal.target)
+        _startYear = State(initialValue: initialGoal.startYear)
+        _durationYears = State(initialValue: max(1, initialGoal.durationYears))
 
         switch initialGoal.rule {
         case .releaseDecade(let d):
@@ -1101,6 +1152,27 @@ private struct CustomGoalEditorView: View {
                     Stepper(value: $target, in: 1...500) {
                         Text("\(target) Filme")
                     }
+                }
+
+                Section("Gültigkeit") {
+                    Picker("Startjahr", selection: $startYear) {
+                        ForEach(availableYears, id: \.self) { y in
+                            Text(verbatim: "\(y)").tag(y)
+                        }
+                    }
+
+                    Stepper(value: $durationYears, in: 1...20) {
+                        let endYear = startYear + durationYears - 1
+                        if durationYears <= 1 {
+                            Text(verbatim: "Dauer: 1 Jahr (\(startYear))")
+                        } else {
+                            Text(verbatim: "Dauer: \(durationYears) Jahre (\(startYear)–\(endYear))")
+                        }
+                    }
+
+                    Text(validityLabel)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
 
                 switch initialGoal.type {
@@ -1409,6 +1481,14 @@ private struct CustomGoalEditorView: View {
         }
     }
 
+    private var validityLabel: String {
+        let endYear = startYear + max(1, durationYears) - 1
+        if durationYears <= 1 {
+            return "Dieses Ziel wird nur im Jahr \(startYear) getrackt."
+        }
+        return "Dieses Ziel wird von \(startYear) bis \(endYear) getrackt."
+    }
+
     // MARK: - Networking
 
     private func filteredPersonResults(preferDepartment: String?) -> [TMDbPersonSummary] {
@@ -1480,6 +1560,8 @@ private struct CustomGoalEditorView: View {
     private func buildUpdatedGoal() -> ViewingCustomGoal {
         var updated = initialGoal
         updated.target = target
+        updated.startYear = startYear
+        updated.durationYears = max(1, durationYears)
 
         switch initialGoal.type {
         case .decade:
