@@ -17,15 +17,16 @@ import CloudKit
 /// - target:  Int      → Zielanzahl Filme
 /// - updatedAt: Date   → Zeitstempel für Debug/Sortierung
 ///
-/// Custom Goals (Decade + Actor, versioniertes Payload):
+/// Custom Goals (Step 3 - generisch, versioniertes Payload):
 /// Record-Type: "ViewingCustomGoals"
 /// Felder:
 /// - groupId: String
-/// - payload: Data     → JSON-encoded ViewingCustomGoalsPayload (v2)
+/// - payload: Data     → JSON-encoded ViewingCustomGoalsPayload (v3)
 /// - updatedAt: Date
 ///
 /// Backward-Compat:
 /// - Step 1 speicherte payload als [DecadeGoal]
+/// - Step 2 speicherte payload als ViewingCustomGoalsPayloadV2 (decadeGoals + actorGoals)
 final class CloudKitGoalStore {
 
     static let shared = CloudKitGoalStore()
@@ -43,7 +44,7 @@ final class CloudKitGoalStore {
     private let targetKey    = "target"
     private let updatedAtKey = "updatedAt"
 
-    // MARK: - Custom Goals (Decade + Actor)
+    // MARK: - Custom Goals (v3)
 
     private let customRecordType = "ViewingCustomGoals"
     private let payloadKey = "payload"
@@ -54,10 +55,6 @@ final class CloudKitGoalStore {
 
     // MARK: - Laden (Jahresziele)
 
-    /// Lädt alle Ziele für eine bestimmte Gruppe aus CloudKit.
-    ///
-    /// - Parameter groupId:
-    ///   - nil oder leer → wird als "" gespeichert und gefiltert
     func fetchGoals(forGroupId groupId: String?) async throws -> [Int: Int] {
         let groupValue = groupId ?? ""
 
@@ -80,7 +77,6 @@ final class CloudKitGoalStore {
             for (_, recordResult) in page.matchResults {
                 switch recordResult {
                 case .success(let record):
-                    // year & target möglichst robust lesen
                     let yearValue: Int?
                     let targetValue: Int?
 
@@ -117,15 +113,12 @@ final class CloudKitGoalStore {
 
     // MARK: - Speichern (Upsert) (Jahresziele)
 
-    /// Speichert (oder aktualisiert) das Ziel für ein bestimmtes Jahr in einer Gruppe.
     func saveGoal(year: Int, target: Int, groupId: String?) async throws {
         let groupValue = groupId ?? ""
 
-        // Eindeutiger Record-Name: groupId + Jahr
         let recordName = "goal-\(groupValue)-\(year)"
         let recordID = CKRecord.ID(recordName: recordName)
 
-        // Hilfsfunktion: Felder setzen
         func applyFields(on record: CKRecord) -> CKRecord {
             record[groupIdKey]   = groupValue as CKRecordValue
             record[yearKey]      = year as CKRecordValue
@@ -150,7 +143,7 @@ final class CloudKitGoalStore {
         }
     }
 
-    // MARK: - Custom Goals (v2 Payload) – Laden
+    // MARK: - Custom Goals (v3 Payload) – Laden
 
     func fetchCustomGoals(forGroupId groupId: String?) async throws -> ViewingCustomGoalsPayload {
         let groupValue = groupId ?? ""
@@ -159,25 +152,31 @@ final class CloudKitGoalStore {
         do {
             let record = try await database.record(for: recordID)
             guard let data = record[payloadKey] as? Data else {
-                return ViewingCustomGoalsPayload(version: 2, decadeGoals: [], actorGoals: [])
+                return ViewingCustomGoalsPayload(version: 3, goals: [])
             }
 
-            // 1) Neu: payload als ViewingCustomGoalsPayload
-            if let decoded = try? JSONDecoder().decode(ViewingCustomGoalsPayload.self, from: data) {
-                return decoded
+            // 1) Aktuell: v3
+            if let decodedV3 = try? JSONDecoder().decode(ViewingCustomGoalsPayload.self, from: data) {
+                return decodedV3
             }
 
-            // 2) Backward-Compat: payload war [DecadeGoal]
+            // 2) Legacy: v2 (Decade + Actor getrennt)
+            if let decodedV2 = try? JSONDecoder().decode(ViewingCustomGoalsPayloadV2.self, from: data) {
+                return decodedV2.toV3()
+            }
+
+            // 3) Legacy: Step 1 – payload war [DecadeGoal]
             if let legacyDecades = try? JSONDecoder().decode([DecadeGoal].self, from: data) {
-                return ViewingCustomGoalsPayload(version: 2, decadeGoals: legacyDecades, actorGoals: [])
+                let goals = legacyDecades.map { ViewingCustomGoal(from: $0) }
+                return ViewingCustomGoalsPayload(version: 3, goals: goals)
             }
 
-            // 3) Wenn kaputt: leer zurück
-            return ViewingCustomGoalsPayload(version: 2, decadeGoals: [], actorGoals: [])
+            // 4) Wenn kaputt: leer zurück
+            return ViewingCustomGoalsPayload(version: 3, goals: [])
 
         } catch let ckError as CKError {
             if ckError.code == .unknownItem {
-                return ViewingCustomGoalsPayload(version: 2, decadeGoals: [], actorGoals: [])
+                return ViewingCustomGoalsPayload(version: 3, goals: [])
             }
             throw ckError
         } catch {
@@ -185,7 +184,7 @@ final class CloudKitGoalStore {
         }
     }
 
-    // MARK: - Custom Goals (v2 Payload) – Speichern (Upsert)
+    // MARK: - Custom Goals (v3 Payload) – Speichern (Upsert)
 
     func saveCustomGoals(_ payload: ViewingCustomGoalsPayload, groupId: String?) async throws {
         let groupValue = groupId ?? ""
@@ -225,16 +224,18 @@ final class CloudKitGoalStore {
         }
     }
 
-    // MARK: - Backward API (falls andere Stellen noch Step-1-Methoden aufrufen)
+    // MARK: - Backward API (falls andere Stellen noch Step-1/2-Methoden aufrufen)
 
     func fetchDecadeGoals(forGroupId groupId: String?) async throws -> [DecadeGoal] {
         let payload = try await fetchCustomGoals(forGroupId: groupId)
-        return payload.decadeGoals
+        return payload.goals.compactMap { $0.toDecadeGoal() }
     }
 
     func saveDecadeGoals(_ goals: [DecadeGoal], groupId: String?) async throws {
-        var payload = try await fetchCustomGoals(forGroupId: groupId)
-        payload.decadeGoals = goals
+        let payload = ViewingCustomGoalsPayload(
+            version: 3,
+            goals: goals.map { ViewingCustomGoal(from: $0) }
+        )
         try await saveCustomGoals(payload, groupId: groupId)
     }
 }

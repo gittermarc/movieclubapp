@@ -8,9 +8,6 @@
 internal import SwiftUI
 
 // MARK: - Shared helper type (file-scope, NOT private)
-// Fixes:
-// - "Cannot convert value of type '[GoalsView.ActorSuggestion]' ..."
-// - "'ActorSuggestion' is inaccessible due to 'private' protection level"
 struct ActorSuggestion: Identifiable, Hashable {
     let personId: Int
     let name: String
@@ -27,19 +24,15 @@ struct GoalsView: View {
     @State private var selectedYear: Int = Calendar.current.component(.year, from: Date())
     @State private var goalsByYear: [Int: Int] = [:]
 
-    // ✅ Custom Goals
-    @State private var decadeGoals: [DecadeGoal] = []
-    @State private var actorGoals: [ActorGoal] = []
+    // ✅ Step 3: Ein Array für alle Custom Goals
+    @State private var customGoals: [ViewingCustomGoal] = []
 
     // Editor states
-    @State private var decadeGoalBeingEdited: DecadeGoal? = nil
-    @State private var actorGoalBeingEdited: ActorGoal? = nil
-    @State private var isEditingExistingDecadeGoal: Bool = false
-    @State private var isEditingExistingActorGoal: Bool = false
+    @State private var goalBeingEdited: ViewingCustomGoal? = nil
+    @State private var isEditingExistingGoal: Bool = false
 
-    // Detail sheets
-    @State private var selectedDecadeGoalForDetail: DecadeGoal? = nil
-    @State private var selectedActorGoalForDetail: ActorGoal? = nil
+    // Detail sheet
+    @State private var selectedGoalForDetail: ViewingCustomGoal? = nil
 
     // Sync handling (für Jahresziele + Custom Goals)
     @State private var syncCount: Int = 0
@@ -48,14 +41,20 @@ struct GoalsView: View {
     private let storageKey = "ViewingGoalsByYear"
     private let defaultGoal = 50
 
-    // ✅ neuer, versionierter Cache-Key pro Gruppe (Decade + Actor)
+    // ✅ neuer, versionierter Cache-Key pro Gruppe (v3)
     private var customGoalsStorageKey: String {
+        let gid = movieStore.currentGroupId ?? ""
+        return "ViewingCustomGoals.Payload.v3.\(gid)"
+    }
+
+    // ✅ alter Key aus Step 2 (v2 Payload)
+    private var legacyCustomGoalsStorageKeyV2: String {
         let gid = movieStore.currentGroupId ?? ""
         return "ViewingCustomGoals.Payload.v2.\(gid)"
     }
 
-    // ✅ alter Key aus Step 1 (nur Decade) – damit wir lokal migrieren können
-    private var legacyDecadeGoalsStorageKey: String {
+    // ✅ alter Key aus Step 1 (nur Decade)
+    private var legacyDecadeGoalsStorageKeyV1: String {
         let gid = movieStore.currentGroupId ?? ""
         return "ViewingCustomGoals.Decade.v1.\(gid)"
     }
@@ -100,6 +99,13 @@ struct GoalsView: View {
         return String(format: "%.0f %% erreicht", min(percent, 100.0))
     }
 
+    private var customGoalsSorted: [ViewingCustomGoal] {
+        customGoals.sorted { a, b in
+            if a.type != b.type { return a.type.rawValue < b.type.rawValue }
+            return a.title.localizedCaseInsensitiveCompare(b.title) == .orderedAscending
+        }
+    }
+
     // MARK: - Body
 
     var body: some View {
@@ -111,13 +117,8 @@ struct GoalsView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
 
-                        // Header / Filter
                         headerSection
-
-                        // Grid mit Postern / Platzhaltern (Jahresziel)
                         gridSection
-
-                        // ✅ Custom Goals
                         customGoalsSection
 
                         Spacer(minLength: 16)
@@ -151,21 +152,28 @@ struct GoalsView: View {
                     Button("Fertig") { dismiss() }
                 }
 
-                // ✅ Plus als Menu: Decade oder Actor
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
                         Button {
-                            isEditingExistingDecadeGoal = false
-                            decadeGoalBeingEdited = DecadeGoal(decadeStart: suggestedDefaultDecade(), target: 10)
+                            isEditingExistingGoal = false
+                            goalBeingEdited = ViewingCustomGoal(
+                                type: .decade,
+                                rule: .releaseDecade(suggestedDefaultDecade()),
+                                target: 10
+                            )
                         } label: {
-                            Label("Decade-Ziel", systemImage: "calendar")
+                            Label("Decade-Ziel", systemImage: ViewingCustomGoalType.decade.systemImage)
                         }
 
                         Button {
-                            isEditingExistingActorGoal = false
-                            actorGoalBeingEdited = ActorGoal(personId: 0, personName: "", profilePath: nil, target: 10)
+                            isEditingExistingGoal = false
+                            goalBeingEdited = ViewingCustomGoal(
+                                type: .person,
+                                rule: .person(id: 0, name: "", profilePath: nil),
+                                target: 10
+                            )
                         } label: {
-                            Label("Darsteller-Ziel", systemImage: "person.fill")
+                            Label("Darsteller-Ziel", systemImage: ViewingCustomGoalType.person.systemImage)
                         }
                     } label: {
                         Image(systemName: "plus")
@@ -182,36 +190,20 @@ struct GoalsView: View {
                     selectedYear = first
                 }
             }
-            // Editors
-            .sheet(item: $decadeGoalBeingEdited) { goal in
-                DecadeGoalEditorView(
+            .sheet(item: $goalBeingEdited) { goal in
+                CustomGoalEditorView(
                     initialGoal: goal,
                     availableDecades: availableDecades(),
-                    onCancel: { decadeGoalBeingEdited = nil },
-                    onSave: { updated in
-                        upsertDecadeGoal(updated, editingExisting: isEditingExistingDecadeGoal)
-                        decadeGoalBeingEdited = nil
-                    }
-                )
-            }
-            .sheet(item: $actorGoalBeingEdited) { goal in
-                // ✅ FIX: suggestions now is [ActorSuggestion], and editor accepts that directly
-                ActorGoalEditorView(
-                    initialGoal: goal,
                     suggestions: actorSuggestionsForSelectedYear(),
-                    onCancel: { actorGoalBeingEdited = nil },
+                    onCancel: { goalBeingEdited = nil },
                     onSave: { updated in
-                        upsertActorGoal(updated, editingExisting: isEditingExistingActorGoal)
-                        actorGoalBeingEdited = nil
+                        upsertCustomGoal(updated, editingExisting: isEditingExistingGoal)
+                        goalBeingEdited = nil
                     }
                 )
             }
-            // Detail Sheets
-            .sheet(item: $selectedDecadeGoalForDetail) { goal in
-                decadeGoalDetailSheet(goal: goal)
-            }
-            .sheet(item: $selectedActorGoalForDetail) { goal in
-                actorGoalDetailSheet(goal: goal)
+            .sheet(item: $selectedGoalForDetail) { goal in
+                customGoalDetailSheet(goal: goal)
             }
         }
     }
@@ -221,7 +213,6 @@ struct GoalsView: View {
     private var headerSection: some View {
         VStack(alignment: .leading, spacing: 12) {
 
-            // Jahr-Auswahl als Chips
             VStack(alignment: .leading, spacing: 6) {
                 Text("Jahr")
                     .font(.caption)
@@ -252,7 +243,6 @@ struct GoalsView: View {
                 }
             }
 
-            // Ziel-Definition (Jahr)
             VStack(alignment: .leading, spacing: 8) {
                 Text("Ziel für \(selectedYear.formatted(.number.grouping(.never)))")
                     .font(.headline)
@@ -354,7 +344,7 @@ struct GoalsView: View {
         }
     }
 
-    // MARK: - ✅ Custom Goals Section (Decade + Actor)
+    // MARK: - ✅ Custom Goals Section (generisch)
 
     private var customGoalsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -366,14 +356,22 @@ struct GoalsView: View {
 
                 Menu {
                     Button {
-                        isEditingExistingDecadeGoal = false
-                        decadeGoalBeingEdited = DecadeGoal(decadeStart: suggestedDefaultDecade(), target: 10)
-                    } label: { Label("Decade-Ziel", systemImage: "calendar") }
+                        isEditingExistingGoal = false
+                        goalBeingEdited = ViewingCustomGoal(
+                            type: .decade,
+                            rule: .releaseDecade(suggestedDefaultDecade()),
+                            target: 10
+                        )
+                    } label: { Label("Decade-Ziel", systemImage: ViewingCustomGoalType.decade.systemImage) }
 
                     Button {
-                        isEditingExistingActorGoal = false
-                        actorGoalBeingEdited = ActorGoal(personId: 0, personName: "", profilePath: nil, target: 10)
-                    } label: { Label("Darsteller-Ziel", systemImage: "person.fill") }
+                        isEditingExistingGoal = false
+                        goalBeingEdited = ViewingCustomGoal(
+                            type: .person,
+                            rule: .person(id: 0, name: "", profilePath: nil),
+                            target: 10
+                        )
+                    } label: { Label("Darsteller-Ziel", systemImage: ViewingCustomGoalType.person.systemImage) }
 
                 } label: {
                     Label("Hinzufügen", systemImage: "plus.circle.fill")
@@ -382,32 +380,14 @@ struct GoalsView: View {
                 .buttonStyle(.plain)
             }
 
-            if decadeGoals.isEmpty && actorGoals.isEmpty {
+            if customGoals.isEmpty {
                 Text("Lege eigene Ziele an, z.B. „10 Filme aus den 50ern“ oder „15 Filme mit Leonardo DiCaprio“ – Fortschritt zählt für das aktuell gewählte Jahr.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
-            }
-
-            // Decade Goals
-            if !decadeGoals.isEmpty {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("Decade-Ziele").font(.subheadline.weight(.semibold))
-                    VStack(spacing: 10) {
-                        ForEach(decadeGoals.sorted(by: { $0.decadeStart < $1.decadeStart })) { goal in
-                            decadeGoalCard(goal: goal)
-                        }
-                    }
-                }
-            }
-
-            // Actor Goals
-            if !actorGoals.isEmpty {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("Darsteller-Ziele").font(.subheadline.weight(.semibold))
-                    VStack(spacing: 10) {
-                        ForEach(actorGoals.sorted(by: { $0.personName.localizedCaseInsensitiveCompare($1.personName) == .orderedAscending })) { goal in
-                            actorGoalCard(goal: goal)
-                        }
+            } else {
+                VStack(spacing: 10) {
+                    ForEach(customGoalsSorted) { goal in
+                        customGoalCard(goal: goal)
                     }
                 }
             }
@@ -415,117 +395,8 @@ struct GoalsView: View {
         .padding(.top, 6)
     }
 
-    // MARK: - Decade Goal Card
-
     @ViewBuilder
-    private func decadeGoalCard(goal: DecadeGoal) -> some View {
-        let matches = matchingMovies(for: goal)
-        let seen = matches.count
-        let target = max(goal.target, 1)
-        let fraction = min(Double(seen) / Double(target), 1.0)
-        let percentText = String(format: "%.0f %% erreicht", fraction * 100.0)
-
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(goal.title)
-                        .font(.subheadline.weight(.semibold))
-                    Text("\(seen) von \(goal.target) im Jahr \(selectedYear)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-
-                Spacer()
-
-                Menu {
-                    Button {
-                        isEditingExistingDecadeGoal = true
-                        decadeGoalBeingEdited = goal
-                    } label: { Label("Bearbeiten", systemImage: "pencil") }
-
-                    Button(role: .destructive) {
-                        deleteDecadeGoal(goal)
-                    } label: { Label("Löschen", systemImage: "trash") }
-                } label: {
-                    Image(systemName: "ellipsis.circle")
-                        .font(.title3)
-                        .foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
-            }
-
-            GeometryReader { geo in
-                let width = geo.size.width
-                let filledWidth = width * fraction
-
-                ZStack(alignment: .leading) {
-                    RoundedRectangle(cornerRadius: 6)
-                        .fill(Color.gray.opacity(0.2))
-                    RoundedRectangle(cornerRadius: 6)
-                        .fill(Color.accentColor.opacity(0.7))
-                        .frame(width: max(0, filledWidth))
-                }
-            }
-            .frame(height: 8)
-
-            HStack {
-                Text(percentText)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Button {
-                    selectedDecadeGoalForDetail = goal
-                } label: {
-                    Text("Matching Movies")
-                        .font(.caption.weight(.semibold))
-                }
-                .buttonStyle(.plain)
-            }
-
-            if matches.isEmpty {
-                Text("Noch keine passenden Filme im gewählten Jahr.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            } else {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        ForEach(matches.prefix(12), id: \.id) { movie in
-                            if let binding = binding(for: movie) {
-                                NavigationLink {
-                                    MovieDetailView(movie: binding, isBacklog: false)
-                                } label: {
-                                    posterThumb(for: movie)
-                                }
-                                .buttonStyle(.plain)
-                            } else {
-                                posterThumb(for: movie)
-                            }
-                        }
-
-                        if matches.count > 12 {
-                            Text("+\(matches.count - 12)")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.secondary)
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 14)
-                                .background(Color.gray.opacity(0.12))
-                                .clipShape(RoundedRectangle(cornerRadius: 10))
-                        }
-                    }
-                }
-            }
-        }
-        .padding()
-        .background(
-            RoundedRectangle(cornerRadius: 14)
-                .fill(Color(.secondarySystemBackground))
-        )
-    }
-
-    // MARK: - Actor Goal Card
-
-    @ViewBuilder
-    private func actorGoalCard(goal: ActorGoal) -> some View {
+    private func customGoalCard(goal: ViewingCustomGoal) -> some View {
         let matches = matchingMovies(for: goal)
         let seen = matches.count
         let target = max(goal.target, 1)
@@ -535,12 +406,13 @@ struct GoalsView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top, spacing: 10) {
 
-                actorAvatar(profilePath: goal.profilePath, fallbackSystemName: "person.fill")
+                goalLeadingView(goal)
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(goal.title)
                         .font(.subheadline.weight(.semibold))
                         .lineLimit(2)
+
                     Text("\(seen) von \(goal.target) im Jahr \(selectedYear)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -550,12 +422,12 @@ struct GoalsView: View {
 
                 Menu {
                     Button {
-                        isEditingExistingActorGoal = true
-                        actorGoalBeingEdited = goal
+                        isEditingExistingGoal = true
+                        goalBeingEdited = goal
                     } label: { Label("Bearbeiten", systemImage: "pencil") }
 
                     Button(role: .destructive) {
-                        deleteActorGoal(goal)
+                        deleteCustomGoal(goal)
                     } label: { Label("Löschen", systemImage: "trash") }
                 } label: {
                     Image(systemName: "ellipsis.circle")
@@ -585,7 +457,7 @@ struct GoalsView: View {
                     .foregroundStyle(.secondary)
                 Spacer()
                 Button {
-                    selectedActorGoalForDetail = goal
+                    selectedGoalForDetail = goal
                 } label: {
                     Text("Matching Movies")
                         .font(.caption.weight(.semibold))
@@ -631,6 +503,23 @@ struct GoalsView: View {
             RoundedRectangle(cornerRadius: 14)
                 .fill(Color(.secondarySystemBackground))
         )
+    }
+
+    @ViewBuilder
+    private func goalLeadingView(_ goal: ViewingCustomGoal) -> some View {
+        switch goal.type {
+        case .decade:
+            RoundedRectangle(cornerRadius: 10)
+                .fill(Color.accentColor.opacity(0.12))
+                .frame(width: 40, height: 40)
+                .overlay {
+                    Image(systemName: ViewingCustomGoalType.decade.systemImage)
+                        .foregroundStyle(Color.accentColor)
+                }
+
+        case .person:
+            actorAvatar(profilePath: goal.profilePath, fallbackSystemName: "person.fill")
+        }
     }
 
     // MARK: - Thumbs / Avatar
@@ -690,10 +579,10 @@ struct GoalsView: View {
         }
     }
 
-    // MARK: - Detail Sheets
+    // MARK: - Detail Sheet (generisch)
 
     @ViewBuilder
-    private func decadeGoalDetailSheet(goal: DecadeGoal) -> some View {
+    private func customGoalDetailSheet(goal: ViewingCustomGoal) -> some View {
         let matches = matchingMovies(for: goal)
 
         NavigationStack {
@@ -707,10 +596,10 @@ struct GoalsView: View {
                             NavigationLink {
                                 MovieDetailView(movie: binding, isBacklog: false)
                             } label: {
-                                decadeMovieRow(movie)
+                                movieRow(movie)
                             }
                         } else {
-                            decadeMovieRow(movie)
+                            movieRow(movie)
                         }
                     }
                 }
@@ -718,46 +607,14 @@ struct GoalsView: View {
             .navigationTitle(goal.title)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Fertig") { selectedDecadeGoalForDetail = nil }
+                    Button("Fertig") { selectedGoalForDetail = nil }
                 }
             }
         }
     }
 
     @ViewBuilder
-    private func actorGoalDetailSheet(goal: ActorGoal) -> some View {
-        let matches = matchingMovies(for: goal)
-
-        NavigationStack {
-            List {
-                if matches.isEmpty {
-                    Text("Keine passenden Filme im Jahr \(selectedYear).")
-                        .foregroundStyle(.secondary)
-                } else {
-                    ForEach(matches) { movie in
-                        if let binding = binding(for: movie) {
-                            NavigationLink {
-                                MovieDetailView(movie: binding, isBacklog: false)
-                            } label: {
-                                decadeMovieRow(movie)
-                            }
-                        } else {
-                            decadeMovieRow(movie)
-                        }
-                    }
-                }
-            }
-            .navigationTitle(goal.title)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Fertig") { selectedActorGoalForDetail = nil }
-                }
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func decadeMovieRow(_ movie: Movie) -> some View {
+    private func movieRow(_ movie: Movie) -> some View {
         HStack(spacing: 12) {
             if let url = movie.posterURL {
                 AsyncImage(url: url) { phase in
@@ -816,20 +673,24 @@ struct GoalsView: View {
         .padding(.vertical, 4)
     }
 
-    // MARK: - Matching Logic
+    // MARK: - Matching Logic (generisch)
 
-    private func matchingMovies(for goal: DecadeGoal) -> [Movie] {
-        moviesInSelectedYear.filter { movie in
-            guard let releaseYear = Int(movie.year.trimmingCharacters(in: .whitespacesAndNewlines)) else { return false }
-            return releaseYear >= goal.decadeStart && releaseYear <= goal.decadeEnd
-        }
-    }
+    private func matchingMovies(for goal: ViewingCustomGoal) -> [Movie] {
+        switch goal.rule {
 
-    private func matchingMovies(for goal: ActorGoal) -> [Movie] {
-        guard goal.personId > 0 else { return [] }
-        return moviesInSelectedYear.filter { movie in
-            guard let cast = movie.cast else { return false }
-            return cast.contains(where: { $0.personId == goal.personId })
+        case .releaseDecade(let decadeStart):
+            let decadeEnd = decadeStart + 9
+            return moviesInSelectedYear.filter { movie in
+                guard let releaseYear = Int(movie.year.trimmingCharacters(in: .whitespacesAndNewlines)) else { return false }
+                return releaseYear >= decadeStart && releaseYear <= decadeEnd
+            }
+
+        case .person(let id, _, _):
+            guard id > 0 else { return [] }
+            return moviesInSelectedYear.filter { movie in
+                guard let cast = movie.cast else { return false }
+                return cast.contains(where: { $0.personId == id })
+            }
         }
     }
 
@@ -896,37 +757,10 @@ struct GoalsView: View {
             .map { $0 }
     }
 
-    // MARK: - Upsert / Delete + Persist
+    // MARK: - Upsert / Delete + Persist (generisch)
 
-    private func upsertDecadeGoal(_ goal: DecadeGoal, editingExisting: Bool) {
-        var next = decadeGoals
-
-        if editingExisting {
-            if let idx = next.firstIndex(where: { $0.id == goal.id }) {
-                next[idx] = goal
-            } else {
-                next.append(goal)
-            }
-        } else {
-            next.append(goal)
-        }
-
-        var byDecade: [Int: DecadeGoal] = [:]
-        for g in next { byDecade[g.decadeStart] = g }
-        decadeGoals = Array(byDecade.values)
-
-        persistCustomGoals()
-    }
-
-    private func deleteDecadeGoal(_ goal: DecadeGoal) {
-        decadeGoals.removeAll { $0.id == goal.id }
-        persistCustomGoals()
-    }
-
-    private func upsertActorGoal(_ goal: ActorGoal, editingExisting: Bool) {
-        guard goal.personId > 0 else { return }
-
-        var next = actorGoals
+    private func upsertCustomGoal(_ goal: ViewingCustomGoal, editingExisting: Bool) {
+        var next = customGoals
 
         if editingExisting {
             if let idx = next.firstIndex(where: { $0.id == goal.id }) {
@@ -938,15 +772,24 @@ struct GoalsView: View {
             next.append(goal)
         }
 
-        var byPerson: [Int: ActorGoal] = [:]
-        for g in next { byPerson[g.personId] = g }
-        actorGoals = Array(byPerson.values)
+        // Dedup by semantic key (decade/person)
+        var byKey: [String: ViewingCustomGoal] = [:]
+        var fallbacks: [ViewingCustomGoal] = []
 
+        for g in next {
+            if let key = g.uniqueKey {
+                byKey[key] = g
+            } else {
+                fallbacks.append(g)
+            }
+        }
+
+        customGoals = Array(byKey.values) + fallbacks
         persistCustomGoals()
     }
 
-    private func deleteActorGoal(_ goal: ActorGoal) {
-        actorGoals.removeAll { $0.id == goal.id }
+    private func deleteCustomGoal(_ goal: ViewingCustomGoal) {
+        customGoals.removeAll { $0.id == goal.id }
         persistCustomGoals()
     }
 
@@ -957,7 +800,7 @@ struct GoalsView: View {
         beginSync()
         Task {
             do {
-                let payload = ViewingCustomGoalsPayload(version: 2, decadeGoals: decadeGoals, actorGoals: actorGoals)
+                let payload = ViewingCustomGoalsPayload(version: 3, goals: customGoals)
                 try await CloudKitGoalStore.shared.saveCustomGoals(payload, groupId: groupId)
             } catch {
                 print("CloudKit ViewingCustomGoals save error: \(error)")
@@ -1073,28 +916,40 @@ struct GoalsView: View {
         }
     }
 
-    // MARK: - Persistence (lokal + CloudKit) – Custom Goals Payload (v2)
+    // MARK: - Persistence (lokal + CloudKit) – Custom Goals (v3)
 
     private func loadCustomGoals() {
-        // 1) Local v2 cache
+        // 1) Local v3 cache
         if let data = UserDefaults.standard.data(forKey: customGoalsStorageKey),
            let decoded = try? JSONDecoder().decode(ViewingCustomGoalsPayload.self, from: data) {
-            decadeGoals = decoded.decadeGoals
-            actorGoals = decoded.actorGoals
+            customGoals = decoded.goals
         } else {
-            // 2) Local legacy cache (Step 1)
-            if let legacyData = UserDefaults.standard.data(forKey: legacyDecadeGoalsStorageKey),
-               let legacyDecades = try? JSONDecoder().decode([DecadeGoal].self, from: legacyData) {
-                decadeGoals = legacyDecades
-                actorGoals = []
-                saveCustomGoalsToCache()
+            // 2) Local v2 cache (Step 2)
+            if let v2Data = UserDefaults.standard.data(forKey: legacyCustomGoalsStorageKeyV2) {
+                if let decodedV2 = try? JSONDecoder().decode(ViewingCustomGoalsPayloadV2.self, from: v2Data) {
+                    let v3 = decodedV2.toV3()
+                    customGoals = v3.goals
+                    saveCustomGoalsToCache()
+                } else if let decodedAsV3 = try? JSONDecoder().decode(ViewingCustomGoalsPayload.self, from: v2Data) {
+                    // Falls der Key mal „falsch“ weiterverwendet wurde
+                    customGoals = decodedAsV3.goals
+                    saveCustomGoalsToCache()
+                } else {
+                    customGoals = []
+                }
             } else {
-                decadeGoals = []
-                actorGoals = []
+                // 3) Local legacy v1 cache (Step 1 – [DecadeGoal])
+                if let legacyData = UserDefaults.standard.data(forKey: legacyDecadeGoalsStorageKeyV1),
+                   let legacyDecades = try? JSONDecoder().decode([DecadeGoal].self, from: legacyData) {
+                    customGoals = legacyDecades.map { ViewingCustomGoal(from: $0) }
+                    saveCustomGoalsToCache()
+                } else {
+                    customGoals = []
+                }
             }
         }
 
-        // 3) Cloud (authoritative)
+        // 4) Cloud (authoritative)
         let groupId = movieStore.currentGroupId ?? ""
 
         beginSync()
@@ -1102,8 +957,7 @@ struct GoalsView: View {
             do {
                 let remote = try await CloudKitGoalStore.shared.fetchCustomGoals(forGroupId: groupId)
                 await MainActor.run {
-                    self.decadeGoals = remote.decadeGoals
-                    self.actorGoals = remote.actorGoals
+                    self.customGoals = remote.goals
                     self.saveCustomGoalsToCache()
                     self.endSync()
                 }
@@ -1115,7 +969,7 @@ struct GoalsView: View {
     }
 
     private func saveCustomGoalsToCache() {
-        let payload = ViewingCustomGoalsPayload(version: 2, decadeGoals: decadeGoals, actorGoals: actorGoals)
+        let payload = ViewingCustomGoalsPayload(version: 3, goals: customGoals)
         if let data = try? JSONEncoder().encode(payload) {
             UserDefaults.standard.set(data, forKey: customGoalsStorageKey)
         }
@@ -1125,99 +979,29 @@ struct GoalsView: View {
     private func endSync() { syncCount = max(0, syncCount - 1) }
 }
 
-// MARK: - Decade Editor View
+// MARK: - Custom Goal Editor (Decade + Person)
 
-private struct DecadeGoalEditorView: View {
+private struct CustomGoalEditorView: View {
     @Environment(\.dismiss) private var dismiss
 
-    @State private var decadeStart: Int
-    @State private var target: Int
-
+    private let initialGoal: ViewingCustomGoal
     private let availableDecades: [Int]
-    private let initialGoal: DecadeGoal
-    private let onCancel: () -> Void
-    private let onSave: (DecadeGoal) -> Void
-
-    init(
-        initialGoal: DecadeGoal,
-        availableDecades: [Int],
-        onCancel: @escaping () -> Void,
-        onSave: @escaping (DecadeGoal) -> Void
-    ) {
-        self.initialGoal = initialGoal
-        self.availableDecades = availableDecades
-        self.onCancel = onCancel
-        self.onSave = onSave
-        _decadeStart = State(initialValue: initialGoal.decadeStart)
-        _target = State(initialValue: initialGoal.target)
-    }
-
-    var body: some View {
-        NavigationStack {
-            Form {
-                Section("Decade") {
-                    Picker("Jahrzehnt", selection: $decadeStart) {
-                        ForEach(availableDecades, id: \.self) { d in
-                            Text("\(d)–\(d + 9)").tag(d)
-                        }
-                    }
-                }
-
-                Section("Ziel") {
-                    Stepper(value: $target, in: 1...500) {
-                        Text("\(target) Filme")
-                    }
-                }
-
-                Section {
-                    Text("Tipp: Gezählt werden Filme, die du im aktuell gewählten Jahr gesehen hast – und deren Release-Year in das Jahrzehnt fällt.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .navigationTitle("Decade-Ziel")
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Abbrechen") {
-                        onCancel()
-                        dismiss()
-                    }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Speichern") {
-                        let updated = DecadeGoal(
-                            id: initialGoal.id,
-                            decadeStart: decadeStart,
-                            target: max(1, target),
-                            createdAt: initialGoal.createdAt
-                        )
-                        onSave(updated)
-                        dismiss()
-                    }
-                }
-            }
-        }
-    }
-}
-
-// MARK: - Actor Editor View
-
-private struct ActorGoalEditorView: View {
-    @Environment(\.dismiss) private var dismiss
-
-    private let initialGoal: ActorGoal
     private let suggestions: [ActorSuggestion]
     private let onCancel: () -> Void
-    private let onSave: (ActorGoal) -> Void
+    private let onSave: (ViewingCustomGoal) -> Void
 
-    // Selection
+    // Shared
+    @State private var target: Int
+
+    // Decade
+    @State private var decadeStart: Int
+
+    // Person selection
     @State private var selectedPersonId: Int
     @State private var selectedPersonName: String
     @State private var selectedProfilePath: String?
 
-    @State private var target: Int
-
-    // Search
+    // Person search
     @State private var query: String = ""
     @State private var results: [TMDbPersonSummary] = []
     @State private var isSearching: Bool = false
@@ -1225,132 +1009,158 @@ private struct ActorGoalEditorView: View {
     @State private var searchTask: Task<Void, Never>? = nil
 
     init(
-        initialGoal: ActorGoal,
+        initialGoal: ViewingCustomGoal,
+        availableDecades: [Int],
         suggestions: [ActorSuggestion],
         onCancel: @escaping () -> Void,
-        onSave: @escaping (ActorGoal) -> Void
+        onSave: @escaping (ViewingCustomGoal) -> Void
     ) {
         self.initialGoal = initialGoal
+        self.availableDecades = availableDecades
         self.suggestions = suggestions
         self.onCancel = onCancel
         self.onSave = onSave
 
-        _selectedPersonId = State(initialValue: initialGoal.personId)
-        _selectedPersonName = State(initialValue: initialGoal.personName)
-        _selectedProfilePath = State(initialValue: initialGoal.profilePath)
         _target = State(initialValue: initialGoal.target)
-        _query = State(initialValue: initialGoal.personName)
+
+        switch initialGoal.rule {
+        case .releaseDecade(let d):
+            _decadeStart = State(initialValue: d)
+            _selectedPersonId = State(initialValue: 0)
+            _selectedPersonName = State(initialValue: "")
+            _selectedProfilePath = State(initialValue: nil)
+            _query = State(initialValue: "")
+
+        case .person(let id, let name, let p):
+            _decadeStart = State(initialValue: availableDecades.first ?? 1990)
+            _selectedPersonId = State(initialValue: id)
+            _selectedPersonName = State(initialValue: name)
+            _selectedProfilePath = State(initialValue: p)
+            _query = State(initialValue: name)
+        }
     }
 
     var body: some View {
         NavigationStack {
             Form {
+                switch initialGoal.type {
 
-                Section("Darsteller") {
-                    TextField("Suche nach Name (TMDb)", text: $query)
-                        .textInputAutocapitalization(.words)
-                        .autocorrectionDisabled()
-                        .onChange(of: query) { _, newValue in
-                            scheduleSearch(for: newValue)
+                case .decade:
+                    Section("Decade") {
+                        Picker("Jahrzehnt", selection: $decadeStart) {
+                            ForEach(availableDecades, id: \.self) { d in
+                                Text("\(d)–\(d + 9)").tag(d)
+                            }
+                        }
+                    }
+
+                case .person:
+                    Section("Darsteller") {
+                        TextField("Suche nach Name (TMDb)", text: $query)
+                            .textInputAutocapitalization(.words)
+                            .autocorrectionDisabled()
+                            .onChange(of: query) { _, newValue in
+                                scheduleSearch(for: newValue)
+                            }
+
+                        if isSearching {
+                            HStack(spacing: 8) {
+                                ProgressView()
+                                Text("Suche …")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
 
-                    if isSearching {
-                        HStack(spacing: 8) {
-                            ProgressView()
-                            Text("Suche …")
+                        if let err = searchError {
+                            Text(err)
+                                .font(.caption)
+                                .foregroundStyle(.red)
+                        }
+
+                        if selectedPersonId > 0, !selectedPersonName.isEmpty {
+                            HStack(spacing: 10) {
+                                avatar(profilePath: selectedProfilePath)
+
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(selectedPersonName)
+                                        .font(.subheadline.weight(.semibold))
+                                    Text("TMDb ID: \(selectedPersonId)")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+
+                                Spacer()
+
+                                Button {
+                                    selectedPersonId = 0
+                                    selectedPersonName = ""
+                                    selectedProfilePath = nil
+                                } label: {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .foregroundStyle(.secondary)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        } else {
+                            Text("Wähle eine Person aus der Suche oder aus den Vorschlägen.")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
                     }
 
-                    if let err = searchError {
-                        Text(err)
-                            .font(.caption)
-                            .foregroundStyle(.red)
-                    }
-
-                    if selectedPersonId > 0, !selectedPersonName.isEmpty {
-                        HStack(spacing: 10) {
-                            avatar(profilePath: selectedProfilePath)
-
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(selectedPersonName)
-                                    .font(.subheadline.weight(.semibold))
-                                Text("TMDb ID: \(selectedPersonId)")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-
-                            Spacer()
-
-                            Button {
-                                selectedPersonId = 0
-                                selectedPersonName = ""
-                                selectedProfilePath = nil
-                            } label: {
-                                Image(systemName: "xmark.circle.fill")
-                                    .foregroundStyle(.secondary)
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    } else {
-                        Text("Wähle eine Person aus der Suche oder aus den Vorschlägen.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
-                if !suggestions.isEmpty && query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    Section("Vorschläge aus deinem Jahr") {
-                        ForEach(suggestions) { s in
-                            Button {
-                                selectedPersonId = s.personId
-                                selectedPersonName = s.name
-                                selectedProfilePath = nil
-                            } label: {
-                                HStack {
-                                    Text(s.name)
-                                    Spacer()
-                                    Text("(\(s.count))")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
+                    if !suggestions.isEmpty && query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        Section("Vorschläge aus deinem Jahr") {
+                            ForEach(suggestions) { s in
+                                Button {
+                                    selectedPersonId = s.personId
+                                    selectedPersonName = s.name
+                                    selectedProfilePath = nil
+                                } label: {
+                                    HStack {
+                                        Text(s.name)
+                                        Spacer()
+                                        Text("(\(s.count))")
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
                                 }
                             }
                         }
                     }
-                }
 
-                if !results.isEmpty {
-                    Section("TMDb Ergebnisse") {
-                        ForEach(results) { p in
-                            Button {
-                                selectedPersonId = p.id
-                                selectedPersonName = p.name
-                                selectedProfilePath = p.profile_path
-                            } label: {
-                                HStack(spacing: 10) {
-                                    avatar(profilePath: p.profile_path)
+                    if !results.isEmpty {
+                        Section("TMDb Ergebnisse") {
+                            ForEach(results) { p in
+                                Button {
+                                    selectedPersonId = p.id
+                                    selectedPersonName = p.name
+                                    selectedProfilePath = p.profile_path
+                                } label: {
+                                    HStack(spacing: 10) {
+                                        avatar(profilePath: p.profile_path)
 
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(p.name)
-                                            .font(.subheadline.weight(.semibold))
-                                        if let dept = p.known_for_department, !dept.isEmpty {
-                                            Text(dept)
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(p.name)
+                                                .font(.subheadline.weight(.semibold))
+                                            if let dept = p.known_for_department, !dept.isEmpty {
+                                                Text(dept)
+                                                    .font(.caption)
+                                                    .foregroundStyle(.secondary)
+                                            }
+                                        }
+
+                                        Spacer()
+
+                                        if let pop = p.popularity {
+                                            Text(String(format: "%.1f", pop))
                                                 .font(.caption)
                                                 .foregroundStyle(.secondary)
+                                                .padding(.horizontal, 8)
+                                                .padding(.vertical, 4)
+                                                .background(Color.gray.opacity(0.12))
+                                                .clipShape(Capsule())
                                         }
-                                    }
-
-                                    Spacer()
-
-                                    if let pop = p.popularity {
-                                        Text(String(format: "%.1f", pop))
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                            .padding(.horizontal, 8)
-                                            .padding(.vertical, 4)
-                                            .background(Color.gray.opacity(0.12))
-                                            .clipShape(Capsule())
                                     }
                                 }
                             }
@@ -1365,12 +1175,12 @@ private struct ActorGoalEditorView: View {
                 }
 
                 Section {
-                    Text("Tipp: Gezählt werden Filme, die du im aktuell gewählten Jahr gesehen hast – und in deren Cast diese Person vorkommt.")
+                    Text(tipText)
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
             }
-            .navigationTitle("Darsteller-Ziel")
+            .navigationTitle(initialGoal.type.displayName)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Abbrechen") {
@@ -1381,30 +1191,73 @@ private struct ActorGoalEditorView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Speichern") {
-                        let updated = ActorGoal(
-                            id: initialGoal.id,
-                            personId: selectedPersonId,
-                            personName: selectedPersonName.trimmingCharacters(in: .whitespacesAndNewlines),
-                            profilePath: selectedProfilePath,
-                            target: max(1, target),
-                            createdAt: initialGoal.createdAt
-                        )
+                        let updated = buildUpdatedGoal()
                         onSave(updated)
                         dismiss()
                     }
-                    .disabled(selectedPersonId <= 0 || selectedPersonName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .disabled(!canSave)
                 }
             }
             .onDisappear {
                 searchTask?.cancel()
             }
             .onAppear {
-                if !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && results.isEmpty {
+                // Autosearch, wenn wir eine Person vorbefüllt haben
+                if initialGoal.type == .person,
+                   !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                   results.isEmpty {
                     scheduleSearch(for: query)
                 }
             }
         }
     }
+
+    private var tipText: String {
+        switch initialGoal.type {
+        case .decade:
+            return "Tipp: Gezählt werden Filme, die du im aktuell gewählten Jahr gesehen hast – und deren Release-Year in das Jahrzehnt fällt."
+        case .person:
+            return "Tipp: Gezählt werden Filme, die du im aktuell gewählten Jahr gesehen hast – und in deren Cast diese Person vorkommt."
+        }
+    }
+
+    private var canSave: Bool {
+        switch initialGoal.type {
+        case .decade:
+            return target >= 1
+        case .person:
+            return target >= 1
+            && selectedPersonId > 0
+            && !selectedPersonName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+    }
+
+    private func buildUpdatedGoal() -> ViewingCustomGoal {
+        switch initialGoal.type {
+        case .decade:
+            return ViewingCustomGoal(
+                id: initialGoal.id,
+                type: .decade,
+                rule: .releaseDecade(decadeStart),
+                target: max(1, target),
+                createdAt: initialGoal.createdAt
+            )
+        case .person:
+            return ViewingCustomGoal(
+                id: initialGoal.id,
+                type: .person,
+                rule: .person(
+                    id: selectedPersonId,
+                    name: selectedPersonName.trimmingCharacters(in: .whitespacesAndNewlines),
+                    profilePath: selectedProfilePath
+                ),
+                target: max(1, target),
+                createdAt: initialGoal.createdAt
+            )
+        }
+    }
+
+    // MARK: - Search
 
     private func scheduleSearch(for raw: String) {
         searchTask?.cancel()
