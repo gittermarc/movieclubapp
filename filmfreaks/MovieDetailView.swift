@@ -428,6 +428,9 @@ struct MovieDetailView: View {
         .navigationTitle(movie.title)
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
+            // Onboarding: zählt, wie oft die Detailansicht geöffnet wurde (pro Gruppe)
+            OnboardingProgress.incrementDetailOpenCount(forGroupId: movie.groupId ?? movieStore.currentGroupId)
+
             if let existing = movie.watchedDate {
                 localWatchedDate = existing
             } else {

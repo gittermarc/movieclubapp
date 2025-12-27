@@ -38,6 +38,11 @@ struct ContentView: View {
     @State private var showingGoals = false
     @State private var showingGroupSettings = false
 
+    // MARK: - Onboarding / Quick Start
+    @AppStorage("Onboarding_HasSeenQuickStart") private var hasSeenQuickStart: Bool = false
+    @State private var showingQuickStart: Bool = false
+    @State private var onboardingChecklistExpanded: Bool = true
+
     @State private var selectedMode: MovieListMode = .watched
     @State private var filterByUser: User? = nil
     @State private var selectedSort: MovieSortOption = .dateNewest
@@ -123,6 +128,13 @@ struct ContentView: View {
                         .padding(.top, 8)
                     }
 
+
+                    // ✅ Onboarding: Quick Start / Setup-Checkliste
+                    if shouldShowOnboardingChecklist {
+                        onboardingChecklistCard
+                            .padding(.horizontal)
+                            .padding(.top, 8)
+                    }
 
                     // Gesehen / Backlog
                     Picker("Liste", selection: $selectedMode) {
@@ -251,6 +263,28 @@ struct ContentView: View {
                 }
             }
             .navigationTitle("The Movie Club")
+            .onAppear {
+                // Quick Start nur beim ersten Start – danach nicht mehr.
+                if !hasSeenQuickStart {
+                    showingQuickStart = true
+                }
+                updateOnboardingCompletionFlag()
+            }
+            .onChange(of: movieStore.currentGroupId) { _, _ in
+                updateOnboardingCompletionFlag()
+            }
+            .onChange(of: movieStore.currentGroupName) { _, _ in
+                updateOnboardingCompletionFlag()
+            }
+            .onChange(of: movieStore.movies.count) { _, _ in
+                updateOnboardingCompletionFlag()
+            }
+            .onChange(of: movieStore.backlogMovies.count) { _, _ in
+                updateOnboardingCompletionFlag()
+            }
+            .onChange(of: userStore.users.count) { _, _ in
+                updateOnboardingCompletionFlag()
+            }
             .toolbar {
                 ToolbarItemGroup(placement: .topBarTrailing) {
                     Button {
@@ -279,12 +313,38 @@ struct ContentView: View {
                     }
 
                     Button {
+                        trackSearchOpened()
                         showingSearchMovie = true
                     } label: {
                         Image(systemName: "magnifyingglass")
                     }
                 }
             }
+            .sheet(isPresented: $showingQuickStart, onDismiss: {
+                // Wenn der User das Sheet wegwischt, nicht ewig wieder nerven.
+                hasSeenQuickStart = true
+            }) {
+                QuickStartView(
+                    onOpenGroups: {
+                        showingQuickStart = false
+                        showingGroupSettings = true
+                    },
+                    onOpenUsers: {
+                        showingQuickStart = false
+                        showingUsers = true
+                    },
+                    onOpenSearch: {
+                        showingQuickStart = false
+                        trackSearchOpened()
+                        showingSearchMovie = true
+                    },
+                    onDone: {
+                        hasSeenQuickStart = true
+                        showingQuickStart = false
+                    }
+                )
+            }
+
             .sheet(isPresented: $showingSearchMovie) {
                 MovieSearchView(
                     existingWatched: movieStore.movies,
@@ -352,6 +412,179 @@ struct ContentView: View {
         }
     }
 
+    // MARK: - Onboarding State
+
+    private var onboardingGroupIdForProgress: String? {
+        // Für die Standard-Gruppe ist currentGroupId nil → wir speichern dann unter "Default"
+        movieStore.currentGroupId
+    }
+
+    private var isGroupStepComplete: Bool {
+        // Wenn es schon Filme gibt, ist "Gruppe" de-facto erfüllt (auch ohne Invite-Code).
+        if hasAnyMoviesInCurrentGroup { return true }
+        if let name = movieStore.currentGroupName, !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return true }
+        if movieStore.currentGroupId != nil { return true }
+        if !movieStore.knownGroups.isEmpty { return true }
+        return false
+    }
+
+    private var isMembersStepComplete: Bool {
+        !userStore.users.isEmpty
+    }
+
+    private var isFirstMovieStepComplete: Bool {
+        hasAnyMoviesInCurrentGroup
+    }
+
+    private var isFirstRatingStepComplete: Bool {
+        movieStore.movies.contains { !$0.ratings.isEmpty }
+    }
+
+    private var onboardingStepsCompletedCount: Int {
+        [isGroupStepComplete, isMembersStepComplete, isFirstMovieStepComplete, isFirstRatingStepComplete]
+            .filter { $0 }
+            .count
+    }
+
+    private var isOnboardingCompletedNow: Bool {
+        onboardingStepsCompletedCount == 4
+    }
+
+    private var shouldShowOnboardingChecklist: Bool {
+        if OnboardingProgress.isGroupOnboardingComplete(forGroupId: onboardingGroupIdForProgress) {
+            return false
+        }
+        return !isOnboardingCompletedNow
+    }
+
+    private func updateOnboardingCompletionFlag() {
+        if isOnboardingCompletedNow {
+            OnboardingProgress.setGroupOnboardingComplete(true, forGroupId: onboardingGroupIdForProgress)
+        }
+    }
+
+    private func trackSearchOpened() {
+        OnboardingProgress.incrementSearchOpenCount(forGroupId: onboardingGroupIdForProgress)
+    }
+
+    private var onboardingChecklistCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Button {
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+                    onboardingChecklistExpanded.toggle()
+                }
+            } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: "sparkles")
+                        .foregroundStyle(.blue)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Quick Start")
+                            .font(.subheadline.weight(.semibold))
+                        Text("\(onboardingStepsCompletedCount) von 4 erledigt")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Spacer()
+
+                    Image(systemName: onboardingChecklistExpanded ? "chevron.up" : "chevron.down")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            if onboardingChecklistExpanded {
+                VStack(alignment: .leading, spacing: 10) {
+                    onboardingRow(
+                        isDone: isGroupStepComplete,
+                        title: "Gruppe einrichten",
+                        subtitle: "Erstellen oder beitreten (Invite-Code)",
+                        actionTitle: "Gruppen"
+                    ) {
+                        showingGroupSettings = true
+                    }
+
+                    onboardingRow(
+                        isDone: isMembersStepComplete,
+                        title: "Mitglieder hinzufügen",
+                        subtitle: "Damit Bewertungen & Vorschläge Sinn ergeben",
+                        actionTitle: "Mitglieder"
+                    ) {
+                        showingUsers = true
+                    }
+
+                    onboardingRow(
+                        isDone: isFirstMovieStepComplete,
+                        title: "Ersten Film hinzufügen",
+                        subtitle: "Suche bei TMDb und pack ihn in „Gesehen“ oder Backlog",
+                        actionTitle: "Suche"
+                    ) {
+                        trackSearchOpened()
+                        showingSearchMovie = true
+                    }
+
+                    onboardingRow(
+                        isDone: isFirstRatingStepComplete,
+                        title: "Erste Bewertung abgeben",
+                        subtitle: hasAnyMoviesInCurrentGroup
+                            ? "Tippe auf einen Film in der Liste und bewerte ihn"
+                            : "Sobald ein Film drin ist, kannst du ihn bewerten",
+                        actionTitle: nil,
+                        action: nil
+                    )
+                }
+                .padding(.top, 2)
+            }
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(.thinMaterial)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color.black.opacity(0.06), lineWidth: 1)
+        )
+        .shadow(color: Color.black.opacity(0.06), radius: 10, x: 0, y: 6)
+    }
+
+    @ViewBuilder
+    private func onboardingRow(
+        isDone: Bool,
+        title: String,
+        subtitle: String,
+        actionTitle: String?,
+        action: (() -> Void)?
+    ) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: isDone ? "checkmark.circle.fill" : "circle")
+                .font(.title3)
+                .foregroundStyle(isDone ? Color.green : Color.secondary)
+                .padding(.top, 1)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            if let actionTitle, let action, !isDone {
+                Button(actionTitle) {
+                    action()
+                }
+                .font(.caption.weight(.semibold))
+                .buttonStyle(.bordered)
+            }
+        }
+    }
+
     // MARK: - Compact Controls UI
 
     @ViewBuilder
@@ -393,6 +626,7 @@ struct ContentView: View {
                 .foregroundStyle(.secondary)
 
             Button {
+                trackSearchOpened()
                 showingSearchMovie = true
             } label: {
                 HStack {
@@ -654,6 +888,134 @@ struct ContentView: View {
         )
         .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
         .padding(.vertical, 4)
+    }
+}
+
+private struct QuickStartView: View {
+    var onOpenGroups: () -> Void
+    var onOpenUsers: () -> Void
+    var onOpenSearch: () -> Void
+    var onDone: () -> Void
+
+    @State private var page: Int = 0
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 16) {
+
+                TabView(selection: $page) {
+                    QuickStartPage(
+                        icon: "person.3.sequence.fill",
+                        title: "Erstmal eine Gruppe",
+                        text: "Erstelle eine Gruppe oder tritt einer bestehenden bei. So bleiben Filme & Bewertungen sauber getrennt."
+                    )
+                    .tag(0)
+
+                    QuickStartPage(
+                        icon: "person.3.fill",
+                        title: "Mitglieder hinzufügen",
+                        text: "Füg die Leute hinzu, die bewerten sollen. Sonst heißt am Ende jeder „Unbekannt“ – und das ist nur bei Thrillern cool."
+                    )
+                    .tag(1)
+
+                    QuickStartPage(
+                        icon: "magnifyingglass",
+                        title: "Ersten Film reinwerfen",
+                        text: "Suche auf TMDb und füge Filme zu „Gesehen“ oder in den Backlog hinzu. Ab dann läuft’s von allein."
+                    )
+                    .tag(2)
+                }
+                .tabViewStyle(.page(indexDisplayMode: .always))
+                .frame(maxHeight: 420)
+
+                // Action Buttons (kontextabhängig)
+                VStack(spacing: 10) {
+                    if page == 0 {
+                        Button {
+                            onOpenGroups()
+                        } label: {
+                            Label("Gruppen verwalten", systemImage: "person.3.sequence.fill")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.borderedProminent)
+                    } else if page == 1 {
+                        Button {
+                            onOpenUsers()
+                        } label: {
+                            Label("Mitglieder hinzufügen", systemImage: "person.3")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.borderedProminent)
+                    } else {
+                        Button {
+                            onOpenSearch()
+                        } label: {
+                            Label("Film suchen", systemImage: "magnifyingglass")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
+
+                    HStack(spacing: 12) {
+                        Button("Überspringen") {
+                            onDone()
+                        }
+                        .buttonStyle(.bordered)
+
+                        Button(page == 2 ? "Fertig" : "Weiter") {
+                            if page < 2 {
+                                withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+                                    page += 1
+                                }
+                            } else {
+                                onDone()
+                            }
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                }
+                .padding(.horizontal)
+                .padding(.bottom, 8)
+
+                Spacer(minLength: 0)
+            }
+            .padding(.top, 10)
+            .navigationTitle("Willkommen")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Schließen") { onDone() }
+                }
+            }
+        }
+    }
+}
+
+private struct QuickStartPage: View {
+    let icon: String
+    let title: String
+    let text: String
+
+    var body: some View {
+        VStack(spacing: 14) {
+            Image(systemName: icon)
+                .font(.system(size: 44, weight: .semibold))
+                .foregroundStyle(.blue)
+
+            Text(title)
+                .font(.title3.weight(.semibold))
+                .multilineTextAlignment(.center)
+
+            Text(text)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 10)
+
+            Spacer(minLength: 0)
+        }
+        .padding(.top, 18)
+        .padding(.horizontal, 18)
     }
 }
 
