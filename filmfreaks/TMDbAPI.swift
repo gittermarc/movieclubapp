@@ -10,7 +10,10 @@ import Foundation
 // MARK: - API Models
 
 struct TMDbSearchResponse: Decodable {
+    let page: Int
     let results: [TMDbMovieResult]
+    let total_pages: Int
+    let total_results: Int
 }
 
 struct TMDbMovieResult: Decodable, Identifiable {
@@ -147,19 +150,24 @@ final class TMDbAPI {
 
     private init() {}
 
-    // MARK: - Film-Suche
+    // MARK: - Film-Suche (paged)
 
-    func searchMovies(query: String) async throws -> [TMDbMovieResult] {
+    /// Paged Search: liefert page + total_pages + total_results
+    func searchMoviesPaged(query: String, page: Int = 1) async throws -> TMDbSearchResponse {
         let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedQuery.isEmpty else { return [] }
+        guard !trimmedQuery.isEmpty else {
+            return TMDbSearchResponse(page: 1, results: [], total_pages: 1, total_results: 0)
+        }
         guard !apiKey.isEmpty else { throw TMDbError.missingAPIKey }
+        let safePage = max(1, page)
 
         var components = URLComponents(string: "https://api.themoviedb.org/3/search/movie")
         components?.queryItems = [
             URLQueryItem(name: "api_key", value: apiKey),
             URLQueryItem(name: "query", value: trimmedQuery),
             URLQueryItem(name: "language", value: "de-DE"),
-            URLQueryItem(name: "include_adult", value: "false")
+            URLQueryItem(name: "include_adult", value: "false"),
+            URLQueryItem(name: "page", value: String(safePage))
         ]
 
         guard let url = components?.url else { throw TMDbError.invalidURL }
@@ -171,11 +179,16 @@ final class TMDbAPI {
         }
 
         do {
-            let decoded = try JSONDecoder().decode(TMDbSearchResponse.self, from: data)
-            return decoded.results
+            return try JSONDecoder().decode(TMDbSearchResponse.self, from: data)
         } catch {
             throw TMDbError.decodingFailed
         }
+    }
+
+    /// Backwards-compatible: wie vorher, nur Seite 1 als Array
+    func searchMovies(query: String) async throws -> [TMDbMovieResult] {
+        let response = try await searchMoviesPaged(query: query, page: 1)
+        return response.results
     }
 
     // MARK: - Film-Details (groß, inkl. credits/keywords/videos)
