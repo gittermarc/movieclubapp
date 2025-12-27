@@ -62,6 +62,12 @@ fileprivate enum MovieSearchSortOption: String, CaseIterable, Identifiable {
 
 struct MovieSearchView: View {
 
+    private enum UI {
+        static let posterWidth: CGFloat = 76
+        static let posterHeight: CGFloat = 114 // ~2:3
+        static let cardCorner: CGFloat = 14
+    }
+
     @Environment(\.dismiss) private var dismiss
 
     // Suche
@@ -93,6 +99,9 @@ struct MovieSearchView: View {
 
     // NEU: Such-Historie
     @State private var recentQueries: [String] = SearchHistoryManager.load()
+
+    // Skeleton-Pulsing
+    @State private var skeletonPulse: Bool = false
 
     let existingWatched: [Movie]
     let existingBacklog: [Movie]
@@ -136,9 +145,6 @@ struct MovieSearchView: View {
                 .ignoresSafeArea()
 
                 VStack(spacing: 12) {
-                    // Suchfeld + Status
-                    searchHeader
-
                     // NEU: Zuletzt gesucht – nur wenn noch nichts eingegeben ist
                     if query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                        !recentQueries.isEmpty {
@@ -153,40 +159,58 @@ struct MovieSearchView: View {
                             .padding(.horizontal)
                     }
 
-                    if results.isEmpty && !isLoading && !query.isEmpty {
+                    // Skeletons (während initialer Suche)
+                    if isLoading && results.isEmpty {
+                        skeletonResultsView
+                            .onAppear {
+                                withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) {
+                                    skeletonPulse.toggle()
+                                }
+                            }
+                    } else if results.isEmpty && !isLoading && !query.isEmpty {
                         Text("Keine Ergebnisse gefunden.")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                             .padding()
-                    }
+                    } else if !sortedResults.isEmpty {
+                        let displayed = sortedResults
 
-                    if !sortedResults.isEmpty {
                         ScrollView {
                             LazyVStack(spacing: 10) {
-                                ForEach(sortedResults) { result in
+                                ForEach(displayed) { result in
                                     resultCard(for: result)
+                                        .onAppear {
+                                            // Infinite Scroll: wenn das letzte Element auftaucht -> laden
+                                            if displayed.last?.id == result.id, canLoadMore {
+                                                Task { await loadMore() }
+                                            }
+                                        }
                                 }
 
-                                // Pagination: Mehr laden
-                                if canLoadMore {
+                                // Footer: Loading / Mehr laden (Fallback)
+                                if isLoadingMore {
+                                    HStack(spacing: 10) {
+                                        ProgressView()
+                                        Text("Lade weitere Treffer…")
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    .padding(.vertical, 14)
+                                } else if canLoadMore {
                                     Button {
                                         Task { await loadMore() }
                                     } label: {
                                         HStack(spacing: 8) {
-                                            if isLoadingMore {
-                                                ProgressView()
-                                            }
-                                            Text(isLoadingMore ? "Lade…" : "Mehr laden")
-                                                .font(.footnote.weight(.semibold))
+                                            Image(systemName: "arrow.down.circle")
+                                            Text("Mehr laden")
                                         }
+                                        .font(.footnote.weight(.semibold))
                                         .frame(maxWidth: .infinity)
                                         .padding(.vertical, 10)
                                         .background(Color.blue.opacity(0.12))
                                         .clipShape(RoundedRectangle(cornerRadius: 12))
                                     }
                                     .buttonStyle(.plain)
-                                    .disabled(isLoadingMore)
-                                    .padding(.horizontal)
                                     .padding(.top, 6)
                                     .padding(.bottom, 12)
                                 } else if totalResults > 0 {
@@ -211,7 +235,10 @@ struct MovieSearchView: View {
                         }
                         .padding(.top, 40)
                     }
+
+                    Spacer(minLength: 0)
                 }
+                .padding(.top, 6)
             }
             .navigationTitle("Film suchen")
             .toolbar {
@@ -220,6 +247,10 @@ struct MovieSearchView: View {
                         dismiss()
                     }
                 }
+            }
+            // Sticky Header (Material + Linear Loader + Sort/Counter)
+            .safeAreaInset(edge: .top, spacing: 0) {
+                stickySearchHeader
             }
             .sheet(item: $detailResult) { result in
                 let key = keyFor(result: result)
@@ -254,7 +285,10 @@ struct MovieSearchView: View {
     // MARK: - Derived
 
     private var canLoadMore: Bool {
-        currentPage < totalPages && !isLoading && !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        currentPage < totalPages
+        && !isLoading
+        && !isLoadingMore
+        && !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private var sortedResults: [TMDbMovieResult] {
@@ -283,12 +317,12 @@ struct MovieSearchView: View {
         }
     }
 
-    // MARK: - Suchkopf
+    // MARK: - Sticky Suchkopf
 
-    private var searchHeader: some View {
-        VStack(spacing: 8) {
-            HStack(spacing: 8) {
-                HStack {
+    private var stickySearchHeader: some View {
+        VStack(spacing: 10) {
+            HStack(spacing: 10) {
+                HStack(spacing: 8) {
                     Image(systemName: "magnifyingglass")
                         .foregroundStyle(.secondary)
 
@@ -313,22 +347,29 @@ struct MovieSearchView: View {
                             Image(systemName: "xmark.circle.fill")
                                 .foregroundStyle(.secondary)
                         }
+                        .buttonStyle(.plain)
                     }
                 }
-                .padding(10)
-                .background(.ultraThinMaterial)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .background(.thinMaterial)
+                .clipShape(RoundedRectangle(cornerRadius: 14))
 
                 if isLoading {
                     ProgressView()
-                        .padding(.trailing, 4)
+                        .padding(.trailing, 2)
                 }
             }
             .padding(.horizontal)
 
+            if isLoading {
+                ProgressView()
+                    .progressViewStyle(.linear)
+                    .padding(.horizontal)
+            }
+
             if !results.isEmpty {
                 HStack {
-                    // Trefferanzeige + Sortier-Menü
                     Text("\(results.count) von \(totalResults) Treffer")
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -366,18 +407,30 @@ struct MovieSearchView: View {
                 .padding(.horizontal)
             }
         }
-        .padding(.top, 8)
+        .padding(.top, 10)
+        .padding(.bottom, 10)
+        .background(.ultraThinMaterial)
+        .overlay(alignment: .bottom) {
+            Divider().opacity(0.35)
+        }
     }
 
-    // MARK: - „Zuletzt gesucht“-View
+    // MARK: - „Zuletzt gesucht“-View (horizontal)
 
     private var recentQueriesView: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("Zuletzt gesucht")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                HStack(spacing: 6) {
+                    Image(systemName: "clock")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text("Zuletzt gesucht")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
                 Spacer()
+
                 if !recentQueries.isEmpty {
                     Button {
                         SearchHistoryManager.clear()
@@ -390,38 +443,39 @@ struct MovieSearchView: View {
                     .foregroundStyle(.secondary)
                 }
             }
+            .padding(.horizontal)
 
-            LazyVGrid(
-                columns: [GridItem(.adaptive(minimum: 90), spacing: 8)],
-                alignment: .leading,
-                spacing: 8
-            ) {
-                ForEach(recentQueries, id: \.self) { term in
-                    Button {
-                        query = term
-                        Task { await performSearch(reset: true) }
-                    } label: {
-                        HStack(spacing: 6) {
-                            Image(systemName: "clock.arrow.circlepath")
-                                .font(.caption2)
-                            Text(term)
-                                .font(.caption)
-                                .lineLimit(1)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(recentQueries, id: \.self) { term in
+                        Button {
+                            query = term
+                            Task { await performSearch(reset: true) }
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "clock.arrow.circlepath")
+                                    .font(.caption2)
+                                Text(term)
+                                    .font(.caption)
+                                    .lineLimit(1)
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(Color(.secondarySystemBackground))
+                            .clipShape(Capsule())
                         }
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(Color(.secondarySystemBackground))
-                        .clipShape(Capsule())
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
                 }
+                .padding(.horizontal)
+                .padding(.vertical, 2)
             }
         }
-        .padding(.horizontal)
+        .padding(.top, 4)
         .padding(.bottom, 4)
     }
 
-    // MARK: - Ergebnis-Karte
+    // MARK: - Ergebnis-Karte (Tap -> Details, + Menu -> Add)
 
     @ViewBuilder
     private func resultCard(for result: TMDbMovieResult) -> some View {
@@ -430,126 +484,170 @@ struct MovieSearchView: View {
         let isInBacklog = localBacklogKeys.contains(key)
 
         VStack(alignment: .leading, spacing: 10) {
-            // Kopf mit Poster + Info
-            HStack(alignment: .top, spacing: 12) {
-                posterThumbnail(for: result)
+            ZStack(alignment: .topTrailing) {
+                // Tappable Area (Poster + Infos)
+                HStack(alignment: .top, spacing: 12) {
+                    posterThumbnail(for: result)
 
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack(alignment: .firstTextBaseline) {
+                    VStack(alignment: .leading, spacing: 6) {
                         Text(result.title)
                             .font(.headline)
                             .lineLimit(2)
 
-                        Spacer()
+                        HStack(spacing: 10) {
+                            if let year = releaseYear(from: result.release_date) {
+                                Label(year, systemImage: "calendar")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            Label(String(format: "%.1f / 10", result.vote_average), systemImage: "star.fill")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
 
                         // Markierung, wenn schon in Listen
                         if isInWatched || isInBacklog {
-                            HStack(spacing: 4) {
+                            HStack(spacing: 6) {
                                 if isInWatched {
-                                    Image(systemName: "checkmark.circle.fill")
-                                        .font(.caption)
-                                    Text("In „Gesehen“")
+                                    Label("In „Gesehen“", systemImage: "checkmark.circle.fill")
                                         .font(.caption2)
                                 }
                                 if isInBacklog {
-                                    if isInWatched { Text("·").font(.caption2) }
-                                    Image(systemName: "tray.full.fill")
-                                        .font(.caption)
-                                    Text("Im Backlog")
+                                    Label("Im Backlog", systemImage: "tray.full.fill")
                                         .font(.caption2)
                                 }
                             }
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
                             .background(Color.blue.opacity(0.08))
                             .clipShape(Capsule())
                         }
-                    }
 
-                    if let year = releaseYear(from: result.release_date) {
-                        Text(year)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    Text(String(format: "TMDb: %.1f / 10", result.vote_average))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-
-                    Button {
-                        detailResult = result
-                        showingDetail = true
-                    } label: {
-                        HStack(spacing: 4) {
+                        // dezenter Hint
+                        HStack(spacing: 6) {
                             Image(systemName: "info.circle")
                                 .font(.caption)
-                            Text("Details & Trailer anzeigen")
+                            Text("Tippen für Details")
                                 .font(.caption)
                         }
                         .foregroundStyle(.blue)
+                        .padding(.top, 2)
                     }
-                    .padding(.top, 4)
+                    .padding(.trailing, 48) // Platz für das + Menu oben rechts
                 }
-            }
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    openDetail(result)
+                }
 
-            // Buttons: direkt hinzufügen
-            HStack(spacing: 8) {
-                Button {
-                    let movie = convertToMovie(result)
-                    onAddToWatched(movie)
-                    localWatchedKeys.insert(key)
-                    showConfirmation("Zu „Gesehen“ hinzugefügt")
+                // + Menu (Add / Details)
+                Menu {
+                    Button {
+                        openDetail(result)
+                    } label: {
+                        Label("Details & Trailer", systemImage: "info.circle")
+                    }
+
+                    Divider()
+
+                    Button {
+                        let movie = convertToMovie(result)
+                        onAddToWatched(movie)
+                        localWatchedKeys.insert(key)
+                        showConfirmation("Zu „Gesehen“ hinzugefügt")
+                    } label: {
+                        Label(isInWatched ? "Schon in „Gesehen“" : "Zu „Gesehen“ hinzufügen", systemImage: "checkmark.circle.fill")
+                    }
+                    .disabled(isInWatched)
+
+                    Button {
+                        let movie = convertToMovie(result)
+                        onAddToBacklog(movie)
+                        localBacklogKeys.insert(key)
+                        showConfirmation("Zum Backlog hinzugefügt")
+                    } label: {
+                        Label(isInBacklog ? "Schon im Backlog" : "Zum Backlog hinzufügen", systemImage: "tray.full.fill")
+                    }
+                    .disabled(isInBacklog)
                 } label: {
-                    HStack {
-                        Image(systemName: "checkmark.circle.fill")
-                        Text(isInWatched ? "Schon in Gesehen" : "Zu gesehen")
+                    HStack(spacing: 6) {
+                        Image(systemName: "plus")
+                            .font(.caption.weight(.bold))
+                        Text("Hinzufügen")
+                            .font(.caption.weight(.semibold))
                     }
-                    .font(.footnote.weight(.semibold))
                     .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(
-                        isInWatched
-                        ? Color.green.opacity(0.10)
-                        : Color.green.opacity(0.18)
-                    )
-                    .foregroundStyle(isInWatched ? Color.secondary : Color.green)
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .padding(.vertical, 7)
+                    .background(.thinMaterial)
+                    .clipShape(Capsule())
                 }
-                .disabled(isInWatched)
-
-                Button {
-                    let movie = convertToMovie(result)
-                    onAddToBacklog(movie)
-                    localBacklogKeys.insert(key)
-                    showConfirmation("Zum Backlog hinzugefügt")
-                } label: {
-                    HStack {
-                        Image(systemName: "text.badge.plus")
-                        Text(isInBacklog ? "Schon im Backlog" : "In Backlog")
-                    }
-                    .font(.footnote.weight(.semibold))
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(
-                        isInBacklog
-                        ? Color.blue.opacity(0.08)
-                        : Color.blue.opacity(0.15)
-                    )
-                    .foregroundStyle(isInBacklog ? Color.secondary : Color.blue)
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
-                }
-                .disabled(isInBacklog)
-
-                Spacer()
+                .buttonStyle(.plain)
+                .padding(.top, 2)
             }
-            .padding(.top, 4)
         }
         .padding(12)
         .background(
-            RoundedRectangle(cornerRadius: 14)
+            RoundedRectangle(cornerRadius: UI.cardCorner)
                 .fill(Color(.secondarySystemBackground))
         )
         .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
+    }
+
+    private func openDetail(_ result: TMDbMovieResult) {
+        detailResult = result
+        showingDetail = true
+    }
+
+    // MARK: - Skeletons
+
+    private var skeletonResultsView: some View {
+        ScrollView {
+            LazyVStack(spacing: 10) {
+                ForEach(0..<6, id: \.self) { _ in
+                    skeletonCard
+                }
+            }
+            .padding(.horizontal)
+            .padding(.bottom, 8)
+        }
+        .opacity(skeletonPulse ? 0.55 : 0.85)
+    }
+
+    private var skeletonCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 12) {
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(Color.gray.opacity(0.22))
+                    .frame(width: UI.posterWidth, height: UI.posterHeight)
+
+                VStack(alignment: .leading, spacing: 8) {
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(Color.gray.opacity(0.22))
+                        .frame(height: 14)
+                        .frame(maxWidth: 240)
+
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(Color.gray.opacity(0.18))
+                        .frame(height: 12)
+                        .frame(maxWidth: 160)
+
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color.gray.opacity(0.16))
+                        .frame(height: 26)
+                        .frame(maxWidth: 170)
+                        .padding(.top, 2)
+                }
+                .padding(.trailing, 48)
+            }
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: UI.cardCorner)
+                .fill(Color(.secondarySystemBackground))
+        )
+        .redacted(reason: .placeholder)
     }
 
     // MARK: - Toast
@@ -685,42 +783,63 @@ struct MovieSearchView: View {
 
     @ViewBuilder
     private func posterThumbnail(for result: TMDbMovieResult) -> some View {
-        if let path = result.poster_path,
-           let url = URL(string: "https://image.tmdb.org/t/p/w185\(path)") {
+        let ratingText = String(format: "%.1f", result.vote_average)
 
-            AsyncImage(url: url) { phase in
-                switch phase {
-                case .empty:
-                    Rectangle()
-                        .foregroundStyle(.gray.opacity(0.2))
-                case .success(let image):
-                    image
-                        .resizable()
-                        .scaledToFill()
-                case .failure:
-                    Rectangle()
-                        .foregroundStyle(.gray.opacity(0.2))
-                        .overlay {
-                            Image(systemName: "film")
-                        }
-                @unknown default:
-                    Rectangle()
-                        .foregroundStyle(.gray.opacity(0.2))
+        Group {
+            if let path = result.poster_path,
+               let url = URL(string: "https://image.tmdb.org/t/p/w185\(path)") {
+
+                AsyncImage(
+                    url: url,
+                    transaction: Transaction(animation: .easeOut(duration: 0.25))
+                ) { phase in
+                    switch phase {
+                    case .empty:
+                        RoundedRectangle(cornerRadius: 10)
+                            .fill(Color.gray.opacity(0.2))
+
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .scaledToFill()
+                            .transition(.opacity)
+
+                    case .failure:
+                        RoundedRectangle(cornerRadius: 10)
+                            .fill(Color.gray.opacity(0.2))
+                            .overlay {
+                                Image(systemName: "film")
+                                    .foregroundStyle(.secondary)
+                            }
+
+                    @unknown default:
+                        RoundedRectangle(cornerRadius: 10)
+                            .fill(Color.gray.opacity(0.2))
+                    }
                 }
+                .frame(width: UI.posterWidth, height: UI.posterHeight)
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .clipped()
+
+            } else {
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(Color.gray.opacity(0.12))
+                    .frame(width: UI.posterWidth, height: UI.posterHeight)
+                    .overlay {
+                        Image(systemName: "film")
+                            .foregroundStyle(.secondary)
+                    }
             }
-            .frame(width: 60, height: 90)
-            .clipShape(RoundedRectangle(cornerRadius: 8))
-            .clipped()
-
-        } else {
-            Rectangle()
-                .foregroundStyle(.gray.opacity(0.1))
-                .frame(width: 60, height: 90)
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-                .overlay {
-                    Image(systemName: "film")
-                        .foregroundStyle(.secondary)
-                }
+        }
+        .overlay(alignment: .topTrailing) {
+            // Rating Badge
+            Text(ratingText)
+                .font(.caption2.weight(.bold))
+                .padding(.horizontal, 7)
+                .padding(.vertical, 4)
+                .background(.ultraThinMaterial)
+                .clipShape(Capsule())
+                .padding(6)
         }
     }
 
