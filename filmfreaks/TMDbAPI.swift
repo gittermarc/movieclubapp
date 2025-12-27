@@ -34,15 +34,19 @@ struct TMDbCast: Decodable {
 }
 
 struct TMDbCrew: Decodable {
+    /// ✅ TMDb Person ID (für Director-Goals)
+    let id: Int
     let name: String
     let job: String?
 }
 
 struct TMDbKeyword: Decodable {
+    let id: Int
     let name: String
 }
 
 struct TMDbKeywordsResponse: Decodable {
+    /// Je nach Endpoint liefert TMDb entweder `keywords` oder `results`
     let keywords: [TMDbKeyword]?
     let results: [TMDbKeyword]?
 
@@ -62,9 +66,13 @@ struct TMDbVideosResponse: Decodable {
     let results: [TMDbVideo]
 }
 
-struct TMDbGenre: Decodable {
+struct TMDbGenre: Codable, Hashable, Identifiable {
     let id: Int
     let name: String
+}
+
+struct TMDbGenreListResponse: Decodable {
+    let genres: [TMDbGenre]
 }
 
 struct TMDbMovieDetails: Decodable {
@@ -108,6 +116,17 @@ struct TMDbPersonDetails: Decodable {
     let known_for_department: String?
     let also_known_as: [String]?
     let popularity: Double?
+}
+
+// MARK: - KEYWORD SEARCH
+
+struct TMDbKeywordSearchResponse: Decodable {
+    let results: [TMDbKeywordSummary]
+}
+
+struct TMDbKeywordSummary: Decodable, Identifiable, Hashable {
+    let id: Int
+    let name: String
 }
 
 enum TMDbError: Error {
@@ -159,7 +178,7 @@ final class TMDbAPI {
         }
     }
 
-    // MARK: - Film-Details
+    // MARK: - Film-Details (groß, inkl. credits/keywords/videos)
 
     func fetchMovieDetails(id: Int) async throws -> TMDbMovieDetails {
         guard !apiKey.isEmpty else { throw TMDbError.missingAPIKey }
@@ -180,8 +199,7 @@ final class TMDbAPI {
         }
 
         do {
-            let decoded = try JSONDecoder().decode(TMDbMovieDetails.self, from: data)
-            return decoded
+            return try JSONDecoder().decode(TMDbMovieDetails.self, from: data)
         } catch {
             throw TMDbError.decodingFailed
         }
@@ -208,6 +226,88 @@ final class TMDbAPI {
 
         do {
             return try JSONDecoder().decode(TMDbCredits.self, from: data)
+        } catch {
+            throw TMDbError.decodingFailed
+        }
+    }
+
+    // MARK: - Keywords-only (kleiner)
+
+    func fetchMovieKeywords(id: Int) async throws -> [TMDbKeyword] {
+        guard !apiKey.isEmpty else { throw TMDbError.missingAPIKey }
+
+        var components = URLComponents(string: "https://api.themoviedb.org/3/movie/\(id)/keywords")
+        components?.queryItems = [
+            URLQueryItem(name: "api_key", value: apiKey)
+        ]
+
+        guard let url = components?.url else { throw TMDbError.invalidURL }
+
+        let (data, response) = try await URLSession.shared.data(from: url)
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200..<300).contains(httpResponse.statusCode) else {
+            throw TMDbError.requestFailed
+        }
+
+        do {
+            let decoded = try JSONDecoder().decode(TMDbKeywordsResponse.self, from: data)
+            return decoded.allKeywords
+        } catch {
+            throw TMDbError.decodingFailed
+        }
+    }
+
+    // MARK: - Genres (für Genre-Goals)
+
+    func fetchMovieGenreList() async throws -> [TMDbGenre] {
+        guard !apiKey.isEmpty else { throw TMDbError.missingAPIKey }
+
+        var components = URLComponents(string: "https://api.themoviedb.org/3/genre/movie/list")
+        components?.queryItems = [
+            URLQueryItem(name: "api_key", value: apiKey),
+            URLQueryItem(name: "language", value: "de-DE")
+        ]
+
+        guard let url = components?.url else { throw TMDbError.invalidURL }
+
+        let (data, response) = try await URLSession.shared.data(from: url)
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200..<300).contains(httpResponse.statusCode) else {
+            throw TMDbError.requestFailed
+        }
+
+        do {
+            let decoded = try JSONDecoder().decode(TMDbGenreListResponse.self, from: data)
+            return decoded.genres
+        } catch {
+            throw TMDbError.decodingFailed
+        }
+    }
+
+    // MARK: - Keyword-Suche (für Keyword-Goals)
+
+    func searchKeywords(query: String) async throws -> [TMDbKeywordSummary] {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return [] }
+        guard !apiKey.isEmpty else { throw TMDbError.missingAPIKey }
+
+        var components = URLComponents(string: "https://api.themoviedb.org/3/search/keyword")
+        components?.queryItems = [
+            URLQueryItem(name: "api_key", value: apiKey),
+            URLQueryItem(name: "query", value: trimmed)
+        ]
+
+        guard let url = components?.url else { throw TMDbError.invalidURL }
+
+        let (data, response) = try await URLSession.shared.data(from: url)
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200..<300).contains(httpResponse.statusCode) else {
+            throw TMDbError.requestFailed
+        }
+
+        do {
+            let decoded = try JSONDecoder().decode(TMDbKeywordSearchResponse.self, from: data)
+            return decoded.results
         } catch {
             throw TMDbError.decodingFailed
         }
@@ -240,7 +340,7 @@ final class TMDbAPI {
         }
     }
 
-    // (Optional) Name-Suche bleibt im Projekt, wird aber in der StatsView nicht mehr benutzt.
+    /// Name-Suche für Personen (Actors/Directors)
     func searchPerson(name: String) async throws -> [TMDbPersonSummary] {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return [] }

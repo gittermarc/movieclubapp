@@ -2,39 +2,64 @@
 //  ViewingCustomGoalsPayload.swift
 //  filmfreaks
 //
-//  Step 3: Versioniertes Payload für Custom Goals (skalierbar).
+//  Versioniertes Payload für Custom Goals (skalierbar).
+//  Step 3+4: ein Array `goals` statt mehrere Arrays pro Typ.
 //
 
 import Foundation
 
-/// ✅ Aktuelles Payload (v3): eine Liste von „Custom Goals“ (heterogen via enum-rule).
 struct ViewingCustomGoalsPayload: Codable, Equatable {
+
+    /// Falls wir später Felder umbauen, können wir sauber migrieren.
+    /// - 2: legacy (decadeGoals + actorGoals)
+    /// - 3: current (goals: [ViewingCustomGoal])
     var version: Int = 3
+
     var goals: [ViewingCustomGoal] = []
 
     init(version: Int = 3, goals: [ViewingCustomGoal] = []) {
         self.version = version
         self.goals = goals
     }
-}
 
-/// ⚠️ Legacy Payload (v2) aus Step 2 (Decade + Actor separat).
-/// Bleibt nur zum Decoden/Migrieren erhalten.
-struct ViewingCustomGoalsPayloadV2: Codable, Equatable {
-    var version: Int = 2
-    var decadeGoals: [DecadeGoal] = []
-    var actorGoals: [ActorGoal] = []
+    // MARK: - Codable Migration
 
-    init(version: Int = 2, decadeGoals: [DecadeGoal] = [], actorGoals: [ActorGoal] = []) {
-        self.version = version
-        self.decadeGoals = decadeGoals
-        self.actorGoals = actorGoals
+    private enum CodingKeys: String, CodingKey {
+        case version
+        case goals
+
+        // legacy v2
+        case decadeGoals
+        case actorGoals
     }
 
-    func toV3() -> ViewingCustomGoalsPayload {
-        var mapped: [ViewingCustomGoal] = []
-        mapped.append(contentsOf: decadeGoals.map { ViewingCustomGoal(from: $0) })
-        mapped.append(contentsOf: actorGoals.map { ViewingCustomGoal(from: $0) })
-        return ViewingCustomGoalsPayload(version: 3, goals: mapped)
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let version = (try? c.decode(Int.self, forKey: .version)) ?? 2
+
+        if version >= 3, let goals = try? c.decode([ViewingCustomGoal].self, forKey: .goals) {
+            self.version = version
+            self.goals = goals
+            return
+        }
+
+        // v2 legacy: decadeGoals + actorGoals
+        let decadeGoals = (try? c.decode([DecadeGoal].self, forKey: .decadeGoals)) ?? []
+        let actorGoals = (try? c.decode([ActorGoal].self, forKey: .actorGoals)) ?? []
+
+        var merged: [ViewingCustomGoal] = []
+        merged.reserveCapacity(decadeGoals.count + actorGoals.count)
+
+        merged.append(contentsOf: decadeGoals.map { ViewingCustomGoal(from: $0) })
+        merged.append(contentsOf: actorGoals.map { ViewingCustomGoal(from: $0) })
+
+        self.version = 3
+        self.goals = merged
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(3, forKey: .version)
+        try c.encode(goals, forKey: .goals)
     }
 }

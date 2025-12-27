@@ -44,7 +44,7 @@ struct Rating: Identifiable, Codable, Equatable {
     }
 }
 
-// MARK: - Cast Member (NEU)
+// MARK: - Person Reference (Cast/Director)
 
 struct CastMember: Identifiable, Codable, Hashable {
     /// TMDb Person ID (positiv) – eindeutig.
@@ -67,11 +67,22 @@ struct Movie: Identifiable, Codable, Equatable {
     var watchedDate: Date?
     var watchedLocation: String?
     var tmdbId: Int?
+
+    /// Genres (Name + optional IDs für stabile Ziele)
     var genres: [String]?
+    var genreIds: [Int]?
+
+    /// Keywords (Name + optional IDs für stabile Ziele)
+    var keywords: [String]?
+    var keywordIds: [Int]?
+
     var suggestedBy: String?
 
-    /// ✅ Cast wird jetzt als [{personId, name}] gespeichert (eindeutig, skalierbar)
+    /// ✅ Cast wird als [{personId, name}] gespeichert (eindeutig, skalierbar)
     var cast: [CastMember]?
+
+    /// ✅ Directors werden als [{personId, name}] gespeichert (für Director-Goals)
+    var directors: [CastMember]?
 
     var groupId: String?
     var groupName: String?
@@ -87,8 +98,12 @@ struct Movie: Identifiable, Codable, Equatable {
         watchedLocation: String? = nil,
         tmdbId: Int? = nil,
         genres: [String]? = nil,
+        genreIds: [Int]? = nil,
+        keywords: [String]? = nil,
+        keywordIds: [Int]? = nil,
         suggestedBy: String? = nil,
-        cast: [CastMember]? = nil
+        cast: [CastMember]? = nil,
+        directors: [CastMember]? = nil
     ) {
         self.id = id
         self.title = title
@@ -100,15 +115,25 @@ struct Movie: Identifiable, Codable, Equatable {
         self.watchedLocation = watchedLocation
         self.tmdbId = tmdbId
         self.genres = genres
+        self.genreIds = genreIds
+        self.keywords = keywords
+        self.keywordIds = keywordIds
         self.suggestedBy = suggestedBy
         self.cast = cast
+        self.directors = directors
     }
 
-    // MARK: - Codable (mit automatischer Migration von legacy cast: [String])
+    // MARK: - Codable (inkl. Migration)
 
     enum CodingKeys: String, CodingKey {
         case id, title, year, tmdbRating, ratings, posterPath, watchedDate, watchedLocation
-        case tmdbId, genres, suggestedBy, cast, groupId, groupName
+        case tmdbId
+        case genres, genreIds
+        case keywords, keywordIds
+        case suggestedBy
+        case cast
+        case directors
+        case groupId, groupName
     }
 
     init(from decoder: Decoder) throws {
@@ -123,18 +148,24 @@ struct Movie: Identifiable, Codable, Equatable {
         self.watchedDate = try c.decodeIfPresent(Date.self, forKey: .watchedDate)
         self.watchedLocation = try c.decodeIfPresent(String.self, forKey: .watchedLocation)
         self.tmdbId = try c.decodeIfPresent(Int.self, forKey: .tmdbId)
+
         self.genres = try c.decodeIfPresent([String].self, forKey: .genres)
+        self.genreIds = try c.decodeIfPresent([Int].self, forKey: .genreIds)
+
+        self.keywords = try c.decodeIfPresent([String].self, forKey: .keywords)
+        self.keywordIds = try c.decodeIfPresent([Int].self, forKey: .keywordIds)
+
         self.suggestedBy = try c.decodeIfPresent(String.self, forKey: .suggestedBy)
         self.groupId = try c.decodeIfPresent(String.self, forKey: .groupId)
         self.groupName = try c.decodeIfPresent(String.self, forKey: .groupName)
 
-        // ✅ Neu: cast als [CastMember]
+        // ✅ Directors (optional)
+        self.directors = try c.decodeIfPresent([CastMember].self, forKey: .directors)
+
+        // ✅ Neu: cast als [CastMember] – plus Legacy-Migration: alte Daten hatten cast: [String]
         if let castMembers = try? c.decodeIfPresent([CastMember].self, forKey: .cast) {
             self.cast = castMembers
         } else if let legacyNames = try? c.decodeIfPresent([String].self, forKey: .cast) {
-            // ✅ Legacy-Migration: alte Daten hatten cast: [String]
-            // Wir geben den Namen erstmal eine stabile, negative Legacy-ID,
-            // damit nichts crasht und Stats trotzdem deterministisch bleibt.
             let mapped = legacyNames
                 .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                 .filter { !$0.isEmpty }
@@ -157,9 +188,16 @@ struct Movie: Identifiable, Codable, Equatable {
         try c.encodeIfPresent(watchedDate, forKey: .watchedDate)
         try c.encodeIfPresent(watchedLocation, forKey: .watchedLocation)
         try c.encodeIfPresent(tmdbId, forKey: .tmdbId)
+
         try c.encodeIfPresent(genres, forKey: .genres)
+        try c.encodeIfPresent(genreIds, forKey: .genreIds)
+
+        try c.encodeIfPresent(keywords, forKey: .keywords)
+        try c.encodeIfPresent(keywordIds, forKey: .keywordIds)
+
         try c.encodeIfPresent(suggestedBy, forKey: .suggestedBy)
         try c.encodeIfPresent(cast, forKey: .cast)
+        try c.encodeIfPresent(directors, forKey: .directors)
         try c.encodeIfPresent(groupId, forKey: .groupId)
         try c.encodeIfPresent(groupName, forKey: .groupName)
     }
@@ -172,7 +210,6 @@ struct Movie: Identifiable, Codable, Equatable {
             hash ^= UInt64(b)
             hash &*= 1099511628211
         }
-        // negative, aber im Int-Bereich
         let v = Int(hash % UInt64(Int32.max))
         return -max(1, v)
     }

@@ -450,11 +450,27 @@ struct SearchResultDetailView: View {
     private func createMovie() -> Movie {
         if let d = details {
             let year = releaseYear(from: d.release_date) ?? "n/a"
+
             let genreNames = d.genres?.map { $0.name }
+            let genreIds = d.genres?.map { $0.id }
+
+            let keywordNames = d.keywords?.allKeywords.map { $0.name }
+            let keywordIds = d.keywords?.allKeywords.map { $0.id }
 
             // ✅ NEU: Cast als [CastMember] statt [String]
             let castMembers: [CastMember]? = d.credits?.cast
                 .prefix(30)
+                .map {
+                    CastMember(
+                        personId: $0.id,
+                        name: $0.name.trimmingCharacters(in: .whitespacesAndNewlines)
+                    )
+                }
+                .filter { !$0.name.isEmpty }
+
+            // ✅ NEU: Directors persistieren (für Director-Goals)
+            let directorMembers: [CastMember]? = d.credits?.crew
+                .filter { ($0.job ?? "").lowercased() == "director" }
                 .map {
                     CastMember(
                         personId: $0.id,
@@ -473,8 +489,12 @@ struct SearchResultDetailView: View {
                 watchedLocation: nil,
                 tmdbId: d.id,
                 genres: genreNames,
+                genreIds: genreIds,
+                keywords: keywordNames,
+                keywordIds: keywordIds,
                 suggestedBy: nil,
-                cast: (castMembers?.isEmpty == true) ? nil : castMembers
+                cast: (castMembers?.isEmpty == true) ? nil : castMembers,
+                directors: (directorMembers?.isEmpty == true) ? nil : directorMembers
             )
         } else {
             let year = releaseYear(from: result.release_date) ?? "n/a"
@@ -488,8 +508,12 @@ struct SearchResultDetailView: View {
                 watchedLocation: nil,
                 tmdbId: result.id,
                 genres: nil,
+                genreIds: nil,
+                keywords: nil,
+                keywordIds: nil,
                 suggestedBy: nil,
-                cast: nil
+                cast: nil,
+                directors: nil
             )
         }
     }

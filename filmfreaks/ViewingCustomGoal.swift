@@ -2,19 +2,25 @@
 //  ViewingCustomGoal.swift
 //  filmfreaks
 //
-//  Step 3: Goal Types als enum + generisches Goal-Model
+//  Step 3+4: Goal Types als enum + generisches Goal-Model (Decade, Actor, Director, Genre, Keyword)
 //
 
 import Foundation
 
 enum ViewingCustomGoalType: String, Codable, CaseIterable, Hashable {
     case decade
-    case person
+    case person        // Actor / cast
+    case director
+    case genre
+    case keyword
 
     var displayName: String {
         switch self {
         case .decade: return "Decade-Ziel"
         case .person: return "Darsteller-Ziel"
+        case .director: return "Regie-Ziel"
+        case .genre: return "Genre-Ziel"
+        case .keyword: return "Keyword-Ziel"
         }
     }
 
@@ -22,15 +28,21 @@ enum ViewingCustomGoalType: String, Codable, CaseIterable, Hashable {
         switch self {
         case .decade: return "calendar"
         case .person: return "person.fill"
+        case .director: return "megaphone.fill"
+        case .genre: return "square.grid.2x2.fill"
+        case .keyword: return "tag.fill"
         }
     }
 }
 
 /// Regel/„Matcher“ für Custom Goals.
-/// Für Step 3 halten wir’s bewusst eng, aber skalierbar (Director/Genre/Keyword sind später nur neue cases).
+/// Für Step 4 kommen Director/Genre/Keyword als neue cases hinzu.
 enum ViewingCustomGoalRule: Hashable {
     case releaseDecade(Int) // decadeStart
     case person(id: Int, name: String, profilePath: String?)
+    case director(id: Int, name: String, profilePath: String?)
+    case genre(id: Int, name: String)
+    case keyword(id: Int, name: String)
 }
 
 extension ViewingCustomGoalRule: Codable {
@@ -38,14 +50,24 @@ extension ViewingCustomGoalRule: Codable {
     private enum CodingKeys: String, CodingKey {
         case kind
         case decadeStart
+
         case personId
         case personName
         case profilePath
+
+        case genreId
+        case genreName
+
+        case keywordId
+        case keywordName
     }
 
     private enum Kind: String, Codable {
         case releaseDecade
         case person
+        case director
+        case genre
+        case keyword
     }
 
     init(from decoder: Decoder) throws {
@@ -56,11 +78,28 @@ extension ViewingCustomGoalRule: Codable {
         case .releaseDecade:
             let d = try c.decode(Int.self, forKey: .decadeStart)
             self = .releaseDecade(d)
+
         case .person:
             let id = try c.decode(Int.self, forKey: .personId)
             let name = try c.decode(String.self, forKey: .personName)
             let profilePath = try c.decodeIfPresent(String.self, forKey: .profilePath)
             self = .person(id: id, name: name, profilePath: profilePath)
+
+        case .director:
+            let id = try c.decode(Int.self, forKey: .personId)
+            let name = try c.decode(String.self, forKey: .personName)
+            let profilePath = try c.decodeIfPresent(String.self, forKey: .profilePath)
+            self = .director(id: id, name: name, profilePath: profilePath)
+
+        case .genre:
+            let id = try c.decode(Int.self, forKey: .genreId)
+            let name = try c.decode(String.self, forKey: .genreName)
+            self = .genre(id: id, name: name)
+
+        case .keyword:
+            let id = try c.decode(Int.self, forKey: .keywordId)
+            let name = try c.decode(String.self, forKey: .keywordName)
+            self = .keyword(id: id, name: name)
         }
     }
 
@@ -77,6 +116,22 @@ extension ViewingCustomGoalRule: Codable {
             try c.encode(id, forKey: .personId)
             try c.encode(name, forKey: .personName)
             try c.encodeIfPresent(profilePath, forKey: .profilePath)
+
+        case .director(let id, let name, let profilePath):
+            try c.encode(Kind.director, forKey: .kind)
+            try c.encode(id, forKey: .personId)
+            try c.encode(name, forKey: .personName)
+            try c.encodeIfPresent(profilePath, forKey: .profilePath)
+
+        case .genre(let id, let name):
+            try c.encode(Kind.genre, forKey: .kind)
+            try c.encode(id, forKey: .genreId)
+            try c.encode(name, forKey: .genreName)
+
+        case .keyword(let id, let name):
+            try c.encode(Kind.keyword, forKey: .kind)
+            try c.encode(id, forKey: .keywordId)
+            try c.encode(name, forKey: .keywordName)
         }
     }
 }
@@ -103,15 +158,23 @@ struct ViewingCustomGoal: Identifiable, Codable, Hashable, Equatable {
         self.createdAt = createdAt
     }
 
-    /// Dedupe-Key pro „Semantik“ (damit nicht 2× dieselbe Decade / derselbe Actor existiert).
-    /// Wenn wir später komplexere Regeln haben, erweitern wir das hier.
+    /// Dedupe-Key pro „Semantik“ (damit nicht 2× dasselbe Ziel existiert).
     var uniqueKey: String? {
         switch rule {
         case .releaseDecade(let decadeStart):
             return "decade:\(decadeStart)"
+
         case .person(let id, _, _):
-            // Achtung: 0 = nicht gewählt → nicht dedupen, Editor lässt Speichern sowieso nicht zu
             return id > 0 ? "person:\(id)" : nil
+
+        case .director(let id, _, _):
+            return id > 0 ? "director:\(id)" : nil
+
+        case .genre(let id, _):
+            return id > 0 ? "genre:\(id)" : nil
+
+        case .keyword(let id, _):
+            return id > 0 ? "keyword:\(id)" : nil
         }
     }
 
@@ -125,8 +188,18 @@ struct ViewingCustomGoal: Identifiable, Codable, Hashable, Equatable {
                 suffix = "\(decadeStart % 100)ern"
             }
             return "Filme aus den \(suffix)"
+
         case .person(_, let name, _):
             return "Filme mit \(name)"
+
+        case .director(_, let name, _):
+            return "Filme von \(name)"
+
+        case .genre(_, let name):
+            return "Genre: \(name)"
+
+        case .keyword(_, let name):
+            return "Keyword: \(name)"
         }
     }
 
@@ -137,22 +210,63 @@ struct ViewingCustomGoal: Identifiable, Codable, Hashable, Equatable {
     }
 
     var personId: Int? {
-        if case .person(let id, _, _) = rule { return id }
-        return nil
+        switch rule {
+        case .person(let id, _, _): return id
+        default: return nil
+        }
     }
 
     var personName: String? {
-        if case .person(_, let name, _) = rule { return name }
-        return nil
+        switch rule {
+        case .person(_, let name, _): return name
+        default: return nil
+        }
+    }
+
+    var directorId: Int? {
+        switch rule {
+        case .director(let id, _, _): return id
+        default: return nil
+        }
+    }
+
+    var directorName: String? {
+        switch rule {
+        case .director(_, let name, _): return name
+        default: return nil
+        }
     }
 
     var profilePath: String? {
-        if case .person(_, _, let p) = rule { return p }
+        switch rule {
+        case .person(_, _, let p): return p
+        case .director(_, _, let p): return p
+        default: return nil
+        }
+    }
+
+    var genreId: Int? {
+        if case .genre(let id, _) = rule { return id }
+        return nil
+    }
+
+    var genreName: String? {
+        if case .genre(_, let name) = rule { return name }
+        return nil
+    }
+
+    var keywordId: Int? {
+        if case .keyword(let id, _) = rule { return id }
+        return nil
+    }
+
+    var keywordName: String? {
+        if case .keyword(_, let name) = rule { return name }
         return nil
     }
 }
 
-// MARK: - Migration Helpers (v2 → v3)
+// MARK: - Migration Helpers (Step 1/2 → v3+)
 
 extension ViewingCustomGoal {
 

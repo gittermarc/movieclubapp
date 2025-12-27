@@ -733,9 +733,28 @@ struct MovieDetailView: View {
                     .map { $0.name.trimmingCharacters(in: .whitespacesAndNewlines) }
                     .filter { !$0.isEmpty }
 
+                let genreIds = fetched.genres?.map { $0.id }
+
+                let keywordNames = fetched.keywords?.allKeywords
+                    .map { $0.name.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { !$0.isEmpty }
+
+                let keywordIds = fetched.keywords?.allKeywords.map { $0.id }
+
                 // ✅ Cast als {personId, name} persistieren
                 let castMembers = fetched.credits?.cast
                     .prefix(30)
+                    .map {
+                        CastMember(
+                            personId: $0.id,
+                            name: $0.name.trimmingCharacters(in: .whitespacesAndNewlines)
+                        )
+                    }
+                    .filter { !$0.name.isEmpty }
+
+                // ✅ Directors als {personId, name} persistieren (für Director-Goals)
+                let directorMembers = fetched.credits?.crew
+                    .filter { ($0.job ?? "").lowercased() == "director" }
                     .map {
                         CastMember(
                             personId: $0.id,
@@ -748,10 +767,25 @@ struct MovieDetailView: View {
                     self.movie.genres = genreNames
                 }
 
+                if let genreIds, !genreIds.isEmpty {
+                    self.movie.genreIds = genreIds
+                }
+
+                if let keywordNames, !keywordNames.isEmpty {
+                    self.movie.keywords = keywordNames
+                }
+
+                if let keywordIds, !keywordIds.isEmpty {
+                    self.movie.keywordIds = keywordIds
+                }
+
                 if let castMembers, !castMembers.isEmpty {
                     self.movie.cast = castMembers
                 }
 
+                if let directorMembers, !directorMembers.isEmpty {
+                    self.movie.directors = directorMembers
+                }
                 self.movie.tmdbRating = fetched.vote_average
                 if let posterPath = fetched.poster_path {
                     self.movie.posterPath = posterPath
