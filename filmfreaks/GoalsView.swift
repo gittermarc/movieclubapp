@@ -329,7 +329,7 @@ struct GoalsView: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 12) {
                         ForEach(moviesInSelectedYear.prefix(30)) { m in
-                            posterTile(for: m)
+                            moviePosterNavTile(for: m)
                         }
                     }
                     .padding(.vertical, 2)
@@ -367,7 +367,7 @@ struct GoalsView: View {
 
             if visibleGoals.isEmpty {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("In \(selectedYear) sind noch keine Custom Goals angelegt.")
+                    Text(verbatim: "In \(selectedYear) sind noch keine Custom Goals angelegt.")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
 
@@ -440,10 +440,7 @@ struct GoalsView: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 10) {
                         ForEach(matches.prefix(18)) { m in
-                            posterTile(for: m)
-                                .onTapGesture {
-                                    selectedGoalForDetail = goal
-                                }
+                            moviePosterNavTile(for: m)
                         }
                     }
                     .padding(.vertical, 2)
@@ -506,6 +503,23 @@ struct GoalsView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 10))
                     .overlay { Image(systemName: "film").foregroundStyle(.secondary) }
             }
+        }
+    }
+
+    @ViewBuilder
+    private func moviePosterNavTile(for movie: Movie) -> some View {
+        if let idx = movieStore.movies.firstIndex(where: { $0.id == movie.id }) {
+            NavigationLink {
+                MovieDetailView(
+                    movie: $movieStore.movies[idx],
+                    isBacklog: false
+                )
+            } label: {
+                posterTile(for: movie)
+            }
+            .buttonStyle(.plain)
+        } else {
+            posterTile(for: movie)
         }
     }
 
@@ -969,6 +983,8 @@ private struct GoalDetailView: View {
     let movies: [Movie]
     let selectedYear: Int
 
+    @EnvironmentObject var movieStore: MovieStore
+
     var body: some View {
         NavigationStack {
             List {
@@ -987,65 +1003,81 @@ private struct GoalDetailView: View {
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(movies) { m in
-                        HStack(spacing: 12) {
-                            if let url = m.posterURL {
-                                AsyncImage(url: url) { phase in
-                                    switch phase {
-                                    case .empty:
-                                        Rectangle().foregroundStyle(.gray.opacity(0.2))
-                                    case .success(let image):
-                                        image.resizable().scaledToFill()
-                                    case .failure:
-                                        Rectangle().foregroundStyle(.gray.opacity(0.15))
-                                            .overlay { Image(systemName: "film").foregroundStyle(.secondary) }
-                                    @unknown default:
-                                        Rectangle().foregroundStyle(.gray.opacity(0.2))
-                                    }
-                                }
-                                .frame(width: 40, height: 60)
-                                .clipShape(RoundedRectangle(cornerRadius: 8))
-                            } else {
-                                Rectangle()
-                                    .foregroundStyle(.gray.opacity(0.15))
-                                    .frame(width: 40, height: 60)
-                                    .clipShape(RoundedRectangle(cornerRadius: 8))
-                                    .overlay { Image(systemName: "film").foregroundStyle(.secondary) }
+                        if let idx = movieStore.movies.firstIndex(where: { $0.id == m.id }) {
+                            NavigationLink {
+                                MovieDetailView(
+                                    movie: $movieStore.movies[idx],
+                                    isBacklog: false
+                                )
+                            } label: {
+                                goalDetailMovieRow(m)
                             }
-
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(m.title)
-                                    .font(.subheadline.weight(.semibold))
-                                    .lineLimit(2)
-
-                                HStack(spacing: 6) {
-                                    Text(m.year)
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-
-                                    if let date = m.watchedDateText {
-                                        Text("• \(date)")
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                }
-                            }
-
-                            Spacer()
-
-                            if let avg = m.averageRating ?? m.tmdbRating {
-                                Text(String(format: "%.1f", avg))
-                                    .font(.caption.bold())
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 4)
-                                    .background(Color.blue.opacity(0.12))
-                                    .clipShape(Capsule())
-                            }
+                        } else {
+                            goalDetailMovieRow(m)
                         }
                     }
                 }
             }
             .navigationTitle("Passende Filme")
             .navigationBarTitleDisplayMode(.inline)
+        }
+    }
+
+    @ViewBuilder
+    private func goalDetailMovieRow(_ m: Movie) -> some View {
+        HStack(spacing: 12) {
+            if let url = m.posterURL {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .empty:
+                        Rectangle().foregroundStyle(.gray.opacity(0.2))
+                    case .success(let image):
+                        image.resizable().scaledToFill()
+                    case .failure:
+                        Rectangle().foregroundStyle(.gray.opacity(0.15))
+                            .overlay { Image(systemName: "film").foregroundStyle(.secondary) }
+                    @unknown default:
+                        Rectangle().foregroundStyle(.gray.opacity(0.2))
+                    }
+                }
+                .frame(width: 40, height: 60)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+            } else {
+                Rectangle()
+                    .foregroundStyle(.gray.opacity(0.15))
+                    .frame(width: 40, height: 60)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .overlay { Image(systemName: "film").foregroundStyle(.secondary) }
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(m.title)
+                    .font(.subheadline.weight(.semibold))
+                    .lineLimit(2)
+
+                HStack(spacing: 6) {
+                    Text(m.year)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    if let date = m.watchedDateText {
+                        Text(verbatim: "• \(date)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+
+            Spacer()
+
+            if let avg = m.averageRating ?? m.tmdbRating {
+                Text(String(format: "%.1f", avg))
+                    .font(.caption.bold())
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.blue.opacity(0.12))
+                    .clipShape(Capsule())
+            }
         }
     }
 }
