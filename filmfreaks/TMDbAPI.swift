@@ -193,6 +193,34 @@ final class TMDbAPI {
 
     // MARK: - Empfehlungen / Similar (für Inspiration)
 
+
+    /// Beliebte Filme (Fallback, wenn noch keine Seeds vorhanden sind).
+    func fetchPopularMovies(page: Int = 1) async throws -> TMDbSearchResponse {
+        guard !apiKey.isEmpty else { throw TMDbError.missingAPIKey }
+        let safePage = max(1, page)
+
+        var components = URLComponents(string: "https://api.themoviedb.org/3/movie/popular")
+        components?.queryItems = [
+            URLQueryItem(name: "api_key", value: apiKey),
+            URLQueryItem(name: "language", value: "de-DE"),
+            URLQueryItem(name: "page", value: String(safePage))
+        ]
+
+        guard let url = components?.url else { throw TMDbError.invalidURL }
+
+        let (data, response) = try await URLSession.shared.data(from: url)
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200..<300).contains(httpResponse.statusCode) else {
+            throw TMDbError.requestFailed
+        }
+
+        do {
+            return try JSONDecoder().decode(TMDbSearchResponse.self, from: data)
+        } catch {
+            throw TMDbError.decodingFailed
+        }
+    }
+
     /// Empfehlungen basierend auf einem Film (TMDb /recommendations).
     func fetchMovieRecommendations(id: Int, page: Int = 1) async throws -> TMDbSearchResponse {
         guard !apiKey.isEmpty else { throw TMDbError.missingAPIKey }
