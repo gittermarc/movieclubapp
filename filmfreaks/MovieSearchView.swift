@@ -45,6 +45,40 @@ fileprivate struct SearchHistoryManager {
     }
 }
 
+// MARK: - ✅ Empfehlungen Cache (lokal per UserDefaults)
+
+fileprivate struct RecommendationsCacheManager {
+    private static let key = "MovieSearchRecommendationsCache_v1"
+
+    struct CachePayload: Codable {
+        let timestamp: Date
+        let seedTitle: String?
+        let results: [TMDbMovieResult]
+    }
+
+    static func load(maxAge: TimeInterval) -> CachePayload? {
+        guard let data = UserDefaults.standard.data(forKey: key),
+              let payload = try? JSONDecoder().decode(CachePayload.self, from: data)
+        else { return nil }
+
+        if Date().timeIntervalSince(payload.timestamp) > maxAge {
+            return nil
+        }
+        return payload
+    }
+
+    static func save(seedTitle: String?, results: [TMDbMovieResult]) {
+        let payload = CachePayload(timestamp: Date(), seedTitle: seedTitle, results: results)
+        if let data = try? JSONEncoder().encode(payload) {
+            UserDefaults.standard.set(data, forKey: key)
+        }
+    }
+
+    static func clear() {
+        UserDefaults.standard.removeObject(forKey: key)
+    }
+}
+
 // MARK: - Sortierung (Search)
 
 fileprivate enum MovieSearchSortOption: String, CaseIterable, Identifiable {
@@ -67,6 +101,11 @@ struct MovieSearchView: View {
         static let posterWidth: CGFloat = 76
         static let posterHeight: CGFloat = 114 // ~2:3
         static let cardCorner: CGFloat = 14
+
+        // Empfehlungen
+        static let recPosterWidth: CGFloat = 120
+        static let recPosterHeight: CGFloat = 178 // ~2:3
+        static let recCardCorner: CGFloat = 16
     }
 
     @Environment(\.dismiss) private var dismiss
@@ -118,6 +157,15 @@ struct MovieSearchView: View {
     // Optional: Focus fürs Suchfeld (bei „Manuell bearbeiten“)
     @FocusState private var isSearchFieldFocused: Bool
 
+    // ✅ NEU: Empfehlungen (Inspiration)
+    @State private var recommendations: [TMDbMovieResult] = []
+    @State private var isLoadingRecommendations: Bool = false
+    @State private var recommendationsError: String?
+    @State private var recommendationsSeedTitle: String?
+    @State private var recommendationsLastUpdated: Date?
+
+    private let recommendationsCacheMaxAge: TimeInterval = 60 * 60 * 24 // 24h
+
     let existingWatched: [Movie]
     let existingBacklog: [Movie]
 
@@ -164,6 +212,11 @@ struct MovieSearchView: View {
                     if query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                        !recentQueries.isEmpty {
                         recentQueriesView
+                    }
+
+                    // ✅ Inspiration (nur wenn Suche leer & keine Ergebnisse gerendert werden)
+                    if shouldShowRecommendations {
+                        recommendationsView
                     }
 
                     // Fehler / leere Zustände
@@ -412,6 +465,17 @@ struct MovieSearchView: View {
                 }
             }
         }
+        .task {
+            // ✅ Empfehlungen laden, sobald die View da ist (nur wenn Suchfeld leer)
+            await loadRecommendationsIfNeeded()
+        }
+        .onChange(of: query) { _, newValue in
+            // ✅ Sobald das Suchfeld wieder leer wird, können Empfehlungen erscheinen
+            let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.isEmpty {
+                Task { await loadRecommendationsIfNeeded() }
+            }
+        }
     }
 
     // MARK: - Derived
@@ -447,6 +511,12 @@ struct MovieSearchView: View {
         case .ratingLow:
             return results.sorted { $0.vote_average < $1.vote_average }
         }
+    }
+
+    private var shouldShowRecommendations: Bool {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Nur im „Idle“-Zustand: keine Suche aktiv und keine Ergebnisse sichtbar
+        return trimmed.isEmpty && results.isEmpty && !isLoading
     }
 
     // MARK: - Sticky Suchkopf
@@ -648,6 +718,360 @@ struct MovieSearchView: View {
         }
         .padding(.top, 4)
         .padding(.bottom, 4)
+    }
+
+    // MARK: - ✅ Empfehlungen UI (Inspiration)
+
+    private var recommendationsView: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline) {
+                HStack(spacing: 8) {
+                    Image(systemName: "sparkles")
+                        .foregroundStyle(.blue)
+                    Text("Inspiration")
+                        .font(.subheadline.weight(.semibold))
+                }
+
+                Spacer()
+
+                Button {
+                    Task { await loadRecommendationsIfNeeded(force: true) }
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "arrow.clockwise")
+                        Text("Aktualisieren")
+                    }
+                    .font(.caption.weight(.semibold))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 7)
+                    .background(Color.blue.opacity(0.12))
+                    .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal)
+
+            if let seed = recommendationsSeedTitle, !seed.isEmpty {
+                Text("Basierend auf „\(seed)“ und ähnlichen Filmen")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal)
+            } else {
+                Text("Filme, die zu deinem Geschmack passen könnten")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal)
+            }
+
+            if isLoadingRecommendations {
+                recommendationsSkeletonView
+            } else if let err = recommendationsError {
+                Text(err)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal)
+                    .padding(.bottom, 4)
+            } else if recommendations.isEmpty {
+                Text("Noch keine Empfehlungen. Füge erst ein paar Filme zu „Gesehen“ hinzu (mit TMDb-ID), dann wird’s hier spannend. 🍿")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal)
+                    .padding(.bottom, 4)
+            } else {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 12) {
+                        ForEach(recommendations) { result in
+                            recommendationCard(for: result)
+                        }
+                    }
+                    .padding(.horizontal)
+                    .padding(.bottom, 2)
+                }
+            }
+
+            if let last = recommendationsLastUpdated, !isLoadingRecommendations, recommendationsError == nil, !recommendations.isEmpty {
+                Text("Zuletzt aktualisiert: \(last.formatted(date: .abbreviated, time: .shortened))")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal)
+                    .padding(.bottom, 2)
+            }
+        }
+        .padding(.top, 2)
+        .padding(.bottom, 6)
+    }
+
+    private var recommendationsSkeletonView: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 12) {
+                ForEach(0..<6, id: \.self) { _ in
+                    VStack(alignment: .leading, spacing: 8) {
+                        RoundedRectangle(cornerRadius: 14)
+                            .fill(Color.gray.opacity(0.22))
+                            .frame(width: UI.recPosterWidth, height: UI.recPosterHeight)
+
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(Color.gray.opacity(0.20))
+                            .frame(height: 12)
+                            .frame(width: UI.recPosterWidth)
+
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(Color.gray.opacity(0.16))
+                            .frame(height: 10)
+                            .frame(width: UI.recPosterWidth * 0.7)
+                    }
+                    .padding(10)
+                    .background(
+                        RoundedRectangle(cornerRadius: UI.recCardCorner)
+                            .fill(Color(.secondarySystemBackground))
+                    )
+                    .redacted(reason: .placeholder)
+                }
+            }
+            .padding(.horizontal)
+        }
+        .opacity(skeletonPulse ? 0.55 : 0.85)
+        .onAppear {
+            withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) {
+                skeletonPulse.toggle()
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func recommendationCard(for result: TMDbMovieResult) -> some View {
+        let key = keyFor(result: result)
+        let isInWatched = localWatchedKeys.contains(key)
+        let isInBacklog = localBacklogKeys.contains(key)
+
+        ZStack(alignment: .topTrailing) {
+            Button {
+                openDetail(result)
+            } label: {
+                VStack(alignment: .leading, spacing: 8) {
+                    posterRecommendation(for: result)
+                        .frame(width: UI.recPosterWidth, height: UI.recPosterHeight)
+                        .clipShape(RoundedRectangle(cornerRadius: 14))
+                        .clipped()
+
+                    Text(result.title)
+                        .font(.footnote.weight(.semibold))
+                        .lineLimit(2)
+                        .foregroundStyle(.primary)
+
+                    HStack(spacing: 8) {
+                        if let year = releaseYear(from: result.release_date) {
+                            Text(year)
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Text(String(format: "%.1f", result.vote_average))
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.secondary)
+
+                        Spacer()
+                    }
+                }
+                .frame(width: UI.recPosterWidth, alignment: .leading)
+                .padding(10)
+                .background(
+                    RoundedRectangle(cornerRadius: UI.recCardCorner)
+                        .fill(Color(.secondarySystemBackground))
+                )
+                .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
+            }
+            .buttonStyle(.plain)
+
+            Menu {
+                Button {
+                    openDetail(result)
+                } label: {
+                    Label("Details & Trailer", systemImage: "info.circle")
+                }
+
+                Divider()
+
+                Button {
+                    let movie = convertToMovie(result)
+                    onAddToWatched(movie)
+                    localWatchedKeys.insert(key)
+                    showConfirmation("Zu „Gesehen“ hinzugefügt")
+                } label: {
+                    Label(isInWatched ? "Schon in „Gesehen“" : "Zu „Gesehen“ hinzufügen", systemImage: "checkmark.circle.fill")
+                }
+                .disabled(isInWatched)
+
+                Button {
+                    let movie = convertToMovie(result)
+                    onAddToBacklog(movie)
+                    localBacklogKeys.insert(key)
+                    showConfirmation("Zum Backlog hinzugefügt")
+                } label: {
+                    Label(isInBacklog ? "Schon im Backlog" : "Zum Backlog hinzufügen", systemImage: "tray.full.fill")
+                }
+                .disabled(isInBacklog)
+            } label: {
+                Image(systemName: "plus.circle.fill")
+                    .font(.title3)
+                    .foregroundStyle(.blue)
+                    .padding(8)
+                    .background(.ultraThinMaterial)
+                    .clipShape(Circle())
+                    .shadow(color: Color.black.opacity(0.08), radius: 6, x: 0, y: 3)
+                    .padding(8)
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    @ViewBuilder
+    private func posterRecommendation(for result: TMDbMovieResult) -> some View {
+        Group {
+            if let path = result.poster_path,
+               let url = URL(string: "https://image.tmdb.org/t/p/w342\(path)") {
+
+                AsyncImage(
+                    url: url,
+                    transaction: Transaction(animation: .easeOut(duration: 0.25))
+                ) { phase in
+                    switch phase {
+                    case .empty:
+                        RoundedRectangle(cornerRadius: 14)
+                            .fill(Color.gray.opacity(0.2))
+
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .scaledToFill()
+                            .transition(.opacity)
+
+                    case .failure:
+                        RoundedRectangle(cornerRadius: 14)
+                            .fill(Color.gray.opacity(0.2))
+                            .overlay {
+                                Image(systemName: "film")
+                                    .foregroundStyle(.secondary)
+                            }
+
+                    @unknown default:
+                        RoundedRectangle(cornerRadius: 14)
+                            .fill(Color.gray.opacity(0.2))
+                    }
+                }
+
+            } else {
+                RoundedRectangle(cornerRadius: 14)
+                    .fill(Color.gray.opacity(0.12))
+                    .overlay {
+                        Image(systemName: "film")
+                            .foregroundStyle(.secondary)
+                    }
+            }
+        }
+    }
+
+    // MARK: - ✅ Empfehlungen Logik
+
+    private func loadRecommendationsIfNeeded(force: Bool = false) async {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.isEmpty else { return }
+        guard !isLoadingRecommendations else { return }
+
+        if !force, let cached = RecommendationsCacheManager.load(maxAge: recommendationsCacheMaxAge) {
+            await MainActor.run {
+                self.recommendations = cached.results
+                self.recommendationsSeedTitle = cached.seedTitle
+                self.recommendationsLastUpdated = cached.timestamp
+                self.recommendationsError = nil
+            }
+            return
+        }
+
+        let seeds = recommendationSeedMovies()
+        guard !seeds.isEmpty else {
+            await MainActor.run {
+                self.recommendations = []
+                self.recommendationsSeedTitle = nil
+                self.recommendationsLastUpdated = nil
+                self.recommendationsError = "Noch keine geeigneten „Gesehen“-Filme mit TMDb-ID gefunden."
+            }
+            RecommendationsCacheManager.clear()
+            return
+        }
+
+        await MainActor.run {
+            self.isLoadingRecommendations = true
+            self.recommendationsError = nil
+        }
+
+        do {
+            let existingKeys = localWatchedKeys.union(localBacklogKeys)
+
+            var aggregated: [TMDbMovieResult] = []
+            var seedTitle: String? = seeds.first?.title
+
+            // bewusst klein halten: 3 Seeds = 3 Requests, meist reicht das
+            for seed in seeds.prefix(3) {
+                guard let tmdbId = seed.tmdbId else { continue }
+                let response = try await TMDbAPI.shared.fetchMovieRecommendations(id: tmdbId, page: 1)
+                aggregated.append(contentsOf: response.results)
+                if aggregated.count >= 80 { break }
+            }
+
+            // Fallback: wenn recommendations leer sind, probieren wir „similar“ für den ersten Seed
+            if aggregated.isEmpty, let firstId = seeds.first?.tmdbId {
+                let response = try await TMDbAPI.shared.fetchMovieSimilar(id: firstId, page: 1)
+                aggregated = response.results
+            }
+
+            // Dedupe + nicht schon in Listen + limit
+            var seen = Set<Int>()
+            var filtered: [TMDbMovieResult] = []
+
+            for r in aggregated {
+                if seen.contains(r.id) { continue }
+                seen.insert(r.id)
+
+                let key = keyFor(result: r)
+                if existingKeys.contains(key) { continue }
+
+                filtered.append(r)
+                if filtered.count >= 20 { break }
+            }
+
+            await MainActor.run {
+                self.recommendations = filtered
+                self.recommendationsSeedTitle = seedTitle
+                self.recommendationsLastUpdated = Date()
+                self.isLoadingRecommendations = false
+            }
+
+            RecommendationsCacheManager.save(seedTitle: seedTitle, results: filtered)
+
+        } catch TMDbError.missingAPIKey {
+            await MainActor.run {
+                self.recommendationsError = "TMDb API-Key fehlt. Bitte in TMDbAPI.swift eintragen."
+                self.isLoadingRecommendations = false
+            }
+        } catch {
+            await MainActor.run {
+                self.recommendationsError = "Konnte keine Empfehlungen laden. Bitte später nochmal versuchen."
+                self.isLoadingRecommendations = false
+            }
+        }
+    }
+
+    private func recommendationSeedMovies() -> [Movie] {
+        let candidates = existingWatched.filter { $0.tmdbId != nil }
+
+        // „zuletzt gesehen“ ist am sinnvollsten; wenn nil, dann ganz nach hinten
+        let sorted = candidates.sorted {
+            ($0.watchedDate ?? .distantPast) > ($1.watchedDate ?? .distantPast)
+        }
+
+        // 5 Seeds reichen; wir nehmen später sowieso nur 3 Requests
+        return Array(sorted.prefix(5))
     }
 
     // MARK: - Ergebnis-Karte (Tap -> Details, + Menu -> Add)

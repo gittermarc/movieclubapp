@@ -9,14 +9,14 @@ import Foundation
 
 // MARK: - API Models
 
-struct TMDbSearchResponse: Decodable {
+struct TMDbSearchResponse: Codable {
     let page: Int
     let results: [TMDbMovieResult]
     let total_pages: Int
     let total_results: Int
 }
 
-struct TMDbMovieResult: Decodable, Identifiable {
+struct TMDbMovieResult: Codable, Identifiable {
     let id: Int
     let title: String
     let release_date: String?
@@ -189,6 +189,62 @@ final class TMDbAPI {
     func searchMovies(query: String) async throws -> [TMDbMovieResult] {
         let response = try await searchMoviesPaged(query: query, page: 1)
         return response.results
+    }
+
+    // MARK: - Empfehlungen / Similar (für Inspiration)
+
+    /// Empfehlungen basierend auf einem Film (TMDb /recommendations).
+    func fetchMovieRecommendations(id: Int, page: Int = 1) async throws -> TMDbSearchResponse {
+        guard !apiKey.isEmpty else { throw TMDbError.missingAPIKey }
+        let safePage = max(1, page)
+
+        var components = URLComponents(string: "https://api.themoviedb.org/3/movie/\(id)/recommendations")
+        components?.queryItems = [
+            URLQueryItem(name: "api_key", value: apiKey),
+            URLQueryItem(name: "language", value: "de-DE"),
+            URLQueryItem(name: "page", value: String(safePage))
+        ]
+
+        guard let url = components?.url else { throw TMDbError.invalidURL }
+
+        let (data, response) = try await URLSession.shared.data(from: url)
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200..<300).contains(httpResponse.statusCode) else {
+            throw TMDbError.requestFailed
+        }
+
+        do {
+            return try JSONDecoder().decode(TMDbSearchResponse.self, from: data)
+        } catch {
+            throw TMDbError.decodingFailed
+        }
+    }
+
+    /// Ähnliche Filme (Fallback, falls Recommendations leer sind).
+    func fetchMovieSimilar(id: Int, page: Int = 1) async throws -> TMDbSearchResponse {
+        guard !apiKey.isEmpty else { throw TMDbError.missingAPIKey }
+        let safePage = max(1, page)
+
+        var components = URLComponents(string: "https://api.themoviedb.org/3/movie/\(id)/similar")
+        components?.queryItems = [
+            URLQueryItem(name: "api_key", value: apiKey),
+            URLQueryItem(name: "language", value: "de-DE"),
+            URLQueryItem(name: "page", value: String(safePage))
+        ]
+
+        guard let url = components?.url else { throw TMDbError.invalidURL }
+
+        let (data, response) = try await URLSession.shared.data(from: url)
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200..<300).contains(httpResponse.statusCode) else {
+            throw TMDbError.requestFailed
+        }
+
+        do {
+            return try JSONDecoder().decode(TMDbSearchResponse.self, from: data)
+        } catch {
+            throw TMDbError.decodingFailed
+        }
     }
 
     // MARK: - Film-Details (groß, inkl. credits/keywords/videos)
