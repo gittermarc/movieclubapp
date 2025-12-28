@@ -860,31 +860,39 @@ struct StatsView: View {
                     } else if let details = selectedActorDetails {
 
                         if let path = details.profile_path,
-                           let url = URL(string: "https://image.tmdb.org/t/p/w300\(path)") {
+                           let url = URL(string: "https://image.tmdb.org/t/p/w500\(path)") {
                             AsyncImage(url: url) { phase in
                                 switch phase {
                                 case .empty:
                                     Rectangle()
                                         .foregroundStyle(.gray.opacity(0.2))
+                                        .frame(maxWidth: .infinity)
                                         .frame(height: 260)
+
                                 case .success(let image):
+                                    // ✅ Option A: nix abschneiden, aber trotzdem "Hero"-artig und sauber gerahmt
                                     image
                                         .resizable()
-                                        .scaledToFill()
+                                        .scaledToFit()
+                                        .frame(maxWidth: .infinity)
                                         .frame(height: 260)
-                                        .clipped()
+                                        .background(Color.gray.opacity(0.08))
+
                                 case .failure:
                                     Rectangle()
                                         .foregroundStyle(.gray.opacity(0.2))
+                                        .frame(maxWidth: .infinity)
                                         .frame(height: 260)
                                         .overlay {
                                             Image(systemName: "person.crop.rectangle")
                                                 .font(.largeTitle)
                                                 .foregroundStyle(.secondary)
                                         }
+
                                 @unknown default:
                                     Rectangle()
                                         .foregroundStyle(.gray.opacity(0.2))
+                                        .frame(maxWidth: .infinity)
                                         .frame(height: 260)
                                 }
                             }
