@@ -104,10 +104,19 @@ struct MovieSearchView: View {
     // Skeleton-Pulsing
     @State private var skeletonPulse: Bool = false
 
-    // NEU: Medium scannen (Live Text)
+    // Medium scannen (Live Text)
     @State private var showScanner: Bool = false
     @State private var scannerError: String?
     @State private var showScannerError: Bool = false
+
+    // NEU: Kandidatenhilfe nach Scan
+    @State private var scannerCandidates: [String] = []
+    @State private var candidatePickerItems: [String] = []
+    @State private var showCandidatePicker: Bool = false
+    @State private var lastTappedScanText: String?
+
+    // Optional: Focus fürs Suchfeld (bei „Manuell bearbeiten“)
+    @FocusState private var isSearchFieldFocused: Bool
 
     let existingWatched: [Movie]
     let existingBacklog: [Movie]
@@ -151,7 +160,7 @@ struct MovieSearchView: View {
                 .ignoresSafeArea()
 
                 VStack(spacing: 12) {
-                    // NEU: Zuletzt gesucht – nur wenn noch nichts eingegeben ist
+                    // Zuletzt gesucht – nur wenn noch nichts eingegeben ist
                     if query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                        !recentQueries.isEmpty {
                         recentQueriesView
@@ -254,7 +263,7 @@ struct MovieSearchView: View {
                     }
                 }
             }
-            // Sticky Header (Material + Linear Loader + Sort/Counter)
+            // Sticky Header
             .safeAreaInset(edge: .top, spacing: 0) {
                 stickySearchHeader
             }
@@ -277,24 +286,33 @@ struct MovieSearchView: View {
                     }
                 )
             }
-            // NEU: Scanner-Sheet
+
+            // Scanner-Sheet
             .sheet(isPresented: $showScanner) {
                 if #available(iOS 16.0, *) {
                     MediaTitleScannerView(
                         onPickText: { scanned in
-                            // häufig: mehrere Zeilen; wir nehmen die erste brauchbare
-                            let cleaned = scanned
-                                .components(separatedBy: .newlines)
-                                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                                .first(where: { !$0.isEmpty }) ?? scanned
-
+                            // Scanner schließen und dann Kandidaten anzeigen
+                            lastTappedScanText = scanned
                             showScanner = false
-                            query = cleaned
 
-                            Task { await performSearch(reset: true) }
+                            let ranked = rankedCandidates(from: scannerCandidates, tapped: scanned)
+
+                            // Wenn wir nur 1 wirklich guten Kandidaten haben: direkt suchen (nice UX)
+                            if let only = ranked.first, ranked.count == 1 {
+                                query = only
+                                Task { await performSearch(reset: true) }
+                            } else {
+                                candidatePickerItems = ranked
+                                showCandidatePicker = true
+                            }
                         },
                         onCancel: {
                             showScanner = false
+                        },
+                        onRecognizedTextsChanged: { texts in
+                            // laufend aktualisieren
+                            scannerCandidates = texts
                         }
                     )
                 } else {
@@ -302,13 +320,90 @@ struct MovieSearchView: View {
                         .padding()
                 }
             }
-            // NEU: Scanner-Fehler
+
+            // Kandidaten-Picker nach Scan
+            .sheet(isPresented: $showCandidatePicker) {
+                NavigationStack {
+                    List {
+                        if let tapped = lastTappedScanText?.trimmingCharacters(in: .whitespacesAndNewlines),
+                           !tapped.isEmpty {
+                            Section {
+                                VStack(alignment: .leading, spacing: 6) {
+                                    Text("Du hast angetippt:")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                    Text(tapped)
+                                        .font(.subheadline.weight(.semibold))
+                                        .lineLimit(3)
+                                }
+                                .padding(.vertical, 4)
+                            }
+                        }
+
+                        Section("Erkannten Titel auswählen") {
+                            if candidatePickerItems.isEmpty {
+                                Text("Keine brauchbaren Vorschläge erkannt. Tippe auf „Manuell bearbeiten“.")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                            } else {
+                                ForEach(candidatePickerItems, id: \.self) { candidate in
+                                    Button {
+                                        showCandidatePicker = false
+                                        query = candidate
+                                        Task { await performSearch(reset: true) }
+                                    } label: {
+                                        VStack(alignment: .leading, spacing: 4) {
+                                            Text(candidate)
+                                                .font(.body)
+                                                .foregroundStyle(.primary)
+                                            Text("Suche starten")
+                                                .font(.caption)
+                                                .foregroundStyle(.secondary)
+                                        }
+                                        .padding(.vertical, 4)
+                                    }
+                                }
+                            }
+                        }
+
+                        Section {
+                            Button {
+                                // Best effort: nimm Top-Kandidat (oder tapped) rein, aber starte NICHT automatisch
+                                let fallback = candidatePickerItems.first
+                                    ?? lastTappedScanText
+                                    ?? ""
+
+                                query = cleanupCandidate(fallback)
+                                showCandidatePicker = false
+
+                                // Fokus ins Suchfeld
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                                    isSearchFieldFocused = true
+                                }
+                            } label: {
+                                Label("Manuell bearbeiten", systemImage: "pencil")
+                            }
+                        }
+                    }
+                    .navigationTitle("Scan-Vorschläge")
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Abbrechen") {
+                                showCandidatePicker = false
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Scanner-Fehler
             .alert("Medium scannen", isPresented: $showScannerError) {
                 Button("OK", role: .cancel) {}
             } message: {
                 Text(scannerError ?? "Unbekannter Fehler.")
             }
-            // 👇 Toast-Overlay unten
+
+            // Toast-Overlay unten
             .overlay(alignment: .bottom) {
                 if showToast, let toastMessage {
                     toastView(message: toastMessage)
@@ -364,6 +459,7 @@ struct MovieSearchView: View {
                         .foregroundStyle(.secondary)
 
                     TextField("Filmtitel suchen…", text: $query)
+                        .focused($isSearchFieldFocused)
                         .textFieldStyle(.plain)
                         .submitLabel(.search)
                         .onSubmit {
@@ -399,7 +495,7 @@ struct MovieSearchView: View {
             }
             .padding(.horizontal)
 
-            // NEU: Medium scannen Button
+            // Medium scannen Button
             HStack {
                 Button {
                     if #available(iOS 16.0, *) {
@@ -413,6 +509,12 @@ struct MovieSearchView: View {
                             showScannerError = true
                             return
                         }
+
+                        // Kandidaten zurücksetzen, damit kein „Altbestand“ reinfunkt
+                        scannerCandidates = []
+                        candidatePickerItems = []
+                        lastTappedScanText = nil
+
                         showScanner = true
                     } else {
                         scannerError = "„Medium scannen“ benötigt iOS 16 oder neuer."
@@ -559,7 +661,7 @@ struct MovieSearchView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top, spacing: 10) {
 
-                // ✅ Content als Button: nimmt den verfügbaren Platz, Menu sitzt daneben (kein Overlap mehr)
+                // Content als Button: nimmt den verfügbaren Platz, Menu sitzt daneben (kein Overlap mehr)
                 Button {
                     openDetail(result)
                 } label: {
@@ -603,7 +705,7 @@ struct MovieSearchView: View {
                                 .clipShape(Capsule())
                             }
 
-                            // ✅ subtiler Chevron + Material-Glow statt „Tippen für Details“
+                            // subtiler Chevron + Material-Glow statt „Tippen für Details“
                             detailsHintChip
                                 .padding(.top, 4)
                         }
@@ -613,7 +715,7 @@ struct MovieSearchView: View {
                 }
                 .buttonStyle(.plain)
 
-                // + Menu (Add / Details) – sitzt jetzt als eigene Spalte, kollidiert nicht mit dem Titel
+                // + Menu (Add / Details)
                 Menu {
                     Button {
                         openDetail(result)
@@ -666,7 +768,7 @@ struct MovieSearchView: View {
         .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
     }
 
-    // ✅ neuer „Details“-Chip (Chevron + Material-Glow)
+    // „Details“-Chip (Chevron + Material-Glow)
     private var detailsHintChip: some View {
         HStack(spacing: 6) {
             Text("Details")
@@ -684,8 +786,8 @@ struct MovieSearchView: View {
             Capsule()
                 .stroke(Color.blue.opacity(0.20), lineWidth: 1)
         }
-        .shadow(color: Color.blue.opacity(0.14), radius: 10, x: 0, y: 2)   // „Glow“, aber subtil
-        .shadow(color: Color.blue.opacity(0.08), radius: 18, x: 0, y: 8)   // weicher Nachglow
+        .shadow(color: Color.blue.opacity(0.14), radius: 10, x: 0, y: 2)
+        .shadow(color: Color.blue.opacity(0.08), radius: 18, x: 0, y: 8)
     }
 
     private func openDetail(_ result: TMDbMovieResult) {
@@ -762,7 +864,6 @@ struct MovieSearchView: View {
         withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
             showToast = true
         }
-        // Nach kurzer Zeit wieder ausblenden
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
             withAnimation(.easeOut(duration: 0.25)) {
                 showToast = false
@@ -793,7 +894,7 @@ struct MovieSearchView: View {
         do {
             let response = try await TMDbAPI.shared.searchMoviesPaged(query: trimmed, page: 1)
 
-            // NEU: Suchbegriff in Verlauf speichern
+            // Suchbegriff in Verlauf speichern
             SearchHistoryManager.add(query: trimmed)
             let updatedHistory = SearchHistoryManager.load()
 
@@ -846,6 +947,118 @@ struct MovieSearchView: View {
                 self.errorMessage = "Konnte nicht mehr laden. Bitte später nochmal versuchen."
             }
         }
+    }
+
+    // MARK: - Scan-Kandidaten (NEU)
+
+    private func rankedCandidates(from recognized: [String], tapped: String) -> [String] {
+        var all: [String] = []
+
+        // Tap-Text rein (inkl. Zeilen)
+        all.append(tapped)
+        all.append(contentsOf: tapped.components(separatedBy: .newlines))
+
+        // Alle erkannten Texte
+        all.append(contentsOf: recognized)
+
+        // Cleanup + dedupe
+        var cleaned: [String] = all
+            .map { cleanupCandidate($0) }
+            .filter { !$0.isEmpty }
+
+        // Dedupe (case-insensitive)
+        var seen = Set<String>()
+        cleaned = cleaned.filter { s in
+            let k = s.lowercased()
+            if seen.contains(k) { return false }
+            seen.insert(k)
+            return true
+        }
+
+        // Scoring + sort
+        let scored = cleaned
+            .map { ($0, scoreCandidate($0)) }
+            .filter { $0.1 > -20 } // raus mit dem offensichtlichen Müll
+
+        let sorted = scored
+            .sorted { a, b in
+                if a.1 == b.1 { return a.0.count > b.0.count }
+                return a.1 > b.1
+            }
+            .map { $0.0 }
+
+        // Top N – reicht in der Praxis
+        return Array(sorted.prefix(12))
+    }
+
+    private func cleanupCandidate(_ s: String) -> String {
+        var t = s.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // häufige „Deko“-Zeichen entfernen
+        t = t.replacingOccurrences(of: "•", with: " ")
+        t = t.replacingOccurrences(of: "·", with: " ")
+        t = t.replacingOccurrences(of: "|", with: " ")
+        t = t.replacingOccurrences(of: "—", with: " ")
+        t = t.replacingOccurrences(of: "–", with: " ")
+
+        // Mehrfachspaces zu einem
+        while t.contains("  ") {
+            t = t.replacingOccurrences(of: "  ", with: " ")
+        }
+
+        // Trim nochmal
+        t = t.trimmingCharacters(in: CharacterSet(charactersIn: " \n\t-_:;,.()[]{}\"'"))
+
+        // Zu kurz? Weg
+        if t.count < 3 { return "" }
+
+        return t
+    }
+
+    private func scoreCandidate(_ s: String) -> Int {
+        let upper = s.uppercased()
+
+        // absolute No-Gos / Buzzwords
+        let badTokens: [String] = [
+            "BLU-RAY", "BLURAY", "DVD", "4K", "UHD", "ULTRA HD",
+            "SPECIAL EDITION", "LIMITED EDITION", "COLLECTOR", "COLLECTORS", "STEELBOOK",
+            "DIGITAL COPY", "DIGITAL", "BONUS", "FEATURES", "DISC", "DISCS",
+            "DOLBY", "ATMOS", "DTS", "HDR",
+            "FSK", "REGION", "UNCUT", "DIRECTOR", "DIRECTOR'S", "CUT", "EXTENDED"
+        ]
+
+        var score = 0
+
+        // Länge – Film-Titel liegen oft irgendwo 8–40 Zeichen
+        switch s.count {
+        case 8...40: score += 30
+        case 5...80: score += 12
+        default: score -= 10
+        }
+
+        // Mehrteilig (Spaces) ist oft Titel, Einzelwort ist oft Logo/Buzzword
+        if s.contains(" ") { score += 10 } else { score -= 4 }
+
+        // Buchstabenanteil
+        let letters = s.filter { $0.isLetter }.count
+        if letters >= 4 { score += 10 } else { score -= 8 }
+
+        // Ziffern-only? Nope.
+        let digits = s.filter { $0.isNumber }.count
+        if digits == s.count { score -= 50 }
+        if digits > 0 && digits > letters { score -= 10 }
+
+        // Bad token penalty (stark)
+        if badTokens.contains(where: { upper.contains($0) }) {
+            score -= 40
+        }
+
+        // sehr „shouty“ kurze Uppercase Wörter: BLU-RAY / DVD / UHD etc.
+        if s.count <= 12, !s.contains(" "), s == upper {
+            score -= 12
+        }
+
+        return score
     }
 
     // MARK: - Hilfsfunktionen
