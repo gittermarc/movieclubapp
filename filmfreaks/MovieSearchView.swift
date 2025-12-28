@@ -4,6 +4,7 @@
 //
 
 internal import SwiftUI
+internal import VisionKit
 
 // MARK: - Such-Historie (lokal per UserDefaults)
 
@@ -102,6 +103,11 @@ struct MovieSearchView: View {
 
     // Skeleton-Pulsing
     @State private var skeletonPulse: Bool = false
+
+    // NEU: Medium scannen (Live Text)
+    @State private var showScanner: Bool = false
+    @State private var scannerError: String?
+    @State private var showScannerError: Bool = false
 
     let existingWatched: [Movie]
     let existingBacklog: [Movie]
@@ -271,6 +277,37 @@ struct MovieSearchView: View {
                     }
                 )
             }
+            // NEU: Scanner-Sheet
+            .sheet(isPresented: $showScanner) {
+                if #available(iOS 16.0, *) {
+                    MediaTitleScannerView(
+                        onPickText: { scanned in
+                            // häufig: mehrere Zeilen; wir nehmen die erste brauchbare
+                            let cleaned = scanned
+                                .components(separatedBy: .newlines)
+                                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                                .first(where: { !$0.isEmpty }) ?? scanned
+
+                            showScanner = false
+                            query = cleaned
+
+                            Task { await performSearch(reset: true) }
+                        },
+                        onCancel: {
+                            showScanner = false
+                        }
+                    )
+                } else {
+                    Text("„Medium scannen“ benötigt iOS 16 oder neuer.")
+                        .padding()
+                }
+            }
+            // NEU: Scanner-Fehler
+            .alert("Medium scannen", isPresented: $showScannerError) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(scannerError ?? "Unbekannter Fehler.")
+            }
             // 👇 Toast-Overlay unten
             .overlay(alignment: .bottom) {
                 if showToast, let toastMessage {
@@ -359,6 +396,42 @@ struct MovieSearchView: View {
                     ProgressView()
                         .padding(.trailing, 2)
                 }
+            }
+            .padding(.horizontal)
+
+            // NEU: Medium scannen Button
+            HStack {
+                Button {
+                    if #available(iOS 16.0, *) {
+                        guard DataScannerViewController.isSupported else {
+                            scannerError = "Scanner wird auf diesem Gerät nicht unterstützt."
+                            showScannerError = true
+                            return
+                        }
+                        guard DataScannerViewController.isAvailable else {
+                            scannerError = "Scanner ist gerade nicht verfügbar (Kamera/Permission?)."
+                            showScannerError = true
+                            return
+                        }
+                        showScanner = true
+                    } else {
+                        scannerError = "„Medium scannen“ benötigt iOS 16 oder neuer."
+                        showScannerError = true
+                    }
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "text.viewfinder")
+                        Text("Medium scannen")
+                    }
+                    .font(.footnote.weight(.semibold))
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(Color.blue.opacity(0.12))
+                    .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+
+                Spacer()
             }
             .padding(.horizontal)
 

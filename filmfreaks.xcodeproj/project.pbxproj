@@ -30,9 +30,22 @@
 		6011360F2EDAEAE0002C1CFD /* Untitled.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Untitled.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		602F16F42F0148DB00E84C9C /* Exceptions for "filmfreaks" folder in "filmfreaks" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 601135B92EDA0D19002C1CFD /* filmfreaks */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		601135BC2EDA0D19002C1CFD /* filmfreaks */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				602F16F42F0148DB00E84C9C /* Exceptions for "filmfreaks" folder in "filmfreaks" target */,
+			);
 			path = filmfreaks;
 			sourceTree = "<group>";
 		};
@@ -403,8 +416,10 @@
 				DEVELOPMENT_TEAM = HPJKAPZ8A3;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = filmfreaks/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "TMC - The Movie Club";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.entertainment";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Die App benötigt Zugriff auf deine Kamera, um Filmtitel auf Covern zu erkennen.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -442,8 +457,10 @@
 				DEVELOPMENT_TEAM = HPJKAPZ8A3;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = filmfreaks/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "TMC - The Movie Club";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.entertainment";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Die App benötigt Zugriff auf deine Kamera, um Filmtitel auf Covern zu erkennen.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
