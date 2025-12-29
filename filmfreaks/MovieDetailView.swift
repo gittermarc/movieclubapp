@@ -942,7 +942,7 @@ struct MovieDetailView: View {
 
         } catch TMDbError.missingAPIKey {
             await MainActor.run {
-                self.detailsError = "TMDb API-Key fehlt. Bitte in TMDbAPI.swift eintragen."
+                self.detailsError = "TMDb API-Key fehlt. Bitte TMDB_API_KEY in der Info.plist setzen."
                 self.isLoadingDetails = false
             }
         } catch {

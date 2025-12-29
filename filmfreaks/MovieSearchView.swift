@@ -1058,7 +1058,7 @@ struct MovieSearchView: View {
 
         } catch TMDbError.missingAPIKey {
             await MainActor.run {
-                self.recommendationsError = "TMDb API-Key fehlt. Bitte in TMDbAPI.swift eintragen."
+                self.recommendationsError = "TMDb API-Key fehlt. Bitte TMDB_API_KEY in der Info.plist setzen."
                 self.isLoadingRecommendations = false
             }
         } catch {
@@ -1467,7 +1467,7 @@ struct MovieSearchView: View {
             }
         } catch TMDbError.missingAPIKey {
             await MainActor.run {
-                self.errorMessage = "TMDb API-Key fehlt. Bitte in TMDbAPI.swift eintragen."
+                self.errorMessage = "TMDb API-Key fehlt. Bitte TMDB_API_KEY in der Info.plist setzen."
                 self.isLoading = false
             }
         } catch {

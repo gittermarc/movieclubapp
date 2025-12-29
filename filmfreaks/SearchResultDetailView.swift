@@ -398,7 +398,7 @@ struct SearchResultDetailView: View {
             }
         } catch TMDbError.missingAPIKey {
             await MainActor.run {
-                self.errorMessage = "TMDb API-Key fehlt. Bitte in TMDbAPI.swift eintragen."
+                self.errorMessage = "TMDb API-Key fehlt. Bitte TMDB_API_KEY in der Info.plist setzen."
                 self.isLoading = false
             }
         } catch {

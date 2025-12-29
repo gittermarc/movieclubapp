@@ -144,13 +144,35 @@ enum TMDbError: Error {
 final class TMDbAPI {
 
     static let shared = TMDbAPI()
-
-    // Deinen API-Key hier
-    private let apiKey: String = "efb878777c3bf57a2d6e8710061cc945"
+    /// TMDb API-Key wird zur Laufzeit aus der App-Konfiguration geladen.
+    ///
+    /// **Wichtig:** Ein API-Key in einer Client-App ist nie „wirklich geheim“ (er lässt sich aus dem App-Bundle extrahieren).
+    /// Das hier verhindert aber, dass er offen im Source-Code / Git landet.
+    ///
+    /// Erwartet einen Eintrag `TMDB_API_KEY` in der Info.plist (String).
+    /// Optional (z.B. Debug/CI): Environment Variable `TMDB_API_KEY`.
+    private lazy var apiKey: String = TMDbAPI.loadAPIKey()
 
     private init() {}
 
-    // MARK: - Film-Suche (paged)
+    private static func loadAPIKey() -> String {
+        // 1) Environment (praktisch für Debug/CI)
+        if let env = ProcessInfo.processInfo.environment["TMDB_API_KEY"]?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+           !env.isEmpty {
+            return env
+        }
+        
+
+        // 2) Info.plist
+        if let plist = Bundle.main.object(forInfoDictionaryKey: "TMDB_API_KEY") as? String {
+            let trimmed = plist.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty { return trimmed }
+        }
+
+        return ""
+    }
+// MARK: - Film-Suche (paged)
 
     /// Paged Search: liefert page + total_pages + total_results
     func searchMoviesPaged(query: String, page: Int = 1) async throws -> TMDbSearchResponse {
