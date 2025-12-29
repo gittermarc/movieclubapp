@@ -21,6 +21,7 @@ struct MovieDetailView: View {
     @State private var localScores: [RatingCriterion: Int] = [:]
     @State private var localSuggestedBy: String = ""
     @State private var localComment: String = ""
+    @State private var localFazitScore: Int? = nil
 
     // TMDb-Details
     @State private var details: TMDbMovieDetails?
@@ -375,6 +376,8 @@ struct MovieDetailView: View {
                                     ratingRow(for: criterion)
                                 }
 
+                                fazitRow()
+
                                 VStack(alignment: .leading, spacing: 6) {
                                     Text("Kommentar (optional)")
                                         .font(.subheadline.weight(.semibold))
@@ -485,7 +488,19 @@ struct MovieDetailView: View {
                 .font(.subheadline.weight(.semibold))
 
             HStack(spacing: 10) {
-                ForEach(0..<4, id: \.self) { value in
+                Button {
+                    localScores[criterion] = 0
+                    saveRating()
+                } label: {
+                    Text("–")
+                        .font(.title3.weight(.semibold))
+                        .foregroundStyle(current == 0 ? Color.primary : Color.secondary)
+                        .frame(width: 20)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("\(criterion.rawValue) nicht bewertet")
+
+                ForEach(1...3, id: \.self) { value in
                     Button {
                         localScores[criterion] = value
                         saveRating()
@@ -500,7 +515,62 @@ struct MovieDetailView: View {
 
                 Spacer()
 
-                Text("\(current) / 3")
+                Text(current == 0 ? "– / 3" : "\(current) / 3")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        
+        .padding(10)
+        .background(Color(.secondarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+
+    // MARK: - Fazit UI (1–10, separat)
+
+    @ViewBuilder
+    private func fazitRow() -> some View {
+        let current = localFazitScore
+
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Fazit (optional)")
+                .font(.subheadline.weight(.semibold))
+
+            HStack(spacing: 10) {
+                Button {
+                    localFazitScore = nil
+                    saveRating()
+                } label: {
+                    Text("–")
+                        .font(.title3.weight(.semibold))
+                        .foregroundStyle(current == nil ? Color.primary : Color.secondary)
+                        .frame(width: 20)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Fazit nicht vergeben")
+
+                HStack(spacing: 4) {
+                    ForEach(1...10, id: \.self) { value in
+                        Button {
+                            localFazitScore = value
+                            saveRating()
+                        } label: {
+                            RoundedRectangle(cornerRadius: 3)
+                                .fill(colorForFazit(value).opacity(fazitOpacity(for: value, current: current)))
+                                .frame(width: 18, height: 18)
+                                .overlay {
+                                    RoundedRectangle(cornerRadius: 3)
+                                        .stroke(Color.primary.opacity(0.06), lineWidth: 1)
+                                }
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Fazit \(value) von 10")
+                    }
+                }
+
+                Spacer()
+
+                Text(current == nil ? "– / 10" : "\(current!) / 10")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -508,6 +578,20 @@ struct MovieDetailView: View {
         .padding(10)
         .background(Color(.secondarySystemBackground))
         .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+
+    private func fazitOpacity(for value: Int, current: Int?) -> Double {
+        guard let current else { return 0.22 }
+        return value <= current ? 1.0 : 0.12
+    }
+
+    private func colorForFazit(_ value: Int) -> Color {
+        // Linear von Rot (1) nach Grün (10)
+        let clamped = min(10, max(1, value))
+        let t = Double(clamped - 1) / 9.0
+        let r = 1.0 - t
+        let g = 0.15 + (0.85 * t)
+        return Color(red: r, green: g, blue: 0.0)
     }
 
     // MARK: - Einzelbewertungen (kompakt + aufklappbar)
@@ -535,6 +619,33 @@ struct MovieDetailView: View {
             VStack(alignment: .leading, spacing: 10) {
 
                 VStack(alignment: .leading, spacing: 6) {
+
+                    // Fazit (separat, 1–10)
+                    HStack(spacing: 8) {
+                        Text("Fazit")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .frame(width: 90, alignment: .leading)
+
+                        if let f = rating.fazitScore {
+                            Text("Fazit \(f) / 10")
+                                .font(.caption2.weight(.semibold))
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(colorForFazit(f).opacity(0.18))
+                                .clipShape(Capsule())
+                        } else {
+                            Text("Fazit –")
+                                .font(.caption2.weight(.semibold))
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(Color.gray.opacity(0.12))
+                                .clipShape(Capsule())
+                        }
+
+                        Spacer()
+                    }
+
                     ForEach(RatingCriterion.allCases) { criterion in
                         let score = rating.scores[criterion] ?? 0
                         HStack(spacing: 8) {
@@ -547,7 +658,7 @@ struct MovieDetailView: View {
 
                             Spacer()
 
-                            Text("\(score)/3")
+                            Text(score == 0 ? "–" : "\(score)/3")
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
                         }
@@ -569,12 +680,30 @@ struct MovieDetailView: View {
 
                     Spacer()
 
-                    Text(String(format: "%.1f / 10", rating.averageScoreNormalizedTo10))
-                        .font(.caption.weight(.semibold))
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(Color.blue.opacity(0.12))
-                        .clipShape(Capsule())
+                    HStack(spacing: 8) {
+                        Text(String(format: "%.1f / 10", rating.averageScoreNormalizedTo10))
+                            .font(.caption.weight(.semibold))
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Color.blue.opacity(0.12))
+                            .clipShape(Capsule())
+
+                        if let f = rating.fazitScore {
+                            Text("Fazit \(f)/10")
+                                .font(.caption.weight(.semibold))
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(colorForFazit(f).opacity(0.18))
+                                .clipShape(Capsule())
+                        } else {
+                            Text("Fazit –")
+                                .font(.caption.weight(.semibold))
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(Color.gray.opacity(0.10))
+                                .clipShape(Capsule())
+                        }
+                    }
                 }
 
                 if hasComment {
@@ -592,11 +721,19 @@ struct MovieDetailView: View {
 
     @ViewBuilder
     private func starsView(score: Int) -> some View {
-        HStack(spacing: 3) {
-            ForEach(0..<3, id: \.self) { idx in
-                Image(systemName: idx < score ? "star.fill" : "star")
-                    .font(.caption)
-                    .foregroundStyle(idx < score ? Color.yellow : Color.secondary)
+        HStack(spacing: 6) {
+            Text("–")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .opacity(score == 0 ? 1 : 0)
+                .frame(width: 10, alignment: .leading)
+
+            HStack(spacing: 3) {
+                ForEach(1...3, id: \.self) { idx in
+                    Image(systemName: idx <= score ? "star.fill" : "star")
+                        .font(.caption)
+                        .foregroundStyle(idx <= score ? Color.yellow : Color.secondary)
+                }
             }
         }
     }
@@ -646,8 +783,11 @@ struct MovieDetailView: View {
             scores: scores
         )
         newRating.comment = finalComment
+        newRating.fazitScore = localFazitScore
 
         if let index = movie.ratings.firstIndex(where: { $0.reviewerName.lowercased() == name.lowercased() }) {
+            // ✅ ID stabil halten, damit DisclosureGroup-States nicht „flackern“
+            newRating.id = movie.ratings[index].id
             movie.ratings[index] = newRating
         } else {
             movie.ratings.append(newRating)
@@ -658,6 +798,7 @@ struct MovieDetailView: View {
         guard let selectedUser = userStore.selectedUser else {
             localScores = [:]
             localComment = ""
+            localFazitScore = nil
             return
         }
 
@@ -668,6 +809,7 @@ struct MovieDetailView: View {
             }
             localScores = scores
             localComment = rating.comment ?? ""
+            localFazitScore = rating.fazitScore
         } else {
             var scores: [RatingCriterion: Int] = [:]
             for criterion in RatingCriterion.allCases {
@@ -675,6 +817,7 @@ struct MovieDetailView: View {
             }
             localScores = scores
             localComment = ""
+            localFazitScore = nil
         }
     }
 

@@ -12,6 +12,8 @@ import Foundation
 enum RatingCriterion: String, CaseIterable, Identifiable, Codable, Hashable {
     case action = "Action"
     case suspense = "Spannung"
+    case emotion = "Emotion"
+    case humor = "Humor"
     case music = "Musik"
     case ambition = "Anspruch"
     case erotic = "Erotik"
@@ -25,17 +27,22 @@ struct Rating: Identifiable, Codable, Equatable {
     var id = UUID()
     var reviewerName: String
 
-    /// Sterne pro Kriterium (0–3)
+    /// Sterne pro Kriterium (1–3). 0 bedeutet: nicht bewertet.
     var scores: [RatingCriterion: Int]
 
     /// Optionaler Freitext-Kommentar zur Bewertung
     var comment: String? = nil
 
-    /// Durchschnitt über alle Kriterien in Sternen (0–3, ggf. z.B. 2.3)
+    /// ✅ NEU: Fazit pro User (1–10). nil bedeutet: nicht vergeben.
+    var fazitScore: Int? = nil
+
+    /// Durchschnitt über alle bewerteten Kriterien in Sternen (0–3, ggf. z.B. 2.3)
+    /// Hinweis: 0 zählt als „nicht bewertet“ und fließt nicht in den Durchschnitt ein.
     var averageStars: Double {
-        guard !scores.isEmpty else { return 0 }
-        let total = scores.values.reduce(0, +)
-        return Double(total) / Double(scores.count)
+        let rated = scores.values.filter { $0 > 0 }
+        guard !rated.isEmpty else { return 0 }
+        let total = rated.reduce(0, +)
+        return Double(total) / Double(rated.count)
     }
 
     /// Normalisiert auf 0–10 Skala für Rest der App
