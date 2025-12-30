@@ -87,6 +87,10 @@ class MovieStore: ObservableObject {
     private let cloudStore: CloudKitMovieStore?
     private var isApplyingCloudUpdate = false
 
+    // Throttle gegen zu viele Cloud-Fetches
+    private var lastRefreshAt: Date?
+    private let minRefreshInterval: TimeInterval = 8
+
     private static let knownGroupsKey = "KnownGroups"
 
     // ✅ Migration Guard
@@ -162,6 +166,27 @@ class MovieStore: ObservableObject {
             print("Fehler beim Laden aus CloudKit: \(error)")
         }
     }
+
+    // MARK: - Public Refresh
+
+    /// Lädt Movies/Ratings der aktuellen Gruppe erneut aus CloudKit.
+    ///
+    /// Wird genutzt für:
+    /// - App kommt wieder in den Vordergrund
+    /// - Pull-to-Refresh
+    /// - manuelles Sync
+    func refreshFromCloud(force: Bool = false) async {
+        guard cloudStore != nil else { return }
+        if isSyncing { return }
+
+        if !force, let last = lastRefreshAt, Date().timeIntervalSince(last) < minRefreshInterval {
+            return
+        }
+        lastRefreshAt = Date()
+
+        await loadFromCloud()
+    }
+
 
     private func initialUploadIfNeeded(using cloudStore: CloudKitMovieStore) async throws {
         print("CloudKit: initial upload starting (watched: \(movies.count), backlog: \(backlogMovies.count))")
