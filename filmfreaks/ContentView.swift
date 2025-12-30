@@ -236,12 +236,20 @@ struct ContentView: View {
                         }
                         .scrollContentBackground(.hidden)
                         .listStyle(.plain)
+                        .refreshable {
+                            await performPullToRefresh()
+                        }
                     } else {
-                        // Empty State für ganz neue Gruppe / App
-                        emptyStateView
-                            .padding(.horizontal, 24)
-                            .padding(.top, 32)
-                        Spacer()
+                        // Empty State: trotzdem pull-to-refresh ermöglichen
+                        ScrollView {
+                            emptyStateView
+                                .padding(.horizontal, 24)
+                                .padding(.top, 32)
+                            Spacer(minLength: 0)
+                        }
+                        .refreshable {
+                            await performPullToRefresh()
+                        }
                     }
                 }
 
@@ -409,6 +417,24 @@ struct ContentView: View {
             .sheet(isPresented: $showingGroupSettings) {
                 GroupSettingsView()
             }
+        }
+    }
+
+    // MARK: - Pull to Refresh
+
+    /// Pull-to-refresh entry point:
+    /// - refresh Movies (CloudKit)
+    /// - refresh Members (CloudKit)
+    private func performPullToRefresh() async {
+        // Parallelisieren, damit's flotter ist (und du nicht gefühlt 'nen Kaffee kochen kannst).
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask {
+                await movieStore.refreshFromCloud(force: true)
+            }
+            group.addTask {
+                await userStore.refreshFromCloud(force: true)
+            }
+            await group.waitForAll()
         }
     }
 
