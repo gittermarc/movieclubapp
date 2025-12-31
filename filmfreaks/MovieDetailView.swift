@@ -40,9 +40,6 @@ struct MovieDetailView: View {
     // ✅ Quick Win: Save-UX (nicht bei jedem Tap speichern)
     @State private var hasPendingRatingChanges = false
 
-    // ✅ Inline Trailer Embed (Tap-to-load)
-    @State private var isInlineTrailerShown = false
-
     // ✅ Trailer Fallback: In-App (SFSafariViewController)
     @State private var isTrailerSafariShown = false
 
@@ -69,7 +66,7 @@ struct MovieDetailView: View {
         ?? []
     }
 
-    // ✅ Trailer: wir arbeiten mit Key (für embed) + Watch-URL (für „In YouTube öffnen“)
+    // ✅ Trailer: wir arbeiten mit Key (für watch-url)
     private var trailerVideo: TMDbVideo? {
         guard let videos = details?.videos?.results else { return nil }
         let youtube = videos.filter { $0.site.lowercased() == "youtube" }
@@ -477,7 +474,7 @@ struct MovieDetailView: View {
                                     }
                                 }
 
-                                // ✅ Inline Trailer Embed + Privacy
+                                // ✅ Trailer: Inline-Embed deaktiviert (zu oft „Video nicht verfügbar“ in WKWebView).
                                 if let key = trailerKey {
                                     trailerInlineBlock(videoId: key)
                                 }
@@ -627,13 +624,9 @@ struct MovieDetailView: View {
         .onChange(of: userStore.selectedUser?.id) { _, _ in
             loadExistingRatingForSelectedUser()
         }
-        .onChange(of: trailerKey) { _, _ in
-            // Wenn ein anderer Film geladen wird / anderer Trailer kommt -> Player erstmal wieder zu (privacy + UX)
-            isInlineTrailerShown = false
-        }
     }
 
-    // MARK: - Trailer Inline Block
+    // MARK: - Trailer Block (ohne Embed)
 
     @ViewBuilder
     private func trailerInlineBlock(videoId: String) -> some View {
@@ -641,69 +634,9 @@ struct MovieDetailView: View {
             Text("Trailer")
                 .font(.subheadline).bold()
 
-            if isInlineTrailerShown {
-                YouTubePlayerView(videoId: videoId)
-                    .frame(maxWidth: .infinity)
-                    .aspectRatio(16.0/9.0, contentMode: .fit)
-                    .clipShape(RoundedRectangle(cornerRadius: 14))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 14)
-                            .stroke(Color.primary.opacity(0.06), lineWidth: 1)
-                    }
-
-                HStack(spacing: 10) {
-                    Button {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            isInlineTrailerShown = false
-                        }
-                    } label: {
-                        HStack(spacing: 6) {
-                            Image(systemName: "xmark.circle.fill")
-                            Text("Trailer schließen")
-                        }
-                        .font(.subheadline.weight(.semibold))
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 8)
-                        .background(Color.gray.opacity(0.12))
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
-                    }
-                    .buttonStyle(.plain)
-
-                    if let trailerWatchURL {
-                        Button {
-                            isTrailerSafariShown = true
-                        } label: {
-                            HStack(spacing: 6) {
-                                Image(systemName: "safari.fill")
-                                Text("In App öffnen")
-                            }
-                            .font(.subheadline.weight(.semibold))
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 8)
-                            .background(Color.orange.opacity(0.14))
-                            .clipShape(RoundedRectangle(cornerRadius: 10))
-                        }
-                        .buttonStyle(.plain)
-
-                        Link(destination: trailerWatchURL) {
-                            HStack(spacing: 6) {
-                                Image(systemName: "arrow.up.right.square")
-                                Text("In YouTube öffnen")
-                            }
-                            .font(.subheadline.weight(.semibold))
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 8)
-                            .background(Color.blue.opacity(0.12))
-                            .clipShape(RoundedRectangle(cornerRadius: 10))
-                        }
-                    }
-                }
-
-            } else {
+            if trailerWatchURL != nil {
                 Button {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        isInlineTrailerShown = true
-                    }
+                    isTrailerSafariShown = true
                 } label: {
                     ZStack {
                         // Preview: Poster (kein Backdrop vorhanden)
@@ -758,6 +691,47 @@ struct MovieDetailView: View {
                     }
                 }
                 .buttonStyle(.plain)
+
+                HStack(spacing: 10) {
+                    Button {
+                        isTrailerSafariShown = true
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "safari.fill")
+                            Text("In App öffnen")
+                        }
+                        .font(.subheadline.weight(.semibold))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 8)
+                        .background(Color.orange.opacity(0.14))
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                    }
+                    .buttonStyle(.plain)
+
+                    if let trailerWatchURL {
+                        Link(destination: trailerWatchURL) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "arrow.up.right.square")
+                                Text("In YouTube öffnen")
+                            }
+                            .font(.subheadline.weight(.semibold))
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 8)
+                            .background(Color.blue.opacity(0.12))
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                        }
+                    }
+                }
+
+                Text("Hinweis: Der YouTube-Inline-Player ist deaktiviert, weil YouTube in WKWebView häufig mit „Video nicht verfügbar“ / Consent-Problemen reagiert. Über „In App öffnen“ ist es für Nutzer deutlich stabiler.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.top, 2)
+
+            } else {
+                Text("Trailer nicht verfügbar.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
             }
 
             // ✅ Datenschutzhinweis (unaufdringlich, aber klar)
@@ -766,7 +740,7 @@ struct MovieDetailView: View {
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
 
-                Text("Beim Abspielen wird ein YouTube-Video eingebettet. Dabei kann eine Verbindung zu YouTube/Google hergestellt und personenbezogene Daten (z. B. IP-Adresse) übertragen werden.")
+                Text("Beim Abspielen wird ein YouTube-Video geöffnet. Dabei kann eine Verbindung zu YouTube/Google hergestellt und personenbezogene Daten (z. B. IP-Adresse) übertragen werden.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
