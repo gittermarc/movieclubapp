@@ -81,8 +81,14 @@ struct TMDbGenreListResponse: Decodable {
 struct TMDbMovieDetails: Decodable {
     let id: Int
     let title: String
+
+    // ✅ Quick Wins: mehr Details
+    let tagline: String?
     let overview: String?
     let release_date: String?
+    let original_title: String?
+    let original_language: String?
+
     let runtime: Int?
     let vote_average: Double
     let poster_path: String?
@@ -162,7 +168,7 @@ final class TMDbAPI {
            !env.isEmpty {
             return env
         }
-        
+
 
         // 2) Info.plist
         if let plist = Bundle.main.object(forInfoDictionaryKey: "TMDB_API_KEY") as? String {
