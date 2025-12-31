@@ -439,18 +439,22 @@ struct MovieDetailView: View {
                                                             subtitle: person.character
                                                         )
                                                     } label: {
-                                                        VStack(alignment: .leading, spacing: 2) {
-                                                            Text(person.name)
-                                                                .font(.caption.weight(.semibold))
-                                                                .foregroundStyle(.primary)
-                                                                .lineLimit(1)
+                                                        HStack(alignment: .center, spacing: 8) {
+                                                            castAvatar(profilePath: person.profile_path)
 
-                                                            if let role = person.character?.trimmingCharacters(in: .whitespacesAndNewlines),
-                                                               !role.isEmpty {
-                                                                Text(role)
-                                                                    .font(.caption2)
-                                                                    .foregroundStyle(.secondary)
+                                                            VStack(alignment: .leading, spacing: 2) {
+                                                                Text(person.name)
+                                                                    .font(.caption.weight(.semibold))
+                                                                    .foregroundStyle(.primary)
                                                                     .lineLimit(1)
+
+                                                                if let role = person.character?.trimmingCharacters(in: .whitespacesAndNewlines),
+                                                                   !role.isEmpty {
+                                                                    Text(role)
+                                                                        .font(.caption2)
+                                                                        .foregroundStyle(.secondary)
+                                                                        .lineLimit(1)
+                                                                }
                                                             }
                                                         }
                                                         .padding(.horizontal, 10)
@@ -1116,6 +1120,61 @@ struct MovieDetailView: View {
     }
 
     // MARK: - Helper Views / Funktionen
+
+    @ViewBuilder
+    private func castAvatar(profilePath: String?) -> some View {
+        let size: CGFloat = 34
+
+        if let path = profilePath,
+           let url = URL(string: "https://image.tmdb.org/t/p/w185\(path)") {
+            AsyncImage(url: url) { phase in
+                switch phase {
+                case .empty:
+                    ZStack {
+                        Circle().foregroundStyle(.gray.opacity(0.18))
+                        ProgressView().scaleEffect(0.75)
+                    }
+
+                case .success(let image):
+                    image
+                        .resizable()
+                        .scaledToFill()
+
+                case .failure:
+                    ZStack {
+                        Circle().foregroundStyle(.gray.opacity(0.18))
+                        Image(systemName: "person.fill")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                    }
+
+                @unknown default:
+                    ZStack {
+                        Circle().foregroundStyle(.gray.opacity(0.18))
+                        Image(systemName: "person.fill")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .frame(width: size, height: size)
+            .clipShape(Circle())
+            .overlay(
+                Circle().stroke(Color.primary.opacity(0.08), lineWidth: 1)
+            )
+        } else {
+            ZStack {
+                Circle().foregroundStyle(.gray.opacity(0.18))
+                Image(systemName: "person.fill")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+            .frame(width: size, height: size)
+            .overlay(
+                Circle().stroke(Color.primary.opacity(0.08), lineWidth: 1)
+            )
+        }
+    }
 
     private var placeholderPoster: some View {
         Rectangle()

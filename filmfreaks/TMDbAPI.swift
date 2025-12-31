@@ -34,6 +34,8 @@ struct TMDbCast: Decodable {
     let id: Int
     let name: String
     let character: String?
+    /// Optionales Profilbild (kommt aus /credits; kann nil sein)
+    let profile_path: String?
 }
 
 struct TMDbCrew: Decodable {
