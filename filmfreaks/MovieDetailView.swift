@@ -429,7 +429,8 @@ struct MovieDetailView: View {
                                         Text("Hauptdarsteller")
                                             .font(.subheadline).bold()
 
-                                        ScrollView(.horizontal, showsIndicators: false) {
+                                        ZStack(alignment: .trailing) {
+                                            ScrollView(.horizontal, showsIndicators: false) {
                                             HStack(spacing: 8) {
                                                 ForEach(castList, id: \.id) { person in
                                                     Button {
@@ -464,6 +465,19 @@ struct MovieDetailView: View {
                                                     }
                                                     .buttonStyle(.plain)
                                                 }
+                                            }
+                                        }
+                                            if castList.count >= 9 {
+                                                LinearGradient(
+                                                    colors: [
+                                                        Color(.secondarySystemBackground),
+                                                        Color(.secondarySystemBackground).opacity(0.0)
+                                                    ],
+                                                    startPoint: .trailing,
+                                                    endPoint: .leading
+                                                )
+                                                .frame(width: 28)
+                                                .allowsHitTesting(false)
                                             }
                                         }
                                     }
@@ -1126,7 +1140,7 @@ struct MovieDetailView: View {
         let size: CGFloat = 34
 
         if let path = profilePath,
-           let url = URL(string: "https://image.tmdb.org/t/p/w185\(path)") {
+           let url = URL(string: "https://image.tmdb.org/t/p/w92\(path)") {
             AsyncImage(url: url) { phase in
                 switch phase {
                 case .empty:
