@@ -310,6 +310,9 @@ struct MovieSearchView: View {
                 .padding(.top, 6)
             }
             .navigationTitle("Film suchen")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(.visible, for: .navigationBar)
+            .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Abbrechen") {
