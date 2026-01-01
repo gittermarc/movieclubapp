@@ -604,11 +604,6 @@ struct SearchResultDetailView: View {
                     }
                 }
 
-                Text("Hinweis: Der YouTube-Inline-Player ist deaktiviert, weil YouTube in WKWebView häufig mit „Video nicht verfügbar“ / Consent-Problemen reagiert. Über „In App öffnen“ ist es für Nutzer deutlich stabiler.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .padding(.top, 2)
-
             } else {
                 Text("Trailer nicht verfügbar.")
                     .font(.subheadline)
