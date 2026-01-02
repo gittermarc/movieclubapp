@@ -6,6 +6,7 @@
 //
 
 internal import SwiftUI
+internal import UIKit
 
 struct MovieDetailView: View {
 
@@ -436,42 +437,42 @@ struct MovieDetailView: View {
 
                                         ZStack(alignment: .trailing) {
                                             ScrollView(.horizontal, showsIndicators: false) {
-                                            HStack(spacing: 8) {
-                                                ForEach(castList, id: \.id) { person in
-                                                    Button {
-                                                        selectedPerson = SelectedPerson(
-                                                            id: person.id,
-                                                            name: person.name,
-                                                            subtitle: person.character
-                                                        )
-                                                    } label: {
-                                                        HStack(alignment: .center, spacing: 8) {
-                                                            castAvatar(profilePath: person.profile_path)
+                                                HStack(spacing: 8) {
+                                                    ForEach(castList, id: \.id) { person in
+                                                        Button {
+                                                            selectedPerson = SelectedPerson(
+                                                                id: person.id,
+                                                                name: person.name,
+                                                                subtitle: person.character
+                                                            )
+                                                        } label: {
+                                                            HStack(alignment: .center, spacing: 8) {
+                                                                castAvatar(profilePath: person.profile_path)
 
-                                                            VStack(alignment: .leading, spacing: 2) {
-                                                                Text(person.name)
-                                                                    .font(.caption.weight(.semibold))
-                                                                    .foregroundStyle(.primary)
-                                                                    .lineLimit(1)
-
-                                                                if let role = person.character?.trimmingCharacters(in: .whitespacesAndNewlines),
-                                                                   !role.isEmpty {
-                                                                    Text(role)
-                                                                        .font(.caption2)
-                                                                        .foregroundStyle(.secondary)
+                                                                VStack(alignment: .leading, spacing: 2) {
+                                                                    Text(person.name)
+                                                                        .font(.caption.weight(.semibold))
+                                                                        .foregroundStyle(.primary)
                                                                         .lineLimit(1)
+
+                                                                    if let role = person.character?.trimmingCharacters(in: .whitespacesAndNewlines),
+                                                                       !role.isEmpty {
+                                                                        Text(role)
+                                                                            .font(.caption2)
+                                                                            .foregroundStyle(.secondary)
+                                                                            .lineLimit(1)
+                                                                    }
                                                                 }
                                                             }
+                                                            .padding(.horizontal, 10)
+                                                            .padding(.vertical, 8)
+                                                            .background(Color.blue.opacity(0.12))
+                                                            .clipShape(RoundedRectangle(cornerRadius: 12))
                                                         }
-                                                        .padding(.horizontal, 10)
-                                                        .padding(.vertical, 8)
-                                                        .background(Color.blue.opacity(0.12))
-                                                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                                                        .buttonStyle(.plain)
                                                     }
-                                                    .buttonStyle(.plain)
                                                 }
                                             }
-                                        }
                                             if castList.count >= 9 {
                                                 LinearGradient(
                                                     colors: [
@@ -696,6 +697,20 @@ struct MovieDetailView: View {
         }
         toastDismissWorkItem = workItem
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.6, execute: workItem)
+    }
+
+    // MARK: - Haptics
+
+    private func hapticSuccess() {
+        let gen = UINotificationFeedbackGenerator()
+        gen.prepare()
+        gen.notificationOccurred(.success)
+    }
+
+    private func hapticWarning() {
+        let gen = UINotificationFeedbackGenerator()
+        gen.prepare()
+        gen.notificationOccurred(.warning)
     }
 
     // MARK: - Trailer Block (ohne Embed)
@@ -1265,26 +1280,78 @@ struct MovieDetailView: View {
         userStore.users.map { $0.name }
     }
 
-    private func saveRating() {
-        guard let selectedUser = userStore.selectedUser else { return }
-
+    private func normalizedScoresFromLocal() -> [RatingCriterion: Int] {
         var scores: [RatingCriterion: Int] = [:]
         for criterion in RatingCriterion.allCases {
             scores[criterion] = localScores[criterion] ?? 0
         }
+        return scores
+    }
 
-        let name = selectedUser.name
+    private func normalizedCommentFromLocal() -> String? {
         let trimmedComment = localComment.trimmingCharacters(in: .whitespacesAndNewlines)
-        let finalComment: String? = trimmedComment.isEmpty ? nil : trimmedComment
+        return trimmedComment.isEmpty ? nil : trimmedComment
+    }
 
+    private func isAllDefault(scores: [RatingCriterion: Int], comment: String?, fazit: Int?) -> Bool {
+        let allZero = RatingCriterion.allCases.allSatisfy { (scores[$0] ?? 0) == 0 }
+        return allZero && comment == nil && fazit == nil
+    }
+
+    private func ratingPayloadEquals(existing: Rating, scores: [RatingCriterion: Int], comment: String?, fazit: Int?) -> Bool {
+        // scores vergleichen (für alle Kriterien)
+        for criterion in RatingCriterion.allCases {
+            let a = existing.scores[criterion] ?? 0
+            let b = scores[criterion] ?? 0
+            if a != b { return false }
+        }
+
+        let existingComment = (existing.comment ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedExistingComment: String? = existingComment.isEmpty ? nil : existingComment
+
+        if normalizedExistingComment != comment { return false }
+        if existing.fazitScore != fazit { return false }
+
+        return true
+    }
+
+    private func saveRating() {
+        guard let selectedUser = userStore.selectedUser else { return }
+
+        let scores = normalizedScoresFromLocal()
+        let finalComment = normalizedCommentFromLocal()
+        let fazit = localFazitScore
+        let name = selectedUser.name
+
+        // ✅ Smart: existierende Bewertung für User?
+        let existingIndex = movie.ratings.firstIndex(where: { $0.reviewerName.lowercased() == name.lowercased() })
+        let existingRating: Rating? = existingIndex.map { movie.ratings[$0] }
+
+        // ✅ Smart: Wenn keine existiert UND alles Default → kein Save
+        if existingRating == nil, isAllDefault(scores: scores, comment: finalComment, fazit: fazit) {
+            hasPendingRatingChanges = false
+            hapticWarning()
+            presentSaveToast("Keine Änderungen zum Speichern festgestellt")
+            return
+        }
+
+        // ✅ Smart: Wenn existiert UND Payload identisch → kein Save
+        if let existingRating, ratingPayloadEquals(existing: existingRating, scores: scores, comment: finalComment, fazit: fazit) {
+            hasPendingRatingChanges = false
+            hapticWarning()
+            presentSaveToast("Keine Änderungen zum Speichern festgestellt")
+            return
+        }
+
+        // ✅ Speichern
         var newRating = Rating(
             reviewerName: name,
             scores: scores
         )
         newRating.comment = finalComment
-        newRating.fazitScore = localFazitScore
+        newRating.fazitScore = fazit
 
-        if let index = movie.ratings.firstIndex(where: { $0.reviewerName.lowercased() == name.lowercased() }) {
+        if let index = existingIndex {
             // ✅ ID stabil halten, damit DisclosureGroup-States nicht „flackern“
             newRating.id = movie.ratings[index].id
             movie.ratings[index] = newRating
@@ -1295,7 +1362,8 @@ struct MovieDetailView: View {
         // ✅ Änderungen sind jetzt explizit gespeichert
         hasPendingRatingChanges = false
 
-        // ✅ NEU: Toast anzeigen
+        // ✅ Haptik + Toast
+        hapticSuccess()
         presentSaveToast("Bewertung gespeichert")
     }
 
