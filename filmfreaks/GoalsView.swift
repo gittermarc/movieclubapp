@@ -481,7 +481,7 @@ struct GoalsView: View {
     private func posterTile(for movie: Movie) -> some View {
         VStack(spacing: 4) {
             if let url = movie.posterURL {
-                AsyncImage(url: url) { phase in
+                CachedAsyncImage(url: url) { phase in
                     switch phase {
                     case .empty:
                         Rectangle().foregroundStyle(.gray.opacity(0.2))
@@ -538,7 +538,7 @@ struct GoalsView: View {
         case .person, .director:
             if let path = goal.profilePath, !path.isEmpty,
                let url = URL(string: "https://image.tmdb.org/t/p/w185\(path)") {
-                AsyncImage(url: url) { phase in
+                CachedAsyncImage(url: url) { phase in
                     switch phase {
                     case .empty:
                         RoundedRectangle(cornerRadius: 10).foregroundStyle(.gray.opacity(0.15))
@@ -1027,7 +1027,7 @@ private struct GoalDetailView: View {
     private func goalDetailMovieRow(_ m: Movie) -> some View {
         HStack(spacing: 12) {
             if let url = m.posterURL {
-                AsyncImage(url: url) { phase in
+                CachedAsyncImage(url: url) { phase in
                     switch phase {
                     case .empty:
                         Rectangle().foregroundStyle(.gray.opacity(0.2))
@@ -1285,7 +1285,7 @@ private struct CustomGoalEditorView: View {
                 if selectedPersonId > 0 {
                     HStack(spacing: 10) {
                         if let p = selectedProfilePath, let url = URL(string: "https://image.tmdb.org/t/p/w185\(p)") {
-                            AsyncImage(url: url) { phase in
+                            CachedAsyncImage(url: url) { phase in
                                 switch phase {
                                 case .empty:
                                     RoundedRectangle(cornerRadius: 8).foregroundStyle(.gray.opacity(0.15))
@@ -1380,7 +1380,7 @@ private struct CustomGoalEditorView: View {
                                 } label: {
                                     HStack(spacing: 10) {
                                     if let path = p.profile_path, let url = URL(string: "https://image.tmdb.org/t/p/w185\(path)") {
-                                        AsyncImage(url: url) { phase in
+                                        CachedAsyncImage(url: url) { phase in
                                             switch phase {
                                             case .empty:
                                                 RoundedRectangle(cornerRadius: 8).foregroundStyle(.gray.opacity(0.15))

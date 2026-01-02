@@ -861,7 +861,7 @@ struct StatsView: View {
 
                         if let path = details.profile_path,
                            let url = URL(string: "https://image.tmdb.org/t/p/w500\(path)") {
-                            AsyncImage(url: url) { phase in
+                            CachedAsyncImage(url: url) { phase in
                                 switch phase {
                                 case .empty:
                                     Rectangle()
@@ -1133,7 +1133,7 @@ struct StatsView: View {
     private func movieRow(_ movie: Movie) -> some View {
         HStack(spacing: 12) {
             if let url = movie.posterURL {
-                AsyncImage(url: url) { phase in
+                CachedAsyncImage(url: url) { phase in
                     switch phase {
                     case .empty:
                         Rectangle().foregroundStyle(.gray.opacity(0.2))

@@ -438,7 +438,7 @@ struct TimelineView: View {
     @ViewBuilder
     private func posterImage(movie: Movie) -> some View {
         if let url = movie.posterURL {
-            AsyncImage(url: url) { phase in
+            CachedAsyncImage(url: url) { phase in
                 switch phase {
                 case .empty:
                     Rectangle()

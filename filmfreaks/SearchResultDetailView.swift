@@ -524,7 +524,7 @@ struct SearchResultDetailView: View {
                     ZStack {
                         Group {
                             if let url = posterURL {
-                                AsyncImage(url: url) { phase in
+                                CachedAsyncImage(url: url) { phase in
                                     switch phase {
                                     case .empty:
                                         Rectangle().foregroundStyle(.gray.opacity(0.15))
@@ -636,7 +636,7 @@ struct SearchResultDetailView: View {
 
             Group {
                 if let url = posterURL {
-                    AsyncImage(url: url) { phase in
+                    CachedAsyncImage(url: url) { phase in
                         switch phase {
                         case .empty:
                             Rectangle().foregroundStyle(.gray.opacity(0.15))
@@ -673,7 +673,7 @@ struct SearchResultDetailView: View {
             HStack(alignment: .bottom, spacing: 14) {
                 Group {
                     if let url = posterURL {
-                        AsyncImage(url: url) { phase in
+                        CachedAsyncImage(url: url) { phase in
                             switch phase {
                             case .empty:
                                 ZStack {
@@ -792,7 +792,7 @@ struct SearchResultDetailView: View {
 
         if let path = profilePath,
            let url = URL(string: "https://image.tmdb.org/t/p/w92\(path)") {
-            AsyncImage(url: url) { phase in
+            CachedAsyncImage(url: url) { phase in
                 switch phase {
                 case .empty:
                     ZStack {
@@ -989,7 +989,7 @@ private struct SRTMDbPersonDetailSheet: View {
                         // Bild (Option A: nix abschneiden)
                         if let path = details.profile_path,
                            let url = URL(string: "https://image.tmdb.org/t/p/w500\(path)") {
-                            AsyncImage(url: url) { phase in
+                            CachedAsyncImage(url: url) { phase in
                                 switch phase {
                                 case .empty:
                                     Rectangle()

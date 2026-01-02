@@ -1047,7 +1047,7 @@ struct MovieSearchView: View {
             if let path = result.poster_path,
                let url = URL(string: "https://image.tmdb.org/t/p/w342\(path)") {
 
-                AsyncImage(
+                CachedAsyncImage(
                     url: url,
                     transaction: Transaction(animation: .easeOut(duration: 0.25))
                 ) { phase in
@@ -1774,7 +1774,7 @@ struct MovieSearchView: View {
             if let path = result.poster_path,
                let url = URL(string: "https://image.tmdb.org/t/p/w185\(path)") {
 
-                AsyncImage(
+                CachedAsyncImage(
                     url: url,
                     transaction: Transaction(animation: .easeOut(duration: 0.25))
                 ) { phase in

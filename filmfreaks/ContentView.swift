@@ -907,7 +907,7 @@ struct ContentView: View {
                 .fill(Color(.secondarySystemBackground))
 
             if let url = movie.posterURL {
-                AsyncImage(url: url) { phase in
+                CachedAsyncImage(url: url) { phase in
                     switch phase {
                     case .empty:
                         RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -949,7 +949,7 @@ struct ContentView: View {
     private func compactMovieRow(movie: Movie, average: Double?) -> some View {
         HStack(spacing: 12) {
             if let url = movie.posterURL {
-                AsyncImage(url: url) { phase in
+                CachedAsyncImage(url: url) { phase in
                     switch phase {
                     case .empty:
                         Rectangle()
@@ -1129,7 +1129,7 @@ struct ContentView: View {
         HStack(spacing: 12) {
             // Poster
             if let url = movie.posterURL {
-                AsyncImage(url: url) { phase in
+                CachedAsyncImage(url: url) { phase in
                     switch phase {
                     case .empty:
                         Rectangle()

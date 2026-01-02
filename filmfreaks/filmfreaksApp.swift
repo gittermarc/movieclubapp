@@ -6,9 +6,17 @@
 //
 
 internal import SwiftUI
+import Foundation
 
 @main
 struct filmfreaksApp: App {
+    init() {
+        // Make HTTP caching for images much more effective across app launches.
+        let memory = 100 * 1024 * 1024  // 100 MB
+        let disk   = 500 * 1024 * 1024  // 500 MB
+        URLCache.shared = URLCache(memoryCapacity: memory, diskCapacity: disk, diskPath: "filmfreaks-urlcache")
+    }
+
     @StateObject var movieStore = MovieStore(useCloud: true)
     @StateObject var userStore = UserStore()
 
