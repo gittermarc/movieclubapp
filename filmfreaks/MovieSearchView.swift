@@ -4,6 +4,8 @@
 //
 
 internal import SwiftUI
+import Combine
+internal import UIKit
 internal import VisionKit
 
 // MARK: - Such-Historie (lokal per UserDefaults)
@@ -79,6 +81,77 @@ fileprivate struct RecommendationsCacheManager {
     }
 }
 
+
+// MARK: - Keyboard Monitor (verhindert „Jump“ beim Fokus)
+
+fileprivate final class KeyboardMonitor: ObservableObject {
+    @Published var height: CGFloat = 0
+    @Published var animationDuration: Double = 0.25
+
+    private var observers: [NSObjectProtocol] = []
+
+    init() {
+        let center = NotificationCenter.default
+
+        observers.append(
+            center.addObserver(
+                forName: UIResponder.keyboardWillChangeFrameNotification,
+                object: nil,
+                queue: .main
+            ) { [weak self] note in
+                self?.handleWillChangeFrame(note)
+            }
+        )
+
+        observers.append(
+            center.addObserver(
+                forName: UIResponder.keyboardWillHideNotification,
+                object: nil,
+                queue: .main
+            ) { [weak self] note in
+                self?.handleWillHide(note)
+            }
+        )
+    }
+
+    deinit {
+        observers.forEach { NotificationCenter.default.removeObserver($0) }
+    }
+
+    private var keyWindow: UIWindow? {
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        let active = scenes.first(where: { $0.activationState == .foregroundActive }) ?? scenes.first
+        return active?.windows.first(where: { $0.isKeyWindow }) ?? active?.windows.first
+    }
+
+    private var safeAreaBottomInset: CGFloat {
+        keyWindow?.safeAreaInsets.bottom ?? 0
+    }
+
+    private func handleWillChangeFrame(_ note: Notification) {
+        guard let userInfo = note.userInfo else { return }
+
+        let duration = (userInfo[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double) ?? 0.25
+        let endFrame = (userInfo[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect) ?? .zero
+
+        animationDuration = duration
+
+        let window = keyWindow
+        let windowHeight = window?.bounds.height ?? endFrame.maxY
+        let endFrameInWindow = window?.convert(endFrame, from: nil) ?? endFrame
+        let raw = windowHeight - endFrameInWindow.minY
+        let adjusted = max(0, raw - safeAreaBottomInset)
+
+        height = adjusted
+    }
+
+    private func handleWillHide(_ note: Notification) {
+        let duration = (note.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double) ?? 0.25
+        animationDuration = duration
+        height = 0
+    }
+}
+
 // MARK: - Sortierung (Search)
 
 fileprivate enum MovieSearchSortOption: String, CaseIterable, Identifiable {
@@ -109,6 +182,9 @@ struct MovieSearchView: View {
     }
 
     @Environment(\.dismiss) private var dismiss
+
+    // Keyboard (gegen Content-Jump beim Fokus)
+    @StateObject private var keyboard = KeyboardMonitor()
 
     // Suche
     @State private var query: String = ""
@@ -291,8 +367,10 @@ struct MovieSearchView: View {
                             }
                             .padding(.horizontal)
                             .padding(.bottom, 8)
+                            .padding(.bottom, keyboard.height)
+                            .animation(.easeOut(duration: keyboard.animationDuration), value: keyboard.height)
                         }
-                    } else if !isLoading && query.isEmpty && recentQueries.isEmpty {
+                    } else if !isLoading && query.isEmpty && recentQueries.isEmpty && !isSearchFieldFocused {
                         // Nur anzeigen, wenn wirklich gar kein Verlauf existiert
                         VStack(spacing: 8) {
                             Image(systemName: "magnifyingglass")
@@ -469,6 +547,7 @@ struct MovieSearchView: View {
                 }
             }
         }
+        .ignoresSafeArea(.keyboard, edges: .bottom)
         .task {
             // ✅ Empfehlungen laden, sobald die View da ist (nur wenn Suchfeld leer)
             await loadRecommendationsIfNeeded()
@@ -480,6 +559,16 @@ struct MovieSearchView: View {
                 Task { await loadRecommendationsIfNeeded() }
             }
         }
+        .onChange(of: isSearchFieldFocused) { _, focused in
+            // Wenn der Fokus weg ist und die Suche leer ist, dürfen Inspirationen wieder auftauchen.
+            if !focused {
+                let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+                if trimmed.isEmpty {
+                    Task { await loadRecommendationsIfNeeded() }
+                }
+            }
+        }
+
     }
 
     // MARK: - Derived
@@ -520,13 +609,35 @@ struct MovieSearchView: View {
     private var shouldShowRecommendations: Bool {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         // Nur im „Idle“-Zustand: keine Suche aktiv und keine Ergebnisse sichtbar
-        return trimmed.isEmpty && results.isEmpty && !isLoading
+        return trimmed.isEmpty && results.isEmpty && !isLoading && !isSearchFieldFocused
     }
+
+
+    /// ✅ Basis-Abstand, damit das Suchfeld schon im „Idle“-Zustand weiter unten sitzt.
+    /// Hintergrund: Beim ersten Fokus-Frame kann SwiftUI den `safeAreaInset` kurz neu vermessen
+    /// und der Header rutscht für einen Moment unter den Inline-Titel. Mit diesem Puffer passiert das nicht.
+    private var baseHeaderSpacer: CGFloat { 22 }
+
+    /// ✅ Extra Luft, sobald das Suchfeld Fokus hat (oder das Keyboard sichtbar ist).
+    private var focusedHeaderSpacer: CGFloat {
+        (isSearchFieldFocused || keyboard.height > 0) ? 12 : 0
+    }
+
+    /// Gesamtabstand über dem Suchfeld (Basis + Fokus)
+    private var headerTopSpacer: CGFloat { baseHeaderSpacer + focusedHeaderSpacer }
+
+
 
     // MARK: - Sticky Suchkopf
 
     private var stickySearchHeader: some View {
         VStack(spacing: 10) {
+
+            // ✅ Platzhalter, damit das Suchfeld beim Fokus nicht unter den Inline-Titel rutscht
+            Color.clear
+                .frame(height: headerTopSpacer)
+                .accessibilityHidden(true)
+
             HStack(spacing: 10) {
                 HStack(spacing: 8) {
                     Image(systemName: "magnifyingglass")
@@ -662,6 +773,7 @@ struct MovieSearchView: View {
         .overlay(alignment: .bottom) {
             Divider().opacity(0.35)
         }
+        .animation(.easeOut(duration: keyboard.animationDuration), value: isSearchFieldFocused)
     }
 
     // MARK: - „Zuletzt gesucht“-View (horizontal)
@@ -980,6 +1092,10 @@ struct MovieSearchView: View {
     private func loadRecommendationsIfNeeded(force: Bool = false) async {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.isEmpty else { return }
+        // Wenn das Suchfeld gerade Fokus hat, sollen „Inspirationen“ nicht auftauchen (und müssen auch nicht geladen werden).
+        guard !isSearchFieldFocused else { return }
+        // Nur laden, wenn wir wirklich im Idle-State sind.
+        guard results.isEmpty && !isLoading else { return }
         guard !isLoadingRecommendations else { return }
 
         if !force, let cached = RecommendationsCacheManager.load(maxAge: recommendationsCacheMaxAge) {
@@ -1369,6 +1485,8 @@ struct MovieSearchView: View {
             .padding(.horizontal)
             .padding(.bottom, 8)
         }
+        .padding(.bottom, keyboard.height)
+        .animation(.easeOut(duration: keyboard.animationDuration), value: keyboard.height)
         .opacity(skeletonPulse ? 0.55 : 0.85)
     }
 
