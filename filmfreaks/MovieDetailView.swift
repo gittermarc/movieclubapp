@@ -43,6 +43,11 @@ struct MovieDetailView: View {
     // ✅ Trailer Fallback: In-App (SFSafariViewController)
     @State private var isTrailerSafariShown = false
 
+    // ✅ NEU: Save-Toast
+    @State private var showSaveToast = false
+    @State private var saveToastText = "Bewertung gespeichert"
+    @State private var toastDismissWorkItem: DispatchWorkItem?
+
     // MARK: - Metadaten aus TMDb
 
     private var director: String? {
@@ -573,6 +578,17 @@ struct MovieDetailView: View {
                 .padding()
             }
         }
+        .overlay(alignment: .bottom) {
+            GeometryReader { proxy in
+                if showSaveToast {
+                    saveToastView
+                        .padding(.bottom, max(12, proxy.safeAreaInsets.bottom + 12))
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
+            .allowsHitTesting(false)
+        }
         .navigationTitle(movie.title)
         .navigationBarTitleDisplayMode(.inline)
         .sheet(item: $selectedPerson) { person in
@@ -642,6 +658,44 @@ struct MovieDetailView: View {
         .onChange(of: userStore.selectedUser?.id) { _, _ in
             loadExistingRatingForSelectedUser()
         }
+    }
+
+    // MARK: - Toast UI
+
+    private var saveToastView: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.subheadline.weight(.semibold))
+            Text(saveToastText)
+                .font(.subheadline.weight(.semibold))
+                .lineLimit(2)
+                .multilineTextAlignment(.leading)
+        }
+        .foregroundStyle(.primary)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .background(.ultraThinMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .shadow(color: Color.black.opacity(0.14), radius: 12, x: 0, y: 6)
+        .padding(.horizontal, 16)
+    }
+
+    private func presentSaveToast(_ text: String = "Bewertung gespeichert") {
+        saveToastText = text
+
+        toastDismissWorkItem?.cancel()
+
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.9)) {
+            showSaveToast = true
+        }
+
+        let workItem = DispatchWorkItem {
+            withAnimation(.easeOut(duration: 0.25)) {
+                showSaveToast = false
+            }
+        }
+        toastDismissWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.6, execute: workItem)
     }
 
     // MARK: - Trailer Block (ohne Embed)
@@ -1240,6 +1294,9 @@ struct MovieDetailView: View {
 
         // ✅ Änderungen sind jetzt explizit gespeichert
         hasPendingRatingChanges = false
+
+        // ✅ NEU: Toast anzeigen
+        presentSaveToast("Bewertung gespeichert")
     }
 
     private func loadExistingRatingForSelectedUser() {
