@@ -26,6 +26,23 @@ enum MovieSortOption: String, CaseIterable, Identifiable {
     var id: Self { self }
 }
 
+
+enum MovieViewStyle: String, CaseIterable, Identifiable {
+    case posterGrid = "Cover-Grid"
+    case cards = "Details"
+    case compactList = "Liste (kompakt)"
+
+    var id: Self { self }
+
+    var icon: String {
+        switch self {
+        case .posterGrid: return "rectangle.grid.2x2"
+        case .cards: return "rectangle.grid.1x2"
+        case .compactList: return "list.bullet"
+        }
+    }
+}
+
 struct ContentView: View {
 
     @EnvironmentObject var movieStore: MovieStore
@@ -47,6 +64,10 @@ struct ContentView: View {
     @State private var filterByUser: User? = nil
     @State private var selectedSort: MovieSortOption = .dateNewest
 
+    // MARK: - View Style
+    @AppStorage("ContentView_ViewStyle") private var viewStyleRaw: String = MovieViewStyle.cards.rawValue
+
+
     /// Gibt an, ob es in der aktuellen Gruppe überhaupt schon Filme gibt
     private var hasAnyMoviesInCurrentGroup: Bool {
         !movieStore.movies.isEmpty || !movieStore.backlogMovies.isEmpty
@@ -64,6 +85,11 @@ struct ContentView: View {
             return "Filter zeigt nur Filme, die von dieser Person vorgeschlagen wurden."
         }
     }
+
+    private var selectedViewStyle: MovieViewStyle {
+        MovieViewStyle(rawValue: viewStyleRaw) ?? .cards
+    }
+
 
     var body: some View {
         NavigationStack {
@@ -184,6 +210,22 @@ struct ContentView: View {
                                 )
                             }
 
+                            // Ansicht
+                            Menu {
+                                ForEach(MovieViewStyle.allCases) { style in
+                                    Button {
+                                        viewStyleRaw = style.rawValue
+                                    } label: {
+                                        Label(style.rawValue, systemImage: style.icon)
+                                    }
+                                }
+                            } label: {
+                                controlChip(
+                                    icon: selectedViewStyle.icon,
+                                    title: selectedViewStyle.rawValue
+                                )
+                            }
+
                             // Reset-Button nur wenn Filter aktiv
                             if filterByUser != nil {
                                 Button {
@@ -225,19 +267,36 @@ struct ContentView: View {
 
                     // MARK: - Inhalt: entweder Empty State oder Listen
                     if hasAnyMoviesInCurrentGroup {
-                        // Normale Listen
-                        List {
-                            switch selectedMode {
-                            case .watched:
-                                watchedList
-                            case .backlog:
-                                backlogList
+
+                        switch selectedViewStyle {
+                        case .posterGrid:
+                            ScrollView {
+                                switch selectedMode {
+                                case .watched:
+                                    posterGrid(items: watchedGridItems, isBacklog: false)
+                                case .backlog:
+                                    posterGrid(items: backlogGridItems, isBacklog: true)
+                                }
                             }
-                        }
-                        .scrollContentBackground(.hidden)
-                        .listStyle(.plain)
-                        .refreshable {
-                            await performPullToRefresh()
+                            .refreshable {
+                                await performPullToRefresh()
+                            }
+
+                        case .cards, .compactList:
+                            // Normale Listen
+                            List {
+                                switch selectedMode {
+                                case .watched:
+                                    watchedList
+                                case .backlog:
+                                    backlogList
+                                }
+                            }
+                            .scrollContentBackground(.hidden)
+                            .listStyle(.plain)
+                            .refreshable {
+                                await performPullToRefresh()
+                            }
                         }
                     } else {
                         // Empty State: trotzdem pull-to-refresh ermöglichen
@@ -711,6 +770,238 @@ struct ContentView: View {
         return sugg.lowercased() == user.name.lowercased()
     }
 
+
+
+    // MARK: - Grid-Daten (gefiltert + sortiert)
+
+    private struct GridMovieItem: Identifiable {
+        let index: Int
+        let movie: Movie
+        var id: String { String(describing: movie.id) }
+    }
+
+    private var watchedGridItems: [GridMovieItem] {
+        let enumerated = Array(movieStore.movies.enumerated())
+            .filter { _, movie in passesUserFilterForWatched(movie) }
+
+        let sorted = enumerated.sorted { lhs, rhs in
+            let lhsMovie = lhs.element
+            let rhsMovie = rhs.element
+
+            switch selectedSort {
+            case .titleAZ:
+                return lhsMovie.title.localizedCaseInsensitiveCompare(rhsMovie.title) == .orderedAscending
+            case .titleZA:
+                return lhsMovie.title.localizedCaseInsensitiveCompare(rhsMovie.title) == .orderedDescending
+            case .ratingHigh:
+                let l = lhsMovie.averageRating ?? lhsMovie.tmdbRating ?? -Double.infinity
+                let r = rhsMovie.averageRating ?? rhsMovie.tmdbRating ?? -Double.infinity
+                return l > r
+            case .ratingLow:
+                let l = lhsMovie.averageRating ?? lhsMovie.tmdbRating ?? Double.infinity
+                let r = rhsMovie.averageRating ?? rhsMovie.tmdbRating ?? Double.infinity
+                return l < r
+            case .dateNewest:
+                let l = lhsMovie.watchedDate ?? .distantPast
+                let r = rhsMovie.watchedDate ?? .distantPast
+                return l > r
+            case .dateOldest:
+                let l = lhsMovie.watchedDate ?? .distantFuture
+                let r = rhsMovie.watchedDate ?? .distantFuture
+                return l < r
+            }
+        }
+
+        return sorted.map { GridMovieItem(index: $0.offset, movie: $0.element) }
+    }
+
+    private var backlogGridItems: [GridMovieItem] {
+        let enumerated = Array(movieStore.backlogMovies.enumerated())
+            .filter { _, movie in passesUserFilterForBacklog(movie) }
+
+        let sorted = enumerated.sorted { lhs, rhs in
+            let lhsMovie = lhs.element
+            let rhsMovie = rhs.element
+
+            switch selectedSort {
+            case .titleAZ:
+                return lhsMovie.title.localizedCaseInsensitiveCompare(rhsMovie.title) == .orderedAscending
+            case .titleZA:
+                return lhsMovie.title.localizedCaseInsensitiveCompare(rhsMovie.title) == .orderedDescending
+            case .ratingHigh:
+                let l = lhsMovie.averageRating ?? lhsMovie.tmdbRating ?? -Double.infinity
+                let r = rhsMovie.averageRating ?? rhsMovie.tmdbRating ?? -Double.infinity
+                return l > r
+            case .ratingLow:
+                let l = lhsMovie.averageRating ?? lhsMovie.tmdbRating ?? Double.infinity
+                let r = rhsMovie.averageRating ?? rhsMovie.tmdbRating ?? Double.infinity
+                return l < r
+            case .dateNewest:
+                // Im Backlog: neuestes Erscheinungsjahr zuerst
+                return lhsMovie.year > rhsMovie.year
+            case .dateOldest:
+                // Im Backlog: ältestes Erscheinungsjahr zuerst
+                return lhsMovie.year < rhsMovie.year
+            }
+        }
+
+        return sorted.map { GridMovieItem(index: $0.offset, movie: $0.element) }
+    }
+
+    // MARK: - Grid-Ansicht (Cover-Only)
+
+    @ViewBuilder
+    private func posterGrid(items: [GridMovieItem], isBacklog: Bool) -> some View {
+        if items.isEmpty {
+            ContentUnavailableView(
+                "Keine Filme",
+                systemImage: "film",
+                description: Text("In dieser Ansicht gibt's gerade nichts anzuzeigen.")
+            )
+            .padding(.top, 32)
+            .padding(.horizontal)
+        } else {
+            let columns = [GridItem(.adaptive(minimum: 110), spacing: 12)]
+
+            LazyVGrid(columns: columns, spacing: 12) {
+                ForEach(items) { item in
+                    NavigationLink {
+                        if isBacklog {
+                            MovieDetailView(
+                                movie: $movieStore.backlogMovies[item.index],
+                                isBacklog: true
+                            )
+                        } else {
+                            MovieDetailView(
+                                movie: $movieStore.movies[item.index],
+                                isBacklog: false
+                            )
+                        }
+                    } label: {
+                        posterGridCell(movie: item.movie)
+                    }
+                    .buttonStyle(.plain)
+                    .contextMenu {
+                        Button(role: .destructive) {
+                            if isBacklog {
+                                movieStore.backlogMovies.remove(at: item.index)
+                            } else {
+                                movieStore.movies.remove(at: item.index)
+                            }
+                        } label: {
+                            Label("Löschen", systemImage: "trash")
+                        }
+                    }
+                }
+            }
+            .padding(.horizontal)
+            .padding(.top, 10)
+            .padding(.bottom, 18)
+        }
+    }
+
+    @ViewBuilder
+    private func posterGridCell(movie: Movie) -> some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color(.secondarySystemBackground))
+
+            if let url = movie.posterURL {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .empty:
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .fill(Color.gray.opacity(0.15))
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .scaledToFill()
+                    case .failure:
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .fill(Color.gray.opacity(0.15))
+                            .overlay {
+                                Image(systemName: "film")
+                                    .foregroundStyle(.secondary)
+                            }
+                    @unknown default:
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .fill(Color.gray.opacity(0.15))
+                    }
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            } else {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(Color.gray.opacity(0.12))
+                    .overlay {
+                        Image(systemName: "film")
+                            .foregroundStyle(.secondary)
+                    }
+            }
+        }
+        .frame(height: 170)
+        .clipped()
+        .shadow(color: Color.black.opacity(0.06), radius: 4, x: 0, y: 2)
+    }
+
+    // MARK: - Kompakte Listenzeile
+
+    @ViewBuilder
+    private func compactMovieRow(movie: Movie, average: Double?) -> some View {
+        HStack(spacing: 12) {
+            if let url = movie.posterURL {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .empty:
+                        Rectangle()
+                            .foregroundStyle(.gray.opacity(0.2))
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .scaledToFill()
+                    case .failure:
+                        Rectangle()
+                            .foregroundStyle(.gray.opacity(0.2))
+                            .overlay { Image(systemName: "film") }
+                    @unknown default:
+                        Rectangle()
+                            .foregroundStyle(.gray.opacity(0.2))
+                    }
+                }
+                .frame(width: 34, height: 50)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+            } else {
+                Rectangle()
+                    .foregroundStyle(.gray.opacity(0.12))
+                    .frame(width: 34, height: 50)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .overlay {
+                        Image(systemName: "film")
+                            .foregroundStyle(.secondary)
+                    }
+            }
+
+            Text(movie.title)
+                .font(.subheadline.weight(.semibold))
+                .lineLimit(1)
+
+            Spacer()
+
+            if let avg = average {
+                Text(String(format: "%.1f", avg))
+                    .font(.subheadline.weight(.semibold))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.blue.opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+            } else {
+                Text("-")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.vertical, 6)
+    }
+
     // MARK: - Watched-Liste
 
     @ViewBuilder
@@ -756,7 +1047,12 @@ struct ContentView: View {
                     isBacklog: false
                 )
             } label: {
-                movieRow(movie: movie, average: movie.averageRating)
+                if selectedViewStyle == .compactList {
+                    let displayRating = movie.averageRating ?? movie.tmdbRating
+                    compactMovieRow(movie: movie, average: displayRating)
+                } else {
+                    movieRow(movie: movie, average: movie.averageRating)
+                }
             }
         }
         .onDelete { indexSet in
@@ -811,7 +1107,11 @@ struct ContentView: View {
                 )
             } label: {
                 let displayRating = movie.averageRating ?? movie.tmdbRating
-                movieRow(movie: movie, average: displayRating)
+                if selectedViewStyle == .compactList {
+                    compactMovieRow(movie: movie, average: displayRating)
+                } else {
+                    movieRow(movie: movie, average: displayRating)
+                }
             }
         }
         .onDelete { indexSet in
