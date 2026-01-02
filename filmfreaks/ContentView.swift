@@ -54,6 +54,7 @@ struct ContentView: View {
     @State private var showingTimeline = false       // 👈 NEU: Timeline
     @State private var showingGoals = false
     @State private var showingGroupSettings = false
+    @State private var showingSettings = false
 
     // MARK: - Onboarding / Quick Start
     @AppStorage("Onboarding_HasSeenQuickStart") private var hasSeenQuickStart: Bool = false
@@ -355,6 +356,12 @@ struct ContentView: View {
             .toolbar {
                 ToolbarItemGroup(placement: .topBarTrailing) {
                     Button {
+                        showingSettings = true
+                    } label: {
+                        Image(systemName: "gearshape")
+                    }
+
+                    Button {
                         showingStats = true
                     } label: {
                         Image(systemName: "chart.bar.fill")
@@ -386,6 +393,9 @@ struct ContentView: View {
                         Image(systemName: "magnifyingglass")
                     }
                 }
+            }
+            .sheet(isPresented: $showingSettings) {
+                SettingsView()
             }
             .sheet(isPresented: $showingQuickStart, onDismiss: {
                 // Wenn der User das Sheet wegwischt, nicht ewig wieder nerven.
