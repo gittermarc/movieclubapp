@@ -109,7 +109,9 @@ struct CloudKitMovieStore {
         let recordID = CKRecord.ID(recordName: movie.id.uuidString)
         
         func applyFields(on record: CKRecord) throws -> CKRecord {
-            let data = try JSONEncoder().encode(movie)
+            var movieForCloud = movie
+            movieForCloud.ratings = []
+            let data = try JSONEncoder().encode(movieForCloud)
             record[payloadKey]   = data as CKRecordValue
             record[isBacklogKey] = isBacklog as CKRecordValue
             record[updatedAtKey] = Date() as CKRecordValue
@@ -178,6 +180,8 @@ struct CloudKitMovieStore {
         }
         
         var decoded = try JSONDecoder().decode(Movie.self, from: data)
+        // Ratings werden in Version B separat als MovieRating Records gespeichert
+        decoded.ratings = []
         let isBacklog = (record[isBacklogKey] as? Bool) ?? false
         
         // Defensive: groupId im Model ggf. aus Feld nachziehen

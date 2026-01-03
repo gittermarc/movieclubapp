@@ -1323,11 +1323,11 @@ struct MovieDetailView: View {
         let fazit = localFazitScore
         let name = selectedUser.name
 
-        // ✅ Smart: existierende Bewertung für User?
+        // ✅ Existierende Bewertung für User?
         let existingIndex = movie.ratings.firstIndex(where: { $0.reviewerName.lowercased() == name.lowercased() })
         let existingRating: Rating? = existingIndex.map { movie.ratings[$0] }
 
-        // ✅ Smart: Wenn keine existiert UND alles Default → kein Save
+        // ✅ Wenn keine existiert UND alles Default → kein Save
         if existingRating == nil, isAllDefault(scores: scores, comment: finalComment, fazit: fazit) {
             hasPendingRatingChanges = false
             hapticWarning()
@@ -1335,36 +1335,48 @@ struct MovieDetailView: View {
             return
         }
 
-        // ✅ Smart: Wenn existiert UND Payload identisch → kein Save
-        if let existingRating, ratingPayloadEquals(existing: existingRating, scores: scores, comment: finalComment, fazit: fazit) {
-            hasPendingRatingChanges = false
-            hapticWarning()
-            presentSaveToast("Keine Änderungen zum Speichern festgestellt")
-            return
-        }
-
-        // ✅ Speichern
         var newRating = Rating(
             reviewerName: name,
-            scores: scores
+            scores: scores,
+            comment: finalComment,
+            fazitScore: fazit
         )
-        newRating.comment = finalComment
-        newRating.fazitScore = fazit
 
+        // ✅ Wenn existiert: Stabiler ID-Transfer + No-Op Check
         if let index = existingIndex {
-            // ✅ ID stabil halten, damit DisclosureGroup-States nicht „flackern“
-            newRating.id = movie.ratings[index].id
-            movie.ratings[index] = newRating
-        } else {
-            movie.ratings.append(newRating)
+            let old = movie.ratings[index]
+            newRating.id = old.id
+
+            let oldComment = (old.comment ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let newComment = (newRating.comment ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+
+            let noScoreChanges = old.scores == newRating.scores
+            let noCommentChanges = oldComment == newComment
+            let noFazitChanges = old.fazitScore == newRating.fazitScore
+
+            if noScoreChanges && noCommentChanges && noFazitChanges {
+                hasPendingRatingChanges = false
+                hapticWarning()
+                presentSaveToast("Keine Änderungen zum Speichern festgestellt")
+                return
+            }
         }
 
-        // ✅ Änderungen sind jetzt explizit gespeichert
-        hasPendingRatingChanges = false
+        // ✅ CloudKit Version B: Rating separat speichern (MovieRating Record)
+        Task {
+            let ok = await movieStore.upsertRating(for: movie.id, rating: newRating)
 
-        // ✅ Haptik + Toast
-        hapticSuccess()
-        presentSaveToast("Bewertung gespeichert")
+            // ✅ Änderungen sind jetzt explizit gespeichert (lokal); Cloud kann trotzdem failen.
+            hasPendingRatingChanges = false
+
+            if ok {
+                hapticSuccess()
+                presentSaveToast("Bewertung gespeichert")
+            } else {
+                hapticWarning()
+                presentSaveToast("Bewertung gespeichert – iCloud Sync fehlgeschlagen")
+            }
+        }
     }
 
     private func loadExistingRatingForSelectedUser() {

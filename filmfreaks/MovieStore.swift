@@ -85,6 +85,7 @@ class MovieStore: ObservableObject {
     }
 
     private let cloudStore: CloudKitMovieStore?
+    private let cloudRatingStore: CloudKitRatingStore?
     private var isApplyingCloudUpdate = false
 
     // Throttle gegen zu viele Cloud-Fetches
@@ -99,8 +100,10 @@ class MovieStore: ObservableObject {
     init(useCloud: Bool = true) {
         if useCloud {
             self.cloudStore = CloudKitMovieStore()
+            self.cloudRatingStore = CloudKitRatingStore()
         } else {
             self.cloudStore = nil
+            self.cloudRatingStore = nil
         }
 
         self.knownGroups = Self.loadKnownGroups()
@@ -140,8 +143,54 @@ class MovieStore: ObservableObject {
             let entries = try await cloudStore.fetchMovies(forGroupId: currentGroupId)
             print("CloudKit: fetchMovies(forGroupId:) returned \(entries.count) entries")
 
-            let watched = entries.filter { !$0.isBacklog }.map { $0.movie }
-            let backlog = entries.filter { $0.isBacklog }.map { $0.movie }
+            var watched = entries.filter { !$0.isBacklog }.map { $0.movie }
+            var backlog = entries.filter { $0.isBacklog }.map { $0.movie }
+
+            // ✅ Ratings sind jetzt eigene CloudKit-Records (MovieRating).
+            //    Damit uns lokale/offline Ratings beim Cloud-Reload nicht verloren gehen,
+            //    konservieren wir erstmal die aktuell im Speicher vorhandenen Ratings.
+            let localRatingsByMovieId: [UUID: [Rating]] = {
+                var dict: [UUID: [Rating]] = [:]
+                for m in (self.movies + self.backlogMovies) {
+                    dict[m.id] = mergeRatings(existing: dict[m.id] ?? [], incoming: m.ratings)
+                }
+                return dict
+            }()
+
+            watched = watched.map { m in
+                var copy = m
+                copy.ratings = localRatingsByMovieId[copy.id] ?? []
+                return copy
+            }
+            backlog = backlog.map { m in
+                var copy = m
+                copy.ratings = localRatingsByMovieId[copy.id] ?? []
+                return copy
+            }
+
+            // ✅ Cloud-Ratings laden und in die Movies mergen
+            if let cloudRatingStore = self.cloudRatingStore {
+                do {
+                    let ids = Array(Set(watched.map(\.id) + backlog.map(\.id)))
+                    let cloudRatingsByMovieId = try await cloudRatingStore.fetchRatings(forGroupId: currentGroupId, movieIds: ids)
+
+                    watched = watched.map { m in
+                        var copy = m
+                        copy.ratings = mergeRatings(existing: copy.ratings, incoming: cloudRatingsByMovieId[copy.id] ?? [])
+                        return copy
+                    }
+                    backlog = backlog.map { m in
+                        var copy = m
+                        copy.ratings = mergeRatings(existing: copy.ratings, incoming: cloudRatingsByMovieId[copy.id] ?? [])
+                        return copy
+                    }
+
+                    let total = cloudRatingsByMovieId.values.reduce(0) { $0 + $1.count }
+                    print("CloudKit: fetched ratings → \(total) total")
+                } catch {
+                    print("CloudKit: ratings fetch error: \(error)")
+                }
+            }
 
             let nameFromData = entries.compactMap { $0.movie.groupName }.first
 
@@ -241,7 +290,7 @@ class MovieStore: ObservableObject {
 
         let changedMovies: [Movie] = newList.filter { movie in
             guard let oldMovie = oldById[movie.id] else { return true }
-            return oldMovie != movie
+            return !moviesEqualIgnoringRatings(oldMovie, movie)
         }
 
         if changedMovies.isEmpty {
@@ -265,7 +314,80 @@ class MovieStore: ObservableObject {
         print("CloudKit: syncChanges END (isBacklog = \(isBacklog))")
     }
 
-    // MARK: - ✅ CAST Migration (Legacy → TMDb Person IDs)
+    
+    // MARK: - Ratings (Version B: MovieRating Records)
+
+    /// Merged Ratings: `incoming` überschreibt (case-insensitive) bestehende Ratings pro Reviewer.
+    private func mergeRatings(existing: [Rating], incoming: [Rating]) -> [Rating] {
+        var out = existing
+        for r in incoming {
+            if let idx = out.firstIndex(where: { $0.reviewerName.lowercased() == r.reviewerName.lowercased() }) {
+                out[idx] = r
+            } else {
+                out.append(r)
+            }
+        }
+        return out
+    }
+
+    /// Für Cloud-Sync vergleichen wir Movies **ohne** Ratings, weil Ratings separat in CloudKit liegen.
+    private func moviesEqualIgnoringRatings(_ a: Movie, _ b: Movie) -> Bool {
+        var aa = a
+        var bb = b
+        aa.ratings = []
+        bb.ratings = []
+        return aa == bb
+    }
+
+    /// Speichert/aktualisiert die Bewertung des aktuellen Users für einen Film.
+    /// - Wichtig: Ratings werden in CloudKit als eigene Records gespeichert (MovieRating).
+    func upsertRating(for movieId: UUID, rating: Rating) async -> Bool {
+        // 1) Lokal in die UI-Models mergen (für sofortiges Feedback + Offline)
+        if let idx = movies.firstIndex(where: { $0.id == movieId }) {
+            var m = movies[idx]
+            m.ratings = mergeRatings(existing: m.ratings, incoming: [rating])
+            movies[idx] = m
+        }
+        if let idx = backlogMovies.firstIndex(where: { $0.id == movieId }) {
+            var m = backlogMovies[idx]
+            m.ratings = mergeRatings(existing: m.ratings, incoming: [rating])
+            backlogMovies[idx] = m
+        }
+
+        // 2) Cloud speichern
+        guard let cloudRatingStore else { return true }
+        do {
+            try await cloudRatingStore.saveRating(rating, movieId: movieId, groupId: currentGroupId)
+            return true
+        } catch {
+            print("CloudKit rating save error: \(error)")
+            return false
+        }
+    }
+
+    /// Löscht die Bewertung eines Reviewers (case-insensitive) für einen Film.
+    func deleteRating(for movieId: UUID, reviewerName: String) async -> Bool {
+        // Lokal entfernen
+        func remove(from list: inout [Movie]) {
+            guard let idx = list.firstIndex(where: { $0.id == movieId }) else { return }
+            var m = list[idx]
+            m.ratings.removeAll { $0.reviewerName.lowercased() == reviewerName.lowercased() }
+            list[idx] = m
+        }
+        remove(from: &movies)
+        remove(from: &backlogMovies)
+
+        guard let cloudRatingStore else { return true }
+        do {
+            try await cloudRatingStore.deleteRating(movieId: movieId, groupId: currentGroupId, reviewerName: reviewerName)
+            return true
+        } catch {
+            print("CloudKit rating delete error: \(error)")
+            return false
+        }
+    }
+
+// MARK: - ✅ CAST Migration (Legacy → TMDb Person IDs)
 
     private func migrateCastDataIfNeeded() async {
         if isMigratingCast { return }
