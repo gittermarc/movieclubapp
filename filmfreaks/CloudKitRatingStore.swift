@@ -2,7 +2,7 @@
 //  CloudKitRatingStore.swift
 //  filmfreaks
 //
-//  Created by Marc Fechner on 03.01.26.
+//  Created by ChatGPT on 03.01.26.
 //
 
 import Foundation

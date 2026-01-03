@@ -153,9 +153,9 @@ struct GroupSettingsView: View {
                                         Spacer()
                                         
                                         ShareLink(
-                                            item: "Komm in unsere Filmgruppe in FilmFreaks! Invite-Code: \(id)",
-                                            subject: Text("FilmFreaks Invite-Code"),
-                                            message: Text("Mit diesem Code kannst du unserer Filmgruppe in FilmFreaks beitreten:\n\(id)")
+                                            item: "Komm in unsere Filmgruppe in The Movie Club! Invite-Code: \(id)",
+                                            subject: Text("The Movie Club Invite-Code"),
+                                            message: Text("Mit diesem Code kannst du unserer Filmgruppe in The Movie Club beitreten:\n\(id)")
                                         ) {
                                             Label("Invite-Code teilen", systemImage: "square.and.arrow.up")
                                                 .font(.footnote.weight(.semibold))

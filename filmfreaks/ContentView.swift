@@ -92,6 +92,39 @@ struct ContentView: View {
     }
 
 
+
+
+    // MARK: - Aktives Mitglied (rechts neben der Gruppe)
+
+    private var hasActiveMemberSelected: Bool {
+        userStore.selectedUser != nil
+    }
+
+    private var activeMemberDisplayName: String {
+        guard let raw = userStore.selectedUser?.name else { return "Keins gewählt" }
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "Keins gewählt" : trimmed
+    }
+
+    private var activeMemberInitials: String {
+        guard hasActiveMemberSelected else { return "–" }
+        return initials(from: activeMemberDisplayName)
+    }
+
+    private func initials(from name: String) -> String {
+        let parts = name
+            .split(whereSeparator: { $0 == " " || $0 == "-" || $0 == "_" })
+            .map { String($0) }
+            .filter { !$0.isEmpty }
+
+        if parts.isEmpty { return "?" }
+        if parts.count == 1 {
+            return String(parts[0].prefix(2)).uppercased()
+        }
+        let first = parts.first?.prefix(1) ?? ""
+        let last = parts.last?.prefix(1) ?? ""
+        return "\(first)\(last)".uppercased()
+    }
     var body: some View {
         NavigationStack {
             ZStack {
@@ -99,14 +132,13 @@ struct ContentView: View {
                     .ignoresSafeArea()
 
                 VStack {
-                    // Aktuelle Gruppe anzeigen (falls vorhanden)
+                                        // Aktuelle Gruppe anzeigen (falls vorhanden)
                     if let name = movieStore.currentGroupName {
                         let totalMoviesInGroup = movieStore.movies.count + movieStore.backlogMovies.count
 
-                        VStack(spacing: 4) {
-                            HStack {
-                                Spacer()
-
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack(spacing: 12) {
+                                // Gruppe (links)
                                 Button {
                                     // Beim Tippen: Gruppenverwaltung öffnen
                                     showingGroupSettings = true
@@ -126,6 +158,7 @@ struct ContentView: View {
                                                 .font(.subheadline.weight(.semibold))
                                                 .foregroundStyle(.white)
                                                 .lineLimit(1)
+                                                .truncationMode(.tail)
                                         }
                                     }
                                     .padding(.horizontal, 14)
@@ -141,8 +174,64 @@ struct ContentView: View {
                                     .shadow(color: Color.black.opacity(0.12), radius: 6, x: 0, y: 3)
                                 }
                                 .buttonStyle(.plain)
+                                .layoutPriority(1)
 
-                                Spacer()
+                                Spacer(minLength: 0)
+
+                                // Aktives Mitglied (rechts)
+                                Button {
+                                    // Direkt in die Mitgliederverwaltung – da ändert man typischerweise auch, wer "aktiv" ist.
+                                    showingUsers = true
+                                } label: {
+                                    let colors: [Color] = hasActiveMemberSelected
+                                        ? [Color.green, Color.teal]
+                                        : [Color.gray.opacity(0.65), Color.gray.opacity(0.45)]
+
+                                    ViewThatFits(in: .horizontal) {
+                                        HStack(spacing: 10) {
+                                            Image(systemName: "person.fill")
+                                                .font(.caption)
+                                                .foregroundStyle(.white.opacity(0.9))
+
+                                            VStack(alignment: .leading, spacing: 2) {
+                                                Text("Aktiv")
+                                                    .font(.caption2)
+                                                    .textCase(.uppercase)
+                                                    .foregroundStyle(.white.opacity(0.8))
+
+                                                Text(activeMemberDisplayName)
+                                                    .font(.subheadline.weight(.semibold))
+                                                    .foregroundStyle(.white)
+                                                    .lineLimit(1)
+                                                    .truncationMode(.tail)
+                                            }
+                                        }
+
+                                        // Fallback für Mini-Displays: nur Initialen
+                                        HStack(spacing: 8) {
+                                            Image(systemName: "person.fill")
+                                                .font(.caption)
+                                                .foregroundStyle(.white.opacity(0.9))
+
+                                            Text(activeMemberInitials)
+                                                .font(.subheadline.weight(.semibold))
+                                                .foregroundStyle(.white)
+                                                .lineLimit(1)
+                                        }
+                                    }
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 8)
+                                    .background(
+                                        LinearGradient(
+                                            colors: colors,
+                                            startPoint: .leading,
+                                            endPoint: .trailing
+                                        )
+                                    )
+                                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                                    .shadow(color: Color.black.opacity(0.10), radius: 6, x: 0, y: 3)
+                                }
+                                .buttonStyle(.plain)
                             }
 
                             if totalMoviesInGroup > 0 {
@@ -353,45 +442,63 @@ struct ContentView: View {
             .onChange(of: userStore.users.count) { _, _ in
                 updateOnboardingCompletionFlag()
             }
-            .toolbar {
-                ToolbarItemGroup(placement: .topBarTrailing) {
-                    Button {
-                        showingSettings = true
-                    } label: {
-                        Image(systemName: "gearshape")
-                    }
+                        .toolbar {
+                // Wichtigste Aktion als Quick-Button – bleibt immer erreichbar.
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        Button {
+                            showingUsers = true
+                        } label: {
+                            Label("Mitglieder", systemImage: "person.3")
+                        }
 
-                    Button {
-                        showingStats = true
-                    } label: {
-                        Image(systemName: "chart.bar.fill")
-                    }
+                        Button {
+                            showingGroupSettings = true
+                        } label: {
+                            Label("Gruppen", systemImage: "person.3.sequence")
+                        }
 
-                    // 👇 NEU: Timeline-Button (zwischen Stats und Ziele)
-                    Button {
-                        showingTimeline = true
-                    } label: {
-                        Image(systemName: "rectangle.stack.fill")
-                    }
+                        Divider()
 
-                    Button {
-                        showingGoals = true
-                    } label: {
-                        Image(systemName: "target")
-                    }
+                        Button {
+                            showingStats = true
+                        } label: {
+                            Label("Statistiken", systemImage: "chart.bar.fill")
+                        }
 
-                    Button {
-                        showingUsers = true
-                    } label: {
-                        Image(systemName: "person.3")
-                    }
+                        Button {
+                            showingTimeline = true
+                        } label: {
+                            Label("Timeline", systemImage: "rectangle.stack.fill")
+                        }
 
+                        Button {
+                            showingGoals = true
+                        } label: {
+                            Label("Ziele", systemImage: "target")
+                        }
+
+                        Divider()
+
+                        Button {
+                            showingSettings = true
+                        } label: {
+                            Label("Einstellungen", systemImage: "gearshape")
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                    }
+                    .accessibilityLabel("Mehr")
+                }
+
+                ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         trackSearchOpened()
                         showingSearchMovie = true
                     } label: {
                         Image(systemName: "magnifyingglass")
                     }
+                    .accessibilityLabel("Film suchen")
                 }
             }
             .sheet(isPresented: $showingSettings) {
