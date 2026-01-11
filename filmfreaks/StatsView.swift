@@ -199,6 +199,7 @@ struct StatsView: View {
 
     // Darsteller UI
     @State private var showAllActors: Bool = false
+    @State private var actorsDisclosureExpanded: Bool = false
     @State private var actorDisplayOrder: [ActorEntry] = []
     @State private var actorSortGeneration: UUID = UUID()
 
@@ -285,6 +286,13 @@ struct StatsView: View {
         }
         .onChange(of: showAllActors) {
             preloadPopularityForVisibleActors()
+        }
+        .onChange(of: actorsDisclosureExpanded) {
+            if !actorsDisclosureExpanded {
+                showAllActors = false
+            } else {
+                preloadPopularityForVisibleActors()
+            }
         }
         .sheet(isPresented: $showingActorSheet) {
             actorDetailSheet()
@@ -955,6 +963,68 @@ struct StatsView: View {
         .contentShape(RoundedRectangle(cornerRadius: 16))
     }
 
+    @ViewBuilder
+    private func actorLeaderboardRow(
+        rank: Int,
+        entry: ActorEntry,
+        totalMovies: Int,
+        maxCount: Int
+    ) -> some View {
+        let share = Double(entry.count) / Double(max(totalMovies, 1))
+        let impact = Double(entry.count) / Double(max(maxCount, 1))
+        let pop = popularityStore.popularityValue(for: entry.personId)
+
+        HStack(spacing: 12) {
+            Text("#\(rank)")
+                .font(.caption.weight(.bold))
+                .monospacedDigit()
+                .foregroundStyle(.secondary)
+                .frame(width: 34, alignment: .leading)
+
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 8) {
+                    Text(entry.name)
+                        .font(.subheadline.weight(.semibold))
+                        .lineLimit(1)
+
+                    Spacer(minLength: 0)
+
+                    HStack(spacing: 6) {
+                        if pop > 0 {
+                            Text("🔥 \(Int(pop.rounded()))")
+                                .font(.caption2.weight(.semibold))
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(Color.gray.opacity(0.12))
+                                .clipShape(Capsule())
+                        }
+
+                        Text("\(entry.count) · \(Int((share * 100).rounded()))%")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                    }
+                }
+
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(Color(.quaternarySystemFill))
+
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(Color.accentColor.opacity(0.35))
+                            .frame(width: geo.size.width * impact)
+                    }
+                }
+                .frame(height: 10)
+            }
+        }
+        .padding(12)
+        .background(Color(.tertiarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .contentShape(RoundedRectangle(cornerRadius: 16))
+    }
+
     private var actorsCard: some View {
         StatsDashboardCard(title: "Darsteller", systemImage: "person.2.fill") {
             VStack(alignment: .leading, spacing: 10) {
@@ -963,63 +1033,103 @@ struct StatsView: View {
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 } else {
-                    Text("Wen ihr am häufigsten seht")
+                    let actorSource = actorsDisplaySource
+                    let totalMovies = max(filteredMovies.count, 1)
+                    let top = Array(actorSource.prefix(9))
+                    let rest = Array(actorSource.dropFirst(9))
+                    let maxCount = max(top.map(\.count).max() ?? 1, 1)
+
+                    let totalLimit = showAllActors ? expandedActorsCount : collapsedActorsCount
+                    let restLimit = max(0, totalLimit - top.count)
+                    let displayedRest = Array(rest.prefix(restLimit))
+
+                    Text("Eure Top-Stars")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
 
-                    let actorSource = actorsDisplaySource
-                    let limit = showAllActors ? expandedActorsCount : collapsedActorsCount
-                    let displayedActors = Array(actorSource.prefix(limit))
-
-                    LazyVGrid(
-                        columns: [GridItem(.adaptive(minimum: 120), spacing: 8)],
-                        alignment: .leading,
-                        spacing: 8
-                    ) {
-                        ForEach(displayedActors) { entry in
+                    VStack(spacing: 8) {
+                        ForEach(Array(top.enumerated()), id: \.element.id) { index, entry in
                             Button {
                                 actorChipTapped(entry)
                             } label: {
-                                HStack(spacing: 6) {
-                                    Text(entry.name)
-                                        .font(.caption)
-                                        .lineLimit(1)
-                                    Text("(\(entry.count))")
-                                        .font(.caption2)
-                                        .foregroundStyle(.secondary)
-                                }
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 7)
-                                .background(Color.blue.opacity(0.12))
-                                .clipShape(Capsule())
+                                actorLeaderboardRow(
+                                    rank: index + 1,
+                                    entry: entry,
+                                    totalMovies: totalMovies,
+                                    maxCount: maxCount
+                                )
                             }
                             .buttonStyle(.plain)
                         }
                     }
                     .transaction { $0.animation = nil }
 
-                    if actorSource.count > collapsedActorsCount {
-                        Button {
-                            showAllActors.toggle()
-                        } label: {
-                            HStack(spacing: 6) {
-                                Text(showAllActors ? "Weniger anzeigen" : "Mehr anzeigen")
-                                    .font(.footnote.weight(.semibold))
-                                Image(systemName: showAllActors ? "chevron.up" : "chevron.down")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
+                    if !rest.isEmpty {
+                        DisclosureGroup("Mehr anzeigen (\(rest.count))", isExpanded: $actorsDisclosureExpanded) {
+                            LazyVGrid(
+                                columns: [GridItem(.adaptive(minimum: 120), spacing: 8)],
+                                alignment: .leading,
+                                spacing: 8
+                            ) {
+                                ForEach(displayedRest) { entry in
+                                    Button {
+                                        actorChipTapped(entry)
+                                    } label: {
+                                        HStack(spacing: 6) {
+                                            Text(entry.name)
+                                                .font(.caption)
+                                                .lineLimit(1)
+
+                                            Text("\(entry.count)")
+                                                .font(.caption2)
+                                                .foregroundStyle(.secondary)
+                                                .monospacedDigit()
+                                        }
+                                        .padding(.horizontal, 10)
+                                        .padding(.vertical, 7)
+                                        .background(Color(.tertiarySystemBackground))
+                                        .clipShape(Capsule())
+                                    }
+                                    .buttonStyle(.plain)
+                                }
                             }
-                            .frame(maxWidth: .infinity, alignment: .center)
-                            .padding(.vertical, 6)
+                            .transaction { $0.animation = nil }
+                            .padding(.top, 6)
+
+                            if rest.count > restLimit {
+                                Button {
+                                    showAllActors.toggle()
+                                } label: {
+                                    HStack(spacing: 6) {
+                                        Text(showAllActors ? "Weniger anzeigen" : "Noch mehr anzeigen")
+                                            .font(.footnote.weight(.semibold))
+
+                                        Image(systemName: showAllActors ? "chevron.up" : "chevron.down")
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    .frame(maxWidth: .infinity, alignment: .center)
+                                    .padding(.vertical, 6)
+                                }
+                                .buttonStyle(.plain)
+                                .padding(.top, 2)
+                            }
                         }
-                        .buttonStyle(.plain)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .padding(.top, 2)
                     }
+
+                    Text("Tippe einen Darsteller, um Details & passende Filme zu sehen.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             }
         }
     }
 
     private var locationsCard: some View {
+
         StatsDashboardCard(title: "Orte", systemImage: "mappin.and.ellipse") {
             VStack(alignment: .leading, spacing: 10) {
                 if moviesByLocation.isEmpty {
