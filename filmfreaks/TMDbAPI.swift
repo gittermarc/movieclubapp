@@ -101,6 +101,41 @@ struct TMDbMovieDetails: Decodable {
     let genres: [TMDbGenre]?
 }
 
+// MARK: - WATCH PROVIDERS
+
+struct TMDbWatchProvider: Decodable, Identifiable, Hashable {
+    let provider_id: Int
+    let provider_name: String
+    let logo_path: String?
+    let display_priority: Int?
+
+    var id: Int { provider_id }
+}
+
+struct TMDbWatchProvidersCountry: Decodable {
+    let link: String?
+
+    /// Subscription streaming services ("flatrate" in TMDb)
+    let flatrate: [TMDbWatchProvider]?
+
+    /// Ad-supported streaming services
+    let ads: [TMDbWatchProvider]?
+
+    /// Free streaming services
+    let free: [TMDbWatchProvider]?
+
+    /// Rental offers
+    let rent: [TMDbWatchProvider]?
+
+    /// Buy offers
+    let buy: [TMDbWatchProvider]?
+}
+
+struct TMDbWatchProvidersResponse: Decodable {
+    let id: Int
+    let results: [String: TMDbWatchProvidersCountry]
+}
+
 // MARK: - PERSON-MODELLE
 
 struct TMDbPersonSearchResponse: Decodable {
@@ -330,6 +365,62 @@ final class TMDbAPI {
         } catch {
             throw TMDbError.decodingFailed
         }
+    }
+
+    // MARK: - Watch Providers (Streaming-Anbieter)
+
+    /// Liefert Watch Provider Infos (Streaming/Rent/Buy) für einen Film.
+    ///
+    /// - Parameter region: ISO-3166-1 Ländercode (z.B. "DE"). Wenn nicht gesetzt,
+    ///   wird versucht, `Locale.current` zu verwenden; Fallback: "DE".
+    func fetchMovieWatchProviders(id: Int, region: String? = nil) async throws -> TMDbWatchProvidersCountry? {
+        guard !apiKey.isEmpty else { throw TMDbError.missingAPIKey }
+
+        var components = URLComponents(string: "https://api.themoviedb.org/3/movie/\(id)/watch/providers")
+        components?.queryItems = [
+            URLQueryItem(name: "api_key", value: apiKey)
+        ]
+
+        guard let url = components?.url else { throw TMDbError.invalidURL }
+
+        let (data, response) = try await URLSession.shared.data(from: url)
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200..<300).contains(httpResponse.statusCode) else {
+            throw TMDbError.requestFailed
+        }
+
+        let decoded: TMDbWatchProvidersResponse
+        do {
+            decoded = try JSONDecoder().decode(TMDbWatchProvidersResponse.self, from: data)
+        } catch {
+            throw TMDbError.decodingFailed
+        }
+
+        let preferred = (region ?? TMDbAPI.preferredRegionCode())
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .uppercased()
+
+        if let match = decoded.results[preferred] { return match }
+        if let de = decoded.results["DE"] { return de }
+        if let us = decoded.results["US"] { return us }
+        return decoded.results.values.first
+    }
+
+    private static func preferredRegionCode() -> String {
+        if #available(iOS 16.0, *) {
+            if let region = Locale.current.region?.identifier,
+               !region.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                return region
+            }
+        }
+
+        // iOS 15 und früher: ohne deprecated `Locale.regionCode` (iOS 16+)
+        if let code = (Locale.current as NSLocale).object(forKey: .countryCode) as? String,
+           !code.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return code
+        }
+
+        return "DE"
     }
 
     // MARK: - Credits-only (kleiner, ideal für Migration)

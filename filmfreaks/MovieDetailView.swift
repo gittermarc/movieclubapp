@@ -29,6 +29,12 @@ struct MovieDetailView: View {
     @State private var isLoadingDetails = false
     @State private var detailsError: String?
 
+    // ✅ NEU: Streaming-Anbieter (Watch Providers)
+    @State private var watchProviders: [TMDbWatchProvider] = []
+    @State private var watchProvidersLink: URL? = nil
+    @State private var isLoadingWatchProviders: Bool = false
+    @State private var didLoadWatchProviders: Bool = false
+
     // ✅ NEU: Aufklapp-Status der Einzelbewertungen
     @State private var expandedRatingIds: Set<UUID> = []
 
@@ -219,6 +225,40 @@ struct MovieDetailView: View {
                                 }
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+
+                    // ✅ NEU: Streaming-Anbieter vor Handlung
+                    if isLoadingWatchProviders {
+                        section(title: "Film ist verfügbar bei:") {
+                            HStack(spacing: 10) {
+                                ProgressView()
+                                Text("Suche Streaming-Anbieter …")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    } else if didLoadWatchProviders {
+                        section(title: "Film ist verfügbar bei:") {
+                            if watchProviders.isEmpty {
+                                Text("Keine Streaming-Anbieter gefunden.")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                            } else {
+                                WatchProvidersIconsRow(providers: watchProviders)
+
+                                if let link = watchProvidersLink {
+                                    Link(destination: link) {
+                                        Label("Mehr Infos", systemImage: "safari")
+                                            .font(.subheadline.weight(.semibold))
+                                            .padding(.horizontal, 10)
+                                            .padding(.vertical, 8)
+                                            .background(Color.gray.opacity(0.12))
+                                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                                    }
+                                    .buttonStyle(.plain)
+                                }
                             }
                         }
                     }
@@ -1456,10 +1496,19 @@ struct MovieDetailView: View {
         await MainActor.run {
             isLoadingDetails = true
             detailsError = nil
+
+            isLoadingWatchProviders = true
+            didLoadWatchProviders = false
+            watchProviders = []
+            watchProvidersLink = nil
         }
 
         do {
-            let fetched = try await TMDbAPI.shared.fetchMovieDetails(id: id)
+            async let detailsTask = TMDbAPI.shared.fetchMovieDetails(id: id)
+            async let providersTask = TMDbAPI.shared.fetchMovieWatchProviders(id: id)
+
+            let fetched = try await detailsTask
+            let providersCountry = try? await providersTask
 
             await MainActor.run {
                 self.details = fetched
@@ -1526,6 +1575,16 @@ struct MovieDetailView: View {
                     self.movie.posterPath = posterPath
                 }
 
+                // ✅ Watch Providers
+                self.watchProviders = providersCountry?.bestEffortProviders ?? []
+                if let linkString = providersCountry?.link {
+                    self.watchProvidersLink = URL(string: linkString)
+                } else {
+                    self.watchProvidersLink = nil
+                }
+                self.isLoadingWatchProviders = false
+                self.didLoadWatchProviders = true
+
                 self.isLoadingDetails = false
             }
 
@@ -1533,11 +1592,17 @@ struct MovieDetailView: View {
             await MainActor.run {
                 self.detailsError = "TMDb API-Key fehlt. Bitte TMDB_API_KEY in der Info.plist setzen."
                 self.isLoadingDetails = false
+
+                self.isLoadingWatchProviders = false
+                self.didLoadWatchProviders = true
             }
         } catch {
             await MainActor.run {
                 self.detailsError = "Fehler beim Laden der Filmdetails."
                 self.isLoadingDetails = false
+
+                self.isLoadingWatchProviders = false
+                self.didLoadWatchProviders = true
             }
         }
     }
