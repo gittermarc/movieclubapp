@@ -195,6 +195,8 @@ struct StatsView: View {
 
                     kpiRow
 
+                    groupHealthCard
+
                     trendsCard
 
                     highlightsCard
@@ -424,6 +426,106 @@ struct StatsView: View {
                     )
                 }
                 .padding(.vertical, 2)
+            }
+        }
+    }
+
+
+    private var groupHealthCard: some View {
+        StatsDashboardCard(title: "Group Health", systemImage: "heart.text.square") {
+            VStack(alignment: .leading, spacing: 12) {
+
+                let members = memberNames
+                let membersCount = members.count
+                let activeCount = activeReviewersCount
+                let unrated = unratedMoviesCount
+
+                HStack(spacing: 10) {
+                    Label("\(membersCount) Mitglieder", systemImage: "person.2.fill")
+                        .font(.caption)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(Color.gray.opacity(0.12))
+                        .clipShape(Capsule())
+
+                    Label("\(activeCount) aktiv", systemImage: "bolt.fill")
+                        .font(.caption)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(Color.gray.opacity(0.12))
+                        .clipShape(Capsule())
+
+                    if unrated > 0 {
+                        Label("\(unrated) unbewertet", systemImage: "exclamationmark.circle.fill")
+                            .font(.caption)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(Color.orange.opacity(0.15))
+                            .clipShape(Capsule())
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Aktivität")
+                        .font(.subheadline.weight(.semibold))
+
+                    if membersCount == 0 {
+                        Text("Keine Mitglieder in der Gruppe.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        let activity = Double(activeCount) / Double(max(1, membersCount))
+                        ProgressView(value: activity)
+                            .tint(Color.accentColor)
+
+                        Text("\(activeCount) von \(membersCount) Mitgliedern haben im Zeitraum mindestens einmal bewertet (\(String(format: "%.0f", activity * 100))%).")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Coverage")
+                        .font(.subheadline.weight(.semibold))
+
+                    let cov = Double(ratedMoviesCount) / Double(max(1, filteredMovies.count))
+                    ProgressView(value: cov)
+                        .tint(Color.accentColor)
+
+                    Text("\(ratedMoviesCount) von \(max(1, filteredMovies.count)) Filmen haben mindestens eine Bewertung (\(String(format: "%.0f", cov * 100))%).")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Alle haben bewertet")
+                        .font(.subheadline.weight(.semibold))
+
+                    if activeReviewerNamesSet.isEmpty {
+                        Text("Noch keine Bewertungen im ausgewählten Zeitraum.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        let allActive = moviesRatedByAllActiveMembersCount
+                        let pActive = Double(allActive) / Double(max(1, filteredMovies.count))
+
+                        ProgressView(value: pActive)
+                            .tint(Color.accentColor)
+
+                        Text("\(allActive) von \(max(1, filteredMovies.count)) Filmen wurden von allen aktiven Mitgliedern bewertet (\(String(format: "%.0f", pActive * 100))%).")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+
+                        if membersCount > 0 && Set(members).count != activeReviewerNamesSet.count {
+                            let allMembers = moviesRatedByAllMembersCount
+                            let pMembers = Double(allMembers) / Double(max(1, filteredMovies.count))
+
+                            Text("Strenger gemessen an allen Mitgliedern: \(allMembers) Filme (\(String(format: "%.0f", pMembers * 100))%).")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
             }
         }
     }
@@ -736,40 +838,113 @@ struct StatsView: View {
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 } else {
-                    VStack(spacing: 10) {
-                        ForEach(userStore.users) { user in
-                            let stats = statsForUser(user)
+                    let totalMovies = filteredMovies.count
+                    let denom = max(1, totalMovies)
 
-                            HStack {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(user.name)
-                                        .font(.subheadline.weight(.semibold))
-                                    Text("\(stats.movieCount) Filme bewertet")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
+                    VStack(alignment: .leading, spacing: 10) {
 
-                                Spacer(minLength: 0)
-
-                                if let avg = stats.averageRating {
-                                    Text(String(format: "%.1f", avg))
-                                        .font(.headline)
-                                        .monospacedDigit()
-                                        .padding(.horizontal, 10)
-                                        .padding(.vertical, 6)
-                                        .background(Color.blue.opacity(0.12))
-                                        .clipShape(RoundedRectangle(cornerRadius: 10))
-                                } else {
-                                    Text("–")
-                                        .font(.headline)
-                                        .foregroundStyle(.secondary)
-                                }
+                        HStack(spacing: 8) {
+                            if totalMovies == 0 {
+                                Text("Im aktuellen Filter gibt es keine Filme.")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            } else {
+                                Text("Bezogen auf \(totalMovies) Filme im aktuellen Filter.")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
                             }
-                            .padding(12)
-                            .background(
-                                RoundedRectangle(cornerRadius: 16)
-                                    .fill(Color(.tertiarySystemBackground))
-                            )
+
+                            Spacer(minLength: 0)
+
+                            if !activeReviewerNamesSet.isEmpty {
+                                Text("\(activeReviewerNamesSet.count) aktiv")
+                                    .font(.caption2.weight(.semibold))
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 5)
+                                    .background(Color.gray.opacity(0.12))
+                                    .clipShape(Capsule())
+                            }
+                        }
+
+                        VStack(spacing: 10) {
+                            ForEach(userStore.users) { user in
+                                let stats = statsForUser(user)
+                                let progress = Double(stats.movieCount) / Double(denom)
+                                let missing = max(0, totalMovies - stats.movieCount)
+
+                                VStack(alignment: .leading, spacing: 10) {
+                                    HStack {
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(user.name)
+                                                .font(.subheadline.weight(.semibold))
+
+                                            HStack(spacing: 6) {
+                                                Text("\(stats.movieCount)/\(totalMovies) Filme")
+                                                    .font(.caption)
+                                                    .foregroundStyle(.secondary)
+
+                                                Text("• \(stats.ratingsCount) Bewertungen")
+                                                    .font(.caption)
+                                                    .foregroundStyle(.secondary)
+
+                                                if missing > 0 && totalMovies > 0 {
+                                                    Text("• \(missing) fehlen")
+                                                        .font(.caption)
+                                                        .foregroundStyle(.secondary)
+                                                }
+                                            }
+                                        }
+
+                                        Spacer(minLength: 0)
+
+                                        if let avg = stats.averageRating {
+                                            Text(String(format: "%.1f", avg))
+                                                .font(.headline)
+                                                .monospacedDigit()
+                                                .padding(.horizontal, 10)
+                                                .padding(.vertical, 6)
+                                                .background(Color.blue.opacity(0.12))
+                                                .clipShape(RoundedRectangle(cornerRadius: 10))
+                                        } else {
+                                            Text("–")
+                                                .font(.headline)
+                                                .foregroundStyle(.secondary)
+                                        }
+                                    }
+
+                                    ProgressView(value: progress)
+                                        .tint(Color.accentColor)
+
+                                    HStack {
+                                        Text("Coverage: \(String(format: "%.0f", progress * 100))%")
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+
+                                        Spacer(minLength: 0)
+
+                                        if totalMovies > 0 && stats.movieCount == totalMovies {
+                                            Text("Komplett")
+                                                .font(.caption2.weight(.semibold))
+                                                .padding(.horizontal, 8)
+                                                .padding(.vertical, 5)
+                                                .background(Color.green.opacity(0.15))
+                                                .clipShape(Capsule())
+                                        } else if stats.ratingsCount == 0 {
+                                            Text("Noch nichts bewertet")
+                                                .font(.caption2.weight(.semibold))
+                                                .padding(.horizontal, 8)
+                                                .padding(.vertical, 5)
+                                                .background(Color.orange.opacity(0.15))
+                                                .clipShape(Capsule())
+                                        }
+                                    }
+                                }
+                                .padding(12)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 16)
+                                        .fill(Color(.tertiarySystemBackground))
+                                )
+                            }
                         }
                     }
                 }
@@ -855,6 +1030,48 @@ struct StatsView: View {
         let pct = (Double(ratedMoviesCount) / Double(filteredMovies.count)) * 100.0
         return String(format: "%.0f%% bewertet", pct)
     }
+
+    // MARK: - Group Health
+
+    private var memberNames: [String] {
+        userStore.users
+            .map { $0.name.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+    }
+
+    private var activeReviewerNamesSet: Set<String> {
+        let names = filteredMovies
+            .flatMap { $0.ratings.map { $0.reviewerName.trimmingCharacters(in: .whitespacesAndNewlines) } }
+            .filter { !$0.isEmpty }
+        return Set(names)
+    }
+
+    private var unratedMoviesCount: Int {
+        max(0, filteredMovies.count - ratedMoviesCount)
+    }
+
+    /// Filme, die von *allen aktiven* Mitgliedern (mind. eine Bewertung im Zeitraum) bewertet wurden.
+    private var moviesRatedByAllActiveMembersCount: Int {
+        let active = activeReviewerNamesSet
+        guard !active.isEmpty else { return 0 }
+
+        return filteredMovies.filter { movie in
+            let reviewers = Set(movie.ratings.map { $0.reviewerName.trimmingCharacters(in: .whitespacesAndNewlines) })
+            return active.isSubset(of: reviewers)
+        }.count
+    }
+
+    /// Filme, die von *allen Mitgliedern* (laut Member-Liste) bewertet wurden.
+    private var moviesRatedByAllMembersCount: Int {
+        let members = Set(memberNames)
+        guard !members.isEmpty else { return 0 }
+
+        return filteredMovies.filter { movie in
+            let reviewers = Set(movie.ratings.map { $0.reviewerName.trimmingCharacters(in: .whitespacesAndNewlines) })
+            return members.isSubset(of: reviewers)
+        }.count
+    }
+
 
     // MARK: - Aggregationen
 
@@ -1038,7 +1255,7 @@ struct StatsView: View {
             .sorted { $0.count > $1.count }
     }
 
-    private func statsForUser(_ user: User) -> (movieCount: Int, averageRating: Double?) {
+    private func statsForUser(_ user: User) -> (movieCount: Int, ratingsCount: Int, averageRating: Double?) {
         var movieIds = Set<UUID>()
         var scores: [Double] = []
 
@@ -1050,11 +1267,11 @@ struct StatsView: View {
             }
         }
 
-        guard !scores.isEmpty else { return (movieIds.count, nil) }
+        guard !scores.isEmpty else { return (movieIds.count, 0, nil) }
 
         let total = scores.reduce(0, +)
         let avg = total / Double(scores.count)
-        return (movieIds.count, avg)
+        return (movieIds.count, scores.count, avg)
     }
 
     // MARK: - Actor Filme
