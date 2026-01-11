@@ -17,10 +17,47 @@ enum StatsTimeRange: String, CaseIterable, Identifiable {
     var id: Self { self }
 }
 
+enum StatsCriticGapKind: String, CaseIterable, Identifiable {
+    /// Eure Gruppe bewertet höher als TMDB ("underrated" bei TMDB).
+    case groupHigher = "Eure Gruppe > TMDB"
+    /// TMDB bewertet höher als eure Gruppe ("overrated" bei TMDB).
+    case groupLower = "TMDB > Eure Gruppe"
+
+    var id: Self { self }
+
+    var headline: String {
+        switch self {
+        case .groupHigher:
+            return "Eure Gruppe findet besser als TMDB"
+        case .groupLower:
+            return "TMDB findet besser als eure Gruppe"
+        }
+    }
+
+    var sheetTitle: String {
+        switch self {
+        case .groupHigher:
+            return "Underrated bei TMDB"
+        case .groupLower:
+            return "Overrated bei TMDB"
+        }
+    }
+
+    var helpText: String {
+        switch self {
+        case .groupHigher:
+            return "Filme, die eure Gruppe deutlich höher bewertet als der TMDB-Score."
+        case .groupLower:
+            return "Filme, die TMDB deutlich höher bewertet als eure Gruppe."
+        }
+    }
+}
+
 enum StatsDrilldown: Identifiable {
     case month(Date)
     case location(String)
     case suggestedBy(String)
+    case critics(StatsCriticGapKind)
 
     var id: String {
         switch self {
@@ -33,6 +70,8 @@ enum StatsDrilldown: Identifiable {
             return "location_\(loc)"
         case .suggestedBy(let name):
             return "suggestedBy_\(name)"
+        case .critics(let kind):
+            return "critics_\(kind.rawValue)"
         }
     }
 }
@@ -60,6 +99,17 @@ private struct StatsMonthTrend: Identifiable, Hashable {
 private struct MovieHighlight: Identifiable {
     let movie: Movie
     let value: Double
+
+    var id: UUID { movie.id }
+}
+
+private struct CriticGapEntry: Identifiable {
+    let movie: Movie
+    let groupAverage: Double
+    let tmdbAverage: Double
+
+    /// groupAverage - tmdbAverage (positiv: Gruppe höher, negativ: TMDB höher)
+    let delta: Double
 
     var id: UUID { movie.id }
 }
@@ -200,6 +250,8 @@ struct StatsView: View {
                     trendsCard
 
                     highlightsCard
+
+                    criticsCard
 
                     // ✅ Bestehende Bereiche – erstmal nur "schöner" (kein neuer Funktionsumfang)
                     genresCard
@@ -656,6 +708,118 @@ struct StatsView: View {
                             movieRow(entry.movie, trailingText: String(format: "±%.1f", entry.value), trailingBackground: Color.orange.opacity(0.15))
                         }
                     }
+                }
+            }
+        }
+    }
+
+    private var criticsCard: some View {
+        StatsDashboardCard(title: "Kritik vs TMDB", systemImage: "theatermasks") {
+            VStack(alignment: .leading, spacing: 14) {
+
+                if criticGapEntries.isEmpty {
+                    Text("Für diesen Bereich brauchen Filme sowohl eine TMDB-Bewertung als auch mindestens eine Gruppenbewertung im aktuellen Filter.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("Je größer der Abstand, desto mehr weicht eure Gruppenmeinung vom TMDB-Score ab.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text("Underrated bei TMDB")
+                                .font(.subheadline.weight(.semibold))
+
+                            Spacer(minLength: 0)
+
+                            if criticGapGroupHigher.count > 3 {
+                                Button("Alle") {
+                                    selectedDrilldown = .critics(.groupHigher)
+                                }
+                                .font(.caption.weight(.semibold))
+                                .buttonStyle(.plain)
+                                .foregroundStyle(Color.accentColor)
+                            }
+                        }
+
+                        Text("Eure Gruppe bewertet höher als TMDB")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+
+                        if criticGapGroupHigher.isEmpty {
+                            Text("Keine klaren Abweichungen im aktuellen Filter.")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            ForEach(criticGapGroupHigher.prefix(3)) { entry in
+                                criticGapRow(entry, kind: .groupHigher)
+                            }
+                        }
+                    }
+
+                    Divider()
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text("Overrated bei TMDB")
+                                .font(.subheadline.weight(.semibold))
+
+                            Spacer(minLength: 0)
+
+                            if criticGapGroupLower.count > 3 {
+                                Button("Alle") {
+                                    selectedDrilldown = .critics(.groupLower)
+                                }
+                                .font(.caption.weight(.semibold))
+                                .buttonStyle(.plain)
+                                .foregroundStyle(Color.accentColor)
+                            }
+                        }
+
+                        Text("TMDB bewertet höher als eure Gruppe")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+
+                        if criticGapGroupLower.isEmpty {
+                            Text("Keine klaren Abweichungen im aktuellen Filter.")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            ForEach(criticGapGroupLower.prefix(3)) { entry in
+                                criticGapRow(entry, kind: .groupLower)
+                            }
+                        }
+                    }
+
+                    HStack(spacing: 10) {
+                        Button {
+                            selectedDrilldown = .critics(.groupHigher)
+                        } label: {
+                            Label("Underrated", systemImage: "arrow.up.right")
+                                .font(.caption)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 7)
+                                .background(Color.green.opacity(0.15))
+                                .clipShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
+
+                        Button {
+                            selectedDrilldown = .critics(.groupLower)
+                        } label: {
+                            Label("Overrated", systemImage: "arrow.down.right")
+                                .font(.caption)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 7)
+                                .background(Color.red.opacity(0.15))
+                                .clipShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
+
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.top, 2)
                 }
             }
         }
@@ -1148,6 +1312,44 @@ struct StatsView: View {
             .map { $0 }
     }
 
+    // MARK: - Kritik vs TMDB
+
+    private var criticGapEntries: [CriticGapEntry] {
+        filteredMovies.compactMap { movie -> CriticGapEntry? in
+            guard let groupAvg = movie.averageRating else { return nil }
+            guard let tmdb = movie.tmdbRating else { return nil }
+
+            let delta = groupAvg - tmdb
+            return CriticGapEntry(movie: movie, groupAverage: groupAvg, tmdbAverage: tmdb, delta: delta)
+        }
+    }
+
+    private var criticGapGroupHigher: [CriticGapEntry] {
+        criticGapEntriesFiltered(kind: .groupHigher)
+    }
+
+    private var criticGapGroupLower: [CriticGapEntry] {
+        criticGapEntriesFiltered(kind: .groupLower)
+    }
+
+    private func criticGapEntriesFiltered(kind: StatsCriticGapKind) -> [CriticGapEntry] {
+        let minInterestingDelta = 0.8
+        let eps = 0.0001
+
+        let base: [CriticGapEntry]
+        switch kind {
+        case .groupHigher:
+            let strong = criticGapEntries.filter { $0.delta >= minInterestingDelta }
+            base = strong.isEmpty ? criticGapEntries.filter { $0.delta > eps } : strong
+            return base.sorted { $0.delta > $1.delta }
+
+        case .groupLower:
+            let strong = criticGapEntries.filter { $0.delta <= -minInterestingDelta }
+            base = strong.isEmpty ? criticGapEntries.filter { $0.delta < -eps } : strong
+            return base.sorted { $0.delta < $1.delta } // negative zuerst (stärkste Abweichung)
+        }
+    }
+
     private func standardDeviation(_ values: [Double]) -> Double {
         guard values.count >= 2 else { return 0 }
         let mean = values.reduce(0, +) / Double(values.count)
@@ -1574,6 +1776,8 @@ struct StatsView: View {
             drilldownMoviesSheetLocation(loc)
         case .suggestedBy(let name):
             drilldownMoviesSheetSuggestedBy(name)
+        case .critics(let kind):
+            drilldownMoviesSheetCritics(kind)
         }
     }
 
@@ -1658,7 +1862,130 @@ struct StatsView: View {
         }
     }
 
+    @ViewBuilder
+    private func drilldownMoviesSheetCritics(_ kind: StatsCriticGapKind) -> some View {
+        let entries: [CriticGapEntry] = {
+            switch kind {
+            case .groupHigher:
+                return criticGapGroupHigher
+            case .groupLower:
+                return criticGapGroupLower
+            }
+        }()
+
+        NavigationStack {
+            List {
+                Section {
+                    if entries.isEmpty {
+                        Text("Keine Filme im aktuellen Filter.")
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(entries) { entry in
+                            criticGapRow(entry, kind: kind)
+                        }
+                    }
+                } header: {
+                    Text(kind.helpText)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .textCase(nil)
+                }
+            }
+            .listStyle(.insetGrouped)
+            .navigationTitle(kind.sheetTitle)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Fertig") { selectedDrilldown = nil }
+                }
+            }
+        }
+    }
+
     // MARK: - Movie Row
+
+    @ViewBuilder
+    private func criticGapRow(_ entry: CriticGapEntry, kind: StatsCriticGapKind) -> some View {
+        let badgeBackground: Color = (kind == .groupHigher) ? Color.green.opacity(0.15) : Color.red.opacity(0.15)
+        let badgeForeground: Color = (kind == .groupHigher) ? Color.green : Color.red
+        let deltaText = String(format: "%+.1f", entry.delta)
+
+        HStack(spacing: 12) {
+            if let url = entry.movie.posterURL {
+                CachedAsyncImage(url: url) { phase in
+                    switch phase {
+                    case .empty:
+                        Rectangle().foregroundStyle(.gray.opacity(0.2))
+                    case .success(let image):
+                        image.resizable().scaledToFill()
+                    case .failure:
+                        Rectangle()
+                            .foregroundStyle(.gray.opacity(0.2))
+                            .overlay { Image(systemName: "film") }
+                    @unknown default:
+                        Rectangle().foregroundStyle(.gray.opacity(0.2))
+                    }
+                }
+                .frame(width: 40, height: 60)
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+            } else {
+                Rectangle()
+                    .foregroundStyle(.gray.opacity(0.1))
+                    .frame(width: 40, height: 60)
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                    .overlay { Image(systemName: "film").foregroundStyle(.secondary) }
+            }
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(entry.movie.title)
+                    .font(.subheadline.weight(.semibold))
+                    .lineLimit(2)
+
+                HStack(spacing: 6) {
+                    Text(entry.movie.year)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    if let dateText = entry.movie.watchedDateText {
+                        Text("• \(dateText)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+
+            Spacer(minLength: 0)
+
+            VStack(alignment: .trailing, spacing: 6) {
+                Text(deltaText)
+                    .font(.headline.bold())
+                    .monospacedDigit()
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(badgeBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .foregroundStyle(badgeForeground)
+
+                HStack(spacing: 6) {
+                    Text(String(format: "Ihr %.1f", entry.groupAverage))
+                        .font(.caption2.weight(.semibold))
+                        .monospacedDigit()
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.blue.opacity(0.12))
+                        .clipShape(Capsule())
+
+                    Text(String(format: "TMDB %.1f", entry.tmdbAverage))
+                        .font(.caption2.weight(.semibold))
+                        .monospacedDigit()
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.gray.opacity(0.12))
+                        .clipShape(Capsule())
+                }
+            }
+        }
+        .padding(.vertical, 4)
+    }
 
     @ViewBuilder
     private func movieRow(
