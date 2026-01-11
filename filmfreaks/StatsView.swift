@@ -833,36 +833,68 @@ struct StatsView: View {
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 } else {
-                    Text("Eure häufigsten Genres")
+                    let totalMovies = max(filteredMovies.count, 1)
+                    let top = Array(genresDisplaySource.prefix(9))
+                    let rest = Array(genresDisplaySource.dropFirst(9))
+                    let maxCount = max(top.map(\.count).max() ?? 1, 1)
+
+                    Text("Eure Top-Genres")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
 
-                    LazyVGrid(
-                        columns: [GridItem(.adaptive(minimum: 90), spacing: 8)],
-                        alignment: .leading,
-                        spacing: 8
-                    ) {
-                        ForEach(genresDisplaySource.prefix(30), id: \.genre) { entry in
+                    VStack(spacing: 8) {
+                        ForEach(Array(top.enumerated()), id: \.element.genre) { index, entry in
                             Button {
                                 genreChipTapped(entry.genre)
                             } label: {
-                                HStack(spacing: 6) {
-                                    Text(entry.genre)
-                                        .font(.caption)
-                                        .lineLimit(1)
-                                    Text("(\(entry.count))")
-                                        .font(.caption2)
-                                        .foregroundStyle(.secondary)
-                                }
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 7)
-                                .background(Color.blue.opacity(0.12))
-                                .clipShape(Capsule())
+                                genreLeaderboardRow(
+                                    rank: index + 1,
+                                    genre: entry.genre,
+                                    count: entry.count,
+                                    totalMovies: totalMovies,
+                                    maxCount: maxCount
+                                )
                             }
                             .buttonStyle(.plain)
                         }
                     }
                     .transaction { $0.animation = nil }
+
+                    if !rest.isEmpty {
+                        DisclosureGroup("Mehr anzeigen (\(rest.count))") {
+                            LazyVGrid(
+                                columns: [GridItem(.adaptive(minimum: 95), spacing: 8)],
+                                alignment: .leading,
+                                spacing: 8
+                            ) {
+                                ForEach(rest.prefix(24), id: \.genre) { entry in
+                                    Button {
+                                        genreChipTapped(entry.genre)
+                                    } label: {
+                                        HStack(spacing: 6) {
+                                            Text(entry.genre)
+                                                .font(.caption)
+                                                .lineLimit(1)
+                                            Text("\(entry.count)")
+                                                .font(.caption2)
+                                                .foregroundStyle(.secondary)
+                                                .monospacedDigit()
+                                        }
+                                        .padding(.horizontal, 10)
+                                        .padding(.vertical, 7)
+                                        .background(Color(.tertiarySystemBackground))
+                                        .clipShape(Capsule())
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                            .transaction { $0.animation = nil }
+                            .padding(.top, 6)
+                        }
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .padding(.top, 2)
+                    }
 
                     Text("Tippe ein Genre, um die passenden Filme im Zeitraum zu sehen.")
                         .font(.caption)
@@ -870,6 +902,57 @@ struct StatsView: View {
                 }
             }
         }
+    }
+
+    @ViewBuilder
+    private func genreLeaderboardRow(
+        rank: Int,
+        genre: String,
+        count: Int,
+        totalMovies: Int,
+        maxCount: Int
+    ) -> some View {
+        let share = Double(count) / Double(max(totalMovies, 1))
+        let impact = Double(count) / Double(max(maxCount, 1))
+
+        HStack(spacing: 12) {
+            Text("#\(rank)")
+                .font(.caption.weight(.bold))
+                .monospacedDigit()
+                .foregroundStyle(.secondary)
+                .frame(width: 34, alignment: .leading)
+
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 8) {
+                    Text(genre)
+                        .font(.subheadline.weight(.semibold))
+                        .lineLimit(1)
+
+                    Spacer(minLength: 0)
+
+                    Text("\(count) · \(Int((share * 100).rounded()))%")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
+
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(Color(.quaternarySystemFill))
+
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(Color.accentColor.opacity(0.35))
+                            .frame(width: geo.size.width * impact)
+                    }
+                }
+                .frame(height: 10)
+            }
+        }
+        .padding(12)
+        .background(Color(.tertiarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .contentShape(RoundedRectangle(cornerRadius: 16))
     }
 
     private var actorsCard: some View {
