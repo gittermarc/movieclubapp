@@ -6,6 +6,7 @@
 //
 
 internal import SwiftUI
+internal import Charts
 
 enum StatsTimeRange: String, CaseIterable, Identifiable {
     case last30 = "Letzte 30 Tage"
@@ -46,6 +47,93 @@ private struct ActorEntry: Identifiable, Hashable {
     let name: String
     let count: Int
     var id: Int { personId }
+}
+
+private struct StatsMonthTrend: Identifiable, Hashable {
+    let monthStart: Date
+    let movieCount: Int
+    let averageRating: Double?
+
+    var id: Date { monthStart }
+}
+
+private struct MovieHighlight: Identifiable {
+    let movie: Movie
+    let value: Double
+
+    var id: UUID { movie.id }
+}
+
+private struct StatsDashboardCard<Content: View>: View {
+    let title: String
+    let systemImage: String?
+    @ViewBuilder let content: () -> Content
+
+    init(title: String, systemImage: String? = nil, @ViewBuilder content: @escaping () -> Content) {
+        self.title = title
+        self.systemImage = systemImage
+        self.content = content
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                if let systemImage {
+                    Image(systemName: systemImage)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+
+                Text(title)
+                    .font(.headline)
+
+                Spacer(minLength: 0)
+            }
+
+            content()
+        }
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 18)
+                .fill(Color(.secondarySystemBackground))
+        )
+    }
+}
+
+private struct StatsKPICard: View {
+    let title: String
+    let value: String
+    let subtitle: String
+    let systemImage: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Image(systemName: systemImage)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Text(title)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Text(value)
+                .font(.title3.bold())
+                .monospacedDigit()
+
+            Text(subtitle)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        }
+        .padding(12)
+        .frame(width: 155, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color(.tertiarySystemBackground))
+        )
+    }
 }
 
 struct StatsView: View {
@@ -90,409 +178,40 @@ struct StatsView: View {
         return df
     }()
 
+    private static let monthFormatter: DateFormatter = {
+        let df = DateFormatter()
+        df.dateFormat = "LLLL yyyy"
+        return df
+    }()
+
     var body: some View {
         NavigationStack {
-            ZStack {
-                Color(.systemGroupedBackground).ignoresSafeArea()
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
 
-                List {
-                    Section {
-                        VStack(alignment: .leading, spacing: 12) {
+                    filterCard
 
-                            if let groupName = movieStore.currentGroupName {
-                                Text("Statistiken für „\(groupName)“")
-                                    .font(.footnote)
-                                    .foregroundStyle(.secondary)
-                            } else {
-                                Text("Statistiken für deine aktuelle Gruppe")
-                                    .font(.footnote)
-                                    .foregroundStyle(.secondary)
-                            }
+                    heroCard
 
-                            VStack(alignment: .leading, spacing: 10) {
-                                Text("Filter")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
+                    kpiRow
 
-                                Text("Zeitraum")
-                                    .font(.subheadline)
+                    trendsCard
 
-                                ScrollView(.horizontal, showsIndicators: false) {
-                                    HStack(spacing: 8) {
-                                        ForEach(StatsTimeRange.allCases) { range in
-                                            let isSelected = (range == selectedRange)
+                    highlightsCard
 
-                                            Button { selectedRange = range } label: {
-                                                Text(range.rawValue)
-                                                    .font(.caption)
-                                                    .padding(.horizontal, 12)
-                                                    .padding(.vertical, 6)
-                                                    .background(
-                                                        RoundedRectangle(cornerRadius: 999)
-                                                            .fill(isSelected ? Color.accentColor.opacity(0.18) : Color.gray.opacity(0.12))
-                                                    )
-                                                    .overlay(
-                                                        RoundedRectangle(cornerRadius: 999)
-                                                            .strokeBorder(isSelected ? Color.accentColor : Color.clear, lineWidth: 1)
-                                                    )
-                                                    .foregroundStyle(isSelected ? Color.accentColor : Color.primary)
-                                            }
-                                        }
-                                    }
-                                }
-
-                                HStack {
-                                    Text("Ort").font(.subheadline)
-                                    Spacer()
-
-                                    Menu {
-                                        Button {
-                                            selectedLocationFilter = nil
-                                        } label: {
-                                            Label("Alle Orte", systemImage: selectedLocationFilter == nil ? "checkmark" : "")
-                                        }
-
-                                        Divider()
-
-                                        ForEach(availableLocations, id: \.self) { loc in
-                                            Button {
-                                                selectedLocationFilter = loc
-                                            } label: {
-                                                Label(loc, systemImage: selectedLocationFilter == loc ? "checkmark" : "")
-                                            }
-                                        }
-                                    } label: {
-                                        HStack(spacing: 6) {
-                                            Text(selectedLocationFilter ?? "Alle Orte")
-                                                .font(.caption)
-                                            Image(systemName: "chevron.up.chevron.down")
-                                                .font(.caption2)
-                                                .foregroundStyle(.secondary)
-                                        }
-                                        .padding(.horizontal, 10)
-                                        .padding(.vertical, 6)
-                                        .background(Color.gray.opacity(0.12))
-                                        .clipShape(Capsule())
-                                    }
-                                }
-                            }
-                        }
-                        .padding(.vertical, 4)
-                    }
-
-                    // Dashboard
-                    Section {
-                        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-                            statsCard(title: "Filme", subtitle: "im Zeitraum", value: "\(filteredMovies.count)", icon: "film")
-
-                            statsCard(
-                                title: "Ø Bewertung",
-                                subtitle: "im Zeitraum",
-                                value: overallAverageRating != nil ? String(format: "%.1f", overallAverageRating!) : "–",
-                                icon: "star.fill"
-                            )
-
-                            statsCard(
-                                title: "Zuletzt",
-                                subtitle: "gesehen",
-                                value: mostRecentWatchedDate != nil ? Self.recentDateFormatter.string(from: mostRecentWatchedDate!) : "–",
-                                icon: "clock"
-                            )
-
-                            statsCard(title: "Orte", subtitle: "im Zeitraum", value: "\(moviesByLocation.count)", icon: "mappin.and.ellipse")
-                        }
-                        .padding(.vertical, 6)
-                    }
-
-                    // Filme pro Monat
-                    Section {
-                        VStack(alignment: .leading, spacing: 8) {
-                            HStack {
-                                Text("Filme pro Monat").font(.headline)
-                                Spacer()
-                                Image(systemName: "calendar").foregroundStyle(.secondary)
-                            }
-
-                            if moviesPerMonth.isEmpty {
-                                Text("Keine Filme im ausgewählten Zeitraum.")
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
-                            } else {
-                                ForEach(moviesPerMonth, id: \.date) { entry in
-                                    HStack {
-                                        Text(monthFormatter.string(from: entry.date))
-                                        Spacer()
-                                        Button {
-                                            selectedDrilldown = .month(entry.date)
-                                        } label: {
-                                            Text("\(entry.count)")
-                                                .font(.footnote)
-                                                .padding(.horizontal, 8)
-                                                .padding(.vertical, 4)
-                                                .background(Color.gray.opacity(0.12))
-                                                .clipShape(Capsule())
-                                        }
-                                        .buttonStyle(.plain)
-                                    }
-                                    .padding(.vertical, 2)
-                                }
-                            }
-                        }
-                        .padding(.vertical, 4)
-                    }
-
-                    // Genres
-                    Section {
-                        VStack(alignment: .leading, spacing: 8) {
-                            HStack {
-                                Text("Genres").font(.headline)
-                                Spacer()
-                                Image(systemName: "square.stack.3d.up").foregroundStyle(.secondary)
-                            }
-
-                            if genresDisplaySource.isEmpty {
-                                Text("Keine Genres im ausgewählten Zeitraum/Ort.")
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
-                            } else {
-                                Text("Eure häufigsten Genres")
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
-
-                                LazyVGrid(
-                                    columns: [GridItem(.adaptive(minimum: 90), spacing: 8)],
-                                    alignment: .leading,
-                                    spacing: 8
-                                ) {
-                                    ForEach(genresDisplaySource.prefix(30), id: \.genre) { entry in
-                                        Button {
-                                            genreChipTapped(entry.genre)
-                                        } label: {
-                                            HStack(spacing: 6) {
-                                                Text(entry.genre)
-                                                    .font(.caption)
-                                                    .lineLimit(1)
-                                                Text("(\(entry.count))")
-                                                    .font(.caption2)
-                                                    .foregroundStyle(.secondary)
-                                            }
-                                            .padding(.horizontal, 10)
-                                            .padding(.vertical, 6)
-                                            .background(Color.blue.opacity(0.12))
-                                            .clipShape(Capsule())
-                                        }
-                                        .buttonStyle(.plain)
-                                    }
-                                }
-                                .transaction { $0.animation = nil }
-
-                                Text("Tippe ein Genre, um die passenden Filme im Zeitraum zu sehen.")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                        .padding(.vertical, 4)
-                    }
-
-                    // Darsteller (✅ personId-basiert)
-                    Section {
-                        VStack(alignment: .leading, spacing: 8) {
-                            HStack {
-                                Text("Darsteller").font(.headline)
-                                Spacer()
-                                Image(systemName: "person.2.fill").foregroundStyle(.secondary)
-                            }
-
-                            if actorsByCountRaw.isEmpty {
-                                Text("Keine Cast-Daten im ausgewählten Zeitraum/Ort.")
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
-                            } else {
-                                Text("Wen ihr am häufigsten seht")
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
-
-                                let actorSource = actorsDisplaySource
-                                let limit = showAllActors ? expandedActorsCount : collapsedActorsCount
-                                let displayedActors = Array(actorSource.prefix(limit))
-
-                                LazyVGrid(
-                                    columns: [GridItem(.adaptive(minimum: 120), spacing: 8)],
-                                    alignment: .leading,
-                                    spacing: 8
-                                ) {
-                                    ForEach(displayedActors) { entry in
-                                        Button {
-                                            actorChipTapped(entry)
-                                        } label: {
-                                            HStack(spacing: 6) {
-                                                Text(entry.name)
-                                                    .font(.caption)
-                                                    .lineLimit(1)
-                                                Text("(\(entry.count))")
-                                                    .font(.caption2)
-                                                    .foregroundStyle(.secondary)
-                                            }
-                                            .padding(.horizontal, 10)
-                                            .padding(.vertical, 6)
-                                            .background(Color.blue.opacity(0.12))
-                                            .clipShape(Capsule())
-                                        }
-                                        .buttonStyle(.plain)
-                                    }
-                                }
-                                .transaction { $0.animation = nil }
-
-                                if actorSource.count > collapsedActorsCount {
-                                    Button {
-                                        showAllActors.toggle()
-                                    } label: {
-                                        HStack(spacing: 6) {
-                                            Text(showAllActors ? "Weniger anzeigen" : "Mehr anzeigen")
-                                                .font(.footnote.weight(.semibold))
-                                            Image(systemName: showAllActors ? "chevron.up" : "chevron.down")
-                                                .font(.caption)
-                                                .foregroundStyle(.secondary)
-                                        }
-                                        .frame(maxWidth: .infinity, alignment: .center)
-                                        .padding(.vertical, 6)
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-                            }
-                        }
-                        .padding(.vertical, 4)
-                    }
-
-                    // Orte
-                    Section {
-                        VStack(alignment: .leading, spacing: 8) {
-                            HStack {
-                                Text("Orte").font(.headline)
-                                Spacer()
-                                Image(systemName: "mappin.and.ellipse").foregroundStyle(.secondary)
-                            }
-
-                            if moviesByLocation.isEmpty {
-                                Text("Keine Filme im ausgewählten Zeitraum.")
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
-                            } else {
-                                ForEach(moviesByLocation, id: \.location) { entry in
-                                    HStack {
-                                        Text(entry.location)
-                                        Spacer()
-                                        Button { selectedDrilldown = .location(entry.location) } label: {
-                                            Text("\(entry.count)")
-                                                .font(.footnote)
-                                                .padding(.horizontal, 8)
-                                                .padding(.vertical, 4)
-                                                .background(Color.gray.opacity(0.12))
-                                                .clipShape(Capsule())
-                                        }
-                                        .buttonStyle(.plain)
-                                    }
-                                    .padding(.vertical, 2)
-                                }
-                            }
-                        }
-                        .padding(.vertical, 4)
-                    }
-
-                    // Vorgeschlagen von
-                    Section {
-                        VStack(alignment: .leading, spacing: 8) {
-                            HStack {
-                                Text("Vorgeschlagen von").font(.headline)
-                                Spacer()
-                                Image(systemName: "person.fill.questionmark").foregroundStyle(.secondary)
-                            }
-
-                            if suggestionsByUser.isEmpty {
-                                Text("Keine Vorschläge im ausgewählten Zeitraum/Ort.")
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
-                            } else {
-                                ForEach(suggestionsByUser, id: \.name) { entry in
-                                    HStack {
-                                        Text(entry.name)
-                                        Spacer()
-                                        Button { selectedDrilldown = .suggestedBy(entry.name) } label: {
-                                            Text("\(entry.count)")
-                                                .font(.footnote)
-                                                .padding(.horizontal, 8)
-                                                .padding(.vertical, 4)
-                                                .background(Color.orange.opacity(0.15))
-                                                .clipShape(Capsule())
-                                        }
-                                        .buttonStyle(.plain)
-                                    }
-                                    .padding(.vertical, 2)
-                                }
-                            }
-                        }
-                        .padding(.vertical, 4)
-                    }
-
-                    // Pro Person
-                    Section {
-                        VStack(alignment: .leading, spacing: 8) {
-                            HStack {
-                                Text("Bewertungen pro Person").font(.headline)
-                                Spacer()
-                                Image(systemName: "person.3.sequence.fill").foregroundStyle(.secondary)
-                            }
-
-                            if userStore.users.isEmpty {
-                                Text("Noch keine Mitglieder in der Filmgruppe.")
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
-                            } else {
-                                VStack(spacing: 8) {
-                                    ForEach(userStore.users) { user in
-                                        let stats = statsForUser(user)
-
-                                        HStack {
-                                            VStack(alignment: .leading, spacing: 2) {
-                                                Text(user.name)
-                                                    .font(.subheadline.weight(.semibold))
-                                                Text("\(stats.movieCount) Filme bewertet")
-                                                    .font(.caption)
-                                                    .foregroundStyle(.secondary)
-                                            }
-
-                                            Spacer()
-
-                                            if let avg = stats.averageRating {
-                                                Text(String(format: "%.1f", avg))
-                                                    .font(.headline)
-                                                    .padding(.horizontal, 10)
-                                                    .padding(.vertical, 6)
-                                                    .background(Color.blue.opacity(0.12))
-                                                    .clipShape(RoundedRectangle(cornerRadius: 10))
-                                            } else {
-                                                Text("–")
-                                                    .font(.headline)
-                                                    .foregroundStyle(.secondary)
-                                            }
-                                        }
-                                        .padding(10)
-                                        .background(
-                                            RoundedRectangle(cornerRadius: 12)
-                                                .fill(Color(.secondarySystemBackground))
-                                        )
-                                    }
-                                }
-                                .padding(.top, 4)
-                            }
-                        }
-                        .padding(.vertical, 4)
-                    }
+                    // ✅ Bestehende Bereiche – erstmal nur "schöner" (kein neuer Funktionsumfang)
+                    genresCard
+                    actorsCard
+                    locationsCard
+                    suggestionsCard
+                    ratingsPerPersonCard
                 }
-                .listStyle(.insetGrouped)
-                .scrollContentBackground(.hidden)
-                .navigationTitle("Statistiken")
+                .padding(.horizontal)
+                .padding(.top, 12)
+                .padding(.bottom, 22)
             }
+            .background(Color(.systemGroupedBackground).ignoresSafeArea())
+            .navigationTitle("Statistiken")
         }
         .onAppear {
             setGenreDisplayOrderNow()
@@ -524,26 +243,553 @@ struct StatsView: View {
         }
     }
 
-    // MARK: - Dashboard Karte
+    // MARK: - Cards (Top-Level)
 
-    private func statsCard(title: String, subtitle: String, value: String, icon: String) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 6) {
-                Image(systemName: icon)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Text(title)
-                    .font(.subheadline.weight(.semibold))
+    private var filterCard: some View {
+        StatsDashboardCard(title: "Filter", systemImage: "line.3.horizontal.decrease.circle") {
+            VStack(alignment: .leading, spacing: 12) {
+
+                if let groupName = movieStore.currentGroupName {
+                    Text("Statistiken für „\(groupName)“")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("Statistiken für deine aktuelle Gruppe")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Zeitraum")
+                        .font(.subheadline.weight(.semibold))
+
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(StatsTimeRange.allCases) { range in
+                                let isSelected = (range == selectedRange)
+
+                                Button { selectedRange = range } label: {
+                                    Text(range.rawValue)
+                                        .font(.caption)
+                                        .padding(.horizontal, 12)
+                                        .padding(.vertical, 7)
+                                        .background(
+                                            RoundedRectangle(cornerRadius: 999)
+                                                .fill(isSelected ? Color.accentColor.opacity(0.18) : Color.gray.opacity(0.12))
+                                        )
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 999)
+                                                .strokeBorder(isSelected ? Color.accentColor : Color.clear, lineWidth: 1)
+                                        )
+                                        .foregroundStyle(isSelected ? Color.accentColor : Color.primary)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                }
+
+                HStack {
+                    Text("Ort")
+                        .font(.subheadline.weight(.semibold))
+                    Spacer(minLength: 0)
+
+                    Menu {
+                        Button {
+                            selectedLocationFilter = nil
+                        } label: {
+                            Label("Alle Orte", systemImage: selectedLocationFilter == nil ? "checkmark" : "")
+                        }
+
+                        Divider()
+
+                        ForEach(availableLocations, id: \.self) { loc in
+                            Button {
+                                selectedLocationFilter = loc
+                            } label: {
+                                Label(loc, systemImage: selectedLocationFilter == loc ? "checkmark" : "")
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 6) {
+                            Text(selectedLocationFilter ?? "Alle Orte")
+                                .font(.caption)
+                            Image(systemName: "chevron.up.chevron.down")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 7)
+                        .background(Color.gray.opacity(0.12))
+                        .clipShape(Capsule())
+                    }
+                }
             }
-
-            Text(value).font(.title2.bold())
-            Text(subtitle).font(.caption).foregroundStyle(.secondary)
         }
-        .padding()
-        .background(
-            RoundedRectangle(cornerRadius: 14)
-                .fill(Color(.secondarySystemBackground))
-        )
+    }
+
+    private var heroCard: some View {
+        StatsDashboardCard(title: "Dashboard", systemImage: "rectangle.3.group") {
+            VStack(alignment: .leading, spacing: 10) {
+
+                HStack(alignment: .top, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(heroTitle)
+                            .font(.title3.bold())
+                            .lineLimit(2)
+
+                        Text(heroSubtitle)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Spacer(minLength: 0)
+
+                    VStack(alignment: .trailing, spacing: 4) {
+                        Text("Ø")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+
+                        Text(overallAverageRating != nil ? String(format: "%.1f", overallAverageRating!) : "–")
+                            .font(.title2.bold())
+                            .monospacedDigit()
+                    }
+                }
+
+                HStack(spacing: 10) {
+                    Label("\(filteredMovies.count) Filme", systemImage: "film")
+                        .font(.caption)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(Color.gray.opacity(0.12))
+                        .clipShape(Capsule())
+
+                    Label("\(activeReviewersCount) aktiv", systemImage: "person.2.fill")
+                        .font(.caption)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(Color.gray.opacity(0.12))
+                        .clipShape(Capsule())
+
+                    if let date = mostRecentWatchedDate {
+                        Label(Self.recentDateFormatter.string(from: date), systemImage: "clock")
+                            .font(.caption)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(Color.gray.opacity(0.12))
+                            .clipShape(Capsule())
+                    }
+                }
+            }
+        }
+    }
+
+    private var kpiRow: some View {
+        StatsDashboardCard(title: "KPIs", systemImage: "speedometer") {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    StatsKPICard(
+                        title: "Filme",
+                        value: "\(filteredMovies.count)",
+                        subtitle: "im Zeitraum",
+                        systemImage: "film"
+                    )
+
+                    StatsKPICard(
+                        title: "Ø Bewertung",
+                        value: overallAverageRating != nil ? String(format: "%.1f", overallAverageRating!) : "–",
+                        subtitle: "0–10 Skala",
+                        systemImage: "star.fill"
+                    )
+
+                    StatsKPICard(
+                        title: "Bewertungen",
+                        value: "\(totalRatingsCount)",
+                        subtitle: "alle Nutzer",
+                        systemImage: "text.bubble.fill"
+                    )
+
+                    StatsKPICard(
+                        title: "Aktive",
+                        value: "\(activeReviewersCount)",
+                        subtitle: "haben bewertet",
+                        systemImage: "person.2.fill"
+                    )
+
+                    StatsKPICard(
+                        title: "Coverage",
+                        value: "\(ratedMoviesCount)/\(max(1, filteredMovies.count))",
+                        subtitle: ratingCoveragePercentText,
+                        systemImage: "checkmark.seal.fill"
+                    )
+                }
+                .padding(.vertical, 2)
+            }
+        }
+    }
+
+    private var trendsCard: some View {
+        StatsDashboardCard(title: "Trends", systemImage: "chart.xyaxis.line") {
+            VStack(alignment: .leading, spacing: 12) {
+                if monthTrends.isEmpty {
+                    Text("Keine Daten im ausgewählten Zeitraum.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                } else {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Filme pro Monat")
+                            .font(.subheadline.weight(.semibold))
+
+                        Chart(monthTrends) { item in
+                            BarMark(
+                                x: .value("Monat", item.monthStart, unit: .month),
+                                y: .value("Filme", item.movieCount)
+                            )
+                        }
+                        .chartXAxis {
+                            AxisMarks(values: .automatic(desiredCount: 6)) { value in
+                                AxisGridLine()
+                                AxisValueLabel(format: .dateTime.month(.abbreviated))
+                            }
+                        }
+                        .frame(height: 160)
+                    }
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Ø Bewertung pro Monat")
+                            .font(.subheadline.weight(.semibold))
+
+                        Chart(monthTrends.compactMap { item -> StatsMonthTrend? in
+                            guard let avg = item.averageRating else { return nil }
+                            return StatsMonthTrend(monthStart: item.monthStart, movieCount: item.movieCount, averageRating: avg)
+                        }) { item in
+                            LineMark(
+                                x: .value("Monat", item.monthStart, unit: .month),
+                                y: .value("Ø", item.averageRating ?? 0)
+                            )
+                            PointMark(
+                                x: .value("Monat", item.monthStart, unit: .month),
+                                y: .value("Ø", item.averageRating ?? 0)
+                            )
+                        }
+                        .chartYScale(domain: 0...10)
+                        .chartXAxis {
+                            AxisMarks(values: .automatic(desiredCount: 6)) { value in
+                                AxisGridLine()
+                                AxisValueLabel(format: .dateTime.month(.abbreviated))
+                            }
+                        }
+                        .frame(height: 160)
+
+                        Text("Tipp: Tippe einen Monat unten an, um die Filme als Liste zu öffnen.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(moviesPerMonth, id: \.date) { entry in
+                                Button {
+                                    selectedDrilldown = .month(entry.date)
+                                } label: {
+                                    HStack(spacing: 6) {
+                                        Text(Self.monthFormatter.string(from: entry.date))
+                                            .font(.caption)
+                                            .lineLimit(1)
+
+                                        Text("\(entry.count)")
+                                            .font(.caption2)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 7)
+                                    .background(Color.gray.opacity(0.12))
+                                    .clipShape(Capsule())
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .padding(.vertical, 2)
+                    }
+                }
+            }
+        }
+    }
+
+    private var highlightsCard: some View {
+        StatsDashboardCard(title: "Highlights", systemImage: "sparkles") {
+            VStack(alignment: .leading, spacing: 14) {
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Top bewertet")
+                        .font(.subheadline.weight(.semibold))
+
+                    if topRatedHighlights.isEmpty {
+                        Text("Noch keine Bewertungen im ausgewählten Zeitraum.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(topRatedHighlights) { entry in
+                            movieRow(entry.movie, trailingText: String(format: "%.1f", entry.value), trailingBackground: Color.blue.opacity(0.12))
+                        }
+                    }
+                }
+
+                Divider()
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Kontrovers")
+                        .font(.subheadline.weight(.semibold))
+
+                    Text("Je höher, desto mehr gehen eure Meinungen auseinander (Standardabweichung).")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    if controversialHighlights.isEmpty {
+                        Text("Dafür braucht es mindestens 2 Bewertungen pro Film.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(controversialHighlights) { entry in
+                            movieRow(entry.movie, trailingText: String(format: "±%.1f", entry.value), trailingBackground: Color.orange.opacity(0.15))
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var genresCard: some View {
+        StatsDashboardCard(title: "Genres", systemImage: "square.stack.3d.up") {
+            VStack(alignment: .leading, spacing: 10) {
+                if genresDisplaySource.isEmpty {
+                    Text("Keine Genres im ausgewählten Zeitraum/Ort.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("Eure häufigsten Genres")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+
+                    LazyVGrid(
+                        columns: [GridItem(.adaptive(minimum: 90), spacing: 8)],
+                        alignment: .leading,
+                        spacing: 8
+                    ) {
+                        ForEach(genresDisplaySource.prefix(30), id: \.genre) { entry in
+                            Button {
+                                genreChipTapped(entry.genre)
+                            } label: {
+                                HStack(spacing: 6) {
+                                    Text(entry.genre)
+                                        .font(.caption)
+                                        .lineLimit(1)
+                                    Text("(\(entry.count))")
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                }
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 7)
+                                .background(Color.blue.opacity(0.12))
+                                .clipShape(Capsule())
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .transaction { $0.animation = nil }
+
+                    Text("Tippe ein Genre, um die passenden Filme im Zeitraum zu sehen.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
+    private var actorsCard: some View {
+        StatsDashboardCard(title: "Darsteller", systemImage: "person.2.fill") {
+            VStack(alignment: .leading, spacing: 10) {
+                if actorsByCountRaw.isEmpty {
+                    Text("Keine Cast-Daten im ausgewählten Zeitraum/Ort.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("Wen ihr am häufigsten seht")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+
+                    let actorSource = actorsDisplaySource
+                    let limit = showAllActors ? expandedActorsCount : collapsedActorsCount
+                    let displayedActors = Array(actorSource.prefix(limit))
+
+                    LazyVGrid(
+                        columns: [GridItem(.adaptive(minimum: 120), spacing: 8)],
+                        alignment: .leading,
+                        spacing: 8
+                    ) {
+                        ForEach(displayedActors) { entry in
+                            Button {
+                                actorChipTapped(entry)
+                            } label: {
+                                HStack(spacing: 6) {
+                                    Text(entry.name)
+                                        .font(.caption)
+                                        .lineLimit(1)
+                                    Text("(\(entry.count))")
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                }
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 7)
+                                .background(Color.blue.opacity(0.12))
+                                .clipShape(Capsule())
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .transaction { $0.animation = nil }
+
+                    if actorSource.count > collapsedActorsCount {
+                        Button {
+                            showAllActors.toggle()
+                        } label: {
+                            HStack(spacing: 6) {
+                                Text(showAllActors ? "Weniger anzeigen" : "Mehr anzeigen")
+                                    .font(.footnote.weight(.semibold))
+                                Image(systemName: showAllActors ? "chevron.up" : "chevron.down")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .center)
+                            .padding(.vertical, 6)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
+    }
+
+    private var locationsCard: some View {
+        StatsDashboardCard(title: "Orte", systemImage: "mappin.and.ellipse") {
+            VStack(alignment: .leading, spacing: 10) {
+                if moviesByLocation.isEmpty {
+                    Text("Keine Filme im ausgewählten Zeitraum.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(moviesByLocation, id: \.location) { entry in
+                        HStack {
+                            Text(entry.location)
+                            Spacer(minLength: 0)
+                            Button { selectedDrilldown = .location(entry.location) } label: {
+                                Text("\(entry.count)")
+                                    .font(.footnote)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 6)
+                                    .background(Color.gray.opacity(0.12))
+                                    .clipShape(Capsule())
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        .padding(.vertical, 2)
+                    }
+                }
+            }
+        }
+    }
+
+    private var suggestionsCard: some View {
+        StatsDashboardCard(title: "Vorgeschlagen von", systemImage: "person.fill.questionmark") {
+            VStack(alignment: .leading, spacing: 10) {
+                if suggestionsByUser.isEmpty {
+                    Text("Keine Vorschläge im ausgewählten Zeitraum/Ort.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(suggestionsByUser, id: \.name) { entry in
+                        HStack {
+                            Text(entry.name)
+                            Spacer(minLength: 0)
+                            Button { selectedDrilldown = .suggestedBy(entry.name) } label: {
+                                Text("\(entry.count)")
+                                    .font(.footnote)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 6)
+                                    .background(Color.orange.opacity(0.15))
+                                    .clipShape(Capsule())
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        .padding(.vertical, 2)
+                    }
+                }
+            }
+        }
+    }
+
+    private var ratingsPerPersonCard: some View {
+        StatsDashboardCard(title: "Bewertungen pro Person", systemImage: "person.3.sequence.fill") {
+            VStack(alignment: .leading, spacing: 10) {
+                if userStore.users.isEmpty {
+                    Text("Noch keine Mitglieder in der Filmgruppe.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                } else {
+                    VStack(spacing: 10) {
+                        ForEach(userStore.users) { user in
+                            let stats = statsForUser(user)
+
+                            HStack {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(user.name)
+                                        .font(.subheadline.weight(.semibold))
+                                    Text("\(stats.movieCount) Filme bewertet")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+
+                                Spacer(minLength: 0)
+
+                                if let avg = stats.averageRating {
+                                    Text(String(format: "%.1f", avg))
+                                        .font(.headline)
+                                        .monospacedDigit()
+                                        .padding(.horizontal, 10)
+                                        .padding(.vertical, 6)
+                                        .background(Color.blue.opacity(0.12))
+                                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                                } else {
+                                    Text("–")
+                                        .font(.headline)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            .padding(12)
+                            .background(
+                                RoundedRectangle(cornerRadius: 16)
+                                    .fill(Color(.tertiarySystemBackground))
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Hero Copy
+
+    private var heroTitle: String {
+        if let groupName = movieStore.currentGroupName {
+            return "\(groupName) – Überblick"
+        }
+        return "Eure Filmgruppe – Überblick"
+    }
+
+    private var heroSubtitle: String {
+        let rangeText = selectedRange.rawValue
+        let locText = selectedLocationFilter ?? "Alle Orte"
+        return "\(rangeText) • \(locText)"
     }
 
     // MARK: - Basis & Filter
@@ -589,6 +835,27 @@ struct StatsView: View {
         return trimmed.isEmpty ? "Ohne Angabe" : trimmed
     }
 
+    // MARK: - KPIs
+
+    private var totalRatingsCount: Int {
+        filteredMovies.reduce(0) { $0 + $1.ratings.count }
+    }
+
+    private var activeReviewersCount: Int {
+        let all = filteredMovies.flatMap { $0.ratings.map { $0.reviewerName } }
+        return Set(all).count
+    }
+
+    private var ratedMoviesCount: Int {
+        filteredMovies.filter { !$0.ratings.isEmpty }.count
+    }
+
+    private var ratingCoveragePercentText: String {
+        guard filteredMovies.count > 0 else { return "0%" }
+        let pct = (Double(ratedMoviesCount) / Double(filteredMovies.count)) * 100.0
+        return String(format: "%.0f%% bewertet", pct)
+    }
+
     // MARK: - Aggregationen
 
     private var overallAverageRating: Double? {
@@ -604,20 +871,73 @@ struct StatsView: View {
         filteredMovies.compactMap { $0.watchedDate }.max()
     }
 
-    private var moviesPerMonth: [(date: Date, count: Int)] {
+    private var monthTrends: [StatsMonthTrend] {
         let calendar = Calendar.current
-        var counts: [Date: Int] = [:]
+        var buckets: [Date: (movies: Int, scores: [Double])] = [:]
 
         for movie in filteredMovies {
             guard let date = movie.watchedDate else { continue }
-            if let monthStart = calendar.date(from: calendar.dateComponents([.year, .month], from: date)) {
-                counts[monthStart, default: 0] += 1
-            }
+            guard let monthStart = calendar.date(from: calendar.dateComponents([.year, .month], from: date)) else { continue }
+
+            var entry = buckets[monthStart] ?? (movies: 0, scores: [])
+            entry.movies += 1
+            entry.scores.append(contentsOf: movie.ratings.map { $0.averageScoreNormalizedTo10 })
+            buckets[monthStart] = entry
         }
 
-        return counts
-            .map { (date: $0.key, count: $0.value) }
+        let result = buckets.map { (monthStart, data) -> StatsMonthTrend in
+            let avg: Double?
+            if data.scores.isEmpty {
+                avg = nil
+            } else {
+                avg = data.scores.reduce(0, +) / Double(data.scores.count)
+            }
+            return StatsMonthTrend(monthStart: monthStart, movieCount: data.movies, averageRating: avg)
+        }
+
+        return result.sorted { $0.monthStart < $1.monthStart }
+    }
+
+    /// Für Chips (aktuellste Monate zuerst)
+    private var moviesPerMonth: [(date: Date, count: Int)] {
+        monthTrends
+            .map { (date: $0.monthStart, count: $0.movieCount) }
             .sorted { $0.date > $1.date }
+    }
+
+    private var topRatedHighlights: [MovieHighlight] {
+        let base = filteredMovies.compactMap { movie -> MovieHighlight? in
+            guard let avg = movie.averageRating else { return nil }
+            return MovieHighlight(movie: movie, value: avg)
+        }
+
+        return base
+            .sorted { $0.value > $1.value }
+            .prefix(5)
+            .map { $0 }
+    }
+
+    private var controversialHighlights: [MovieHighlight] {
+        let base = filteredMovies.compactMap { movie -> MovieHighlight? in
+            let values = movie.ratings.map { $0.averageScoreNormalizedTo10 }
+            guard values.count >= 2 else { return nil }
+            let sd = standardDeviation(values)
+            return MovieHighlight(movie: movie, value: sd)
+        }
+
+        return base
+            .sorted { $0.value > $1.value }
+            .prefix(5)
+            .map { $0 }
+    }
+
+    private func standardDeviation(_ values: [Double]) -> Double {
+        guard values.count >= 2 else { return 0 }
+        let mean = values.reduce(0, +) / Double(values.count)
+        let variance = values
+            .map { ($0 - mean) * ($0 - mean) }
+            .reduce(0, +) / Double(values.count)
+        return sqrt(variance)
     }
 
     private var moviesByGenreRaw: [(genre: String, count: Int)] {
@@ -716,12 +1036,6 @@ struct StatsView: View {
         return counts
             .map { (name: $0.key, count: $0.value) }
             .sorted { $0.count > $1.count }
-    }
-
-    private var monthFormatter: DateFormatter {
-        let df = DateFormatter()
-        df.dateFormat = "LLLL yyyy"
-        return df
     }
 
     private func statsForUser(_ user: User) -> (movieCount: Int, averageRating: Double?) {
@@ -1070,7 +1384,7 @@ struct StatsView: View {
                     }
                 }
             }
-            .navigationTitle(monthFormatter.string(from: date))
+            .navigationTitle(Self.monthFormatter.string(from: date))
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Fertig") { selectedDrilldown = nil }
@@ -1130,7 +1444,11 @@ struct StatsView: View {
     // MARK: - Movie Row
 
     @ViewBuilder
-    private func movieRow(_ movie: Movie) -> some View {
+    private func movieRow(
+        _ movie: Movie,
+        trailingText: String? = nil,
+        trailingBackground: Color = Color.blue.opacity(0.12)
+    ) -> some View {
         HStack(spacing: 12) {
             if let url = movie.posterURL {
                 CachedAsyncImage(url: url) { phase in
@@ -1182,15 +1500,22 @@ struct StatsView: View {
                 }
             }
 
-            Spacer()
+            Spacer(minLength: 0)
 
-            if let avg = movie.averageRating ?? movie.tmdbRating {
-                Text(String(format: "%.1f", avg))
+            let badgeText: String? = {
+                if let trailingText { return trailingText }
+                if let avg = movie.averageRating ?? movie.tmdbRating { return String(format: "%.1f", avg) }
+                return nil
+            }()
+
+            if let badgeText {
+                Text(badgeText)
                     .font(.caption.bold())
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 4)
-                    .background(Color.blue.opacity(0.12))
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                    .monospacedDigit()
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 6)
+                    .background(trailingText == nil ? Color.blue.opacity(0.12) : trailingBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
             }
         }
         .padding(.vertical, 4)
