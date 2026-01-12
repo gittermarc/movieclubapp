@@ -1309,11 +1309,28 @@ struct MovieDetailView: View {
     }
 
     private var locationOptions: [String] {
-        var names = userStore.users.map { $0.name }
-        if !names.contains("Kino") {
-            names.append("Kino")
+        // Feste Orte (immer verfügbar) + Mitglieder
+        // Hinweis: Wir vermeiden Duplikate, falls ein Mitglied zufällig genauso heißt.
+        var options: [String] = []
+
+        func appendUnique(_ value: String) {
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return }
+            if !options.contains(trimmed) {
+                options.append(trimmed)
+            }
         }
-        return names
+
+        // Immer anbieten:
+        appendUnique("Heimkino")
+        appendUnique("Kino")
+
+        // Danach Mitglieder
+        for name in userStore.users.map({ $0.name }) {
+            appendUnique(name)
+        }
+
+        return options
     }
 
     private var suggestedByOptions: [String] {
