@@ -1,0 +1,114 @@
+//
+//  StatsTypes.swift
+//  filmfreaks
+//
+//  Extracted from StatsView.swift to keep the dashboard view maintainable.
+//
+
+import Foundation
+
+enum StatsTimeRange: String, CaseIterable, Identifiable {
+    case last30 = "Letzte 30 Tage"
+    case last90 = "Letzte 90 Tage"
+    case thisYear = "Dieses Jahr"
+    case all = "Gesamte Zeit"
+
+    var id: Self { self }
+}
+
+enum StatsCriticGapKind: String, CaseIterable, Identifiable {
+    /// Eure Gruppe bewertet höher als TMDB ("underrated" bei TMDB).
+    case groupHigher = "Eure Gruppe > TMDB"
+    /// TMDB bewertet höher als eure Gruppe ("overrated" bei TMDB).
+    case groupLower = "TMDB > Eure Gruppe"
+
+    var id: Self { self }
+
+    var headline: String {
+        switch self {
+        case .groupHigher:
+            return "Eure Gruppe findet besser als TMDB"
+        case .groupLower:
+            return "TMDB findet besser als eure Gruppe"
+        }
+    }
+
+    var sheetTitle: String {
+        switch self {
+        case .groupHigher:
+            return "Underrated bei TMDB"
+        case .groupLower:
+            return "Overrated bei TMDB"
+        }
+    }
+
+    var helpText: String {
+        switch self {
+        case .groupHigher:
+            return "Filme, die eure Gruppe deutlich höher bewertet als der TMDB-Score."
+        case .groupLower:
+            return "Filme, die TMDB deutlich höher bewertet als eure Gruppe."
+        }
+    }
+}
+
+enum StatsDrilldown: Identifiable {
+    case month(Date)
+    case location(String)
+    case suggestedBy(String)
+    case critics(StatsCriticGapKind)
+
+    var id: String {
+        switch self {
+        case .month(let date):
+            let comps = Calendar.current.dateComponents([.year, .month], from: date)
+            let y = comps.year ?? 0
+            let m = comps.month ?? 0
+            return "month_\(y)_\(m)"
+        case .location(let loc):
+            return "location_\(loc)"
+        case .suggestedBy(let name):
+            return "suggestedBy_\(name)"
+        case .critics(let kind):
+            return "critics_\(kind.rawValue)"
+        }
+    }
+}
+
+struct GenreDrilldown: Identifiable, Hashable {
+    let genre: String
+    var id: String { genre }
+}
+
+struct ActorEntry: Identifiable, Hashable {
+    let personId: Int
+    let name: String
+    let count: Int
+    var id: Int { personId }
+}
+
+struct StatsMonthTrend: Identifiable, Hashable {
+    let monthStart: Date
+    let movieCount: Int
+    let averageRating: Double?
+
+    var id: Date { monthStart }
+}
+
+struct MovieHighlight: Identifiable {
+    let movie: Movie
+    let value: Double
+
+    var id: UUID { movie.id }
+}
+
+struct CriticGapEntry: Identifiable {
+    let movie: Movie
+    let groupAverage: Double
+    let tmdbAverage: Double
+
+    /// groupAverage - tmdbAverage (positiv: Gruppe höher, negativ: TMDB höher)
+    let delta: Double
+
+    var id: UUID { movie.id }
+}
