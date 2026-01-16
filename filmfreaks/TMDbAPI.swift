@@ -371,8 +371,9 @@ final class TMDbAPI {
 
     /// Liefert Watch Provider Infos (Streaming/Rent/Buy) für einen Film.
     ///
-    /// - Parameter region: ISO-3166-1 Ländercode (z.B. "DE"). Wenn nicht gesetzt,
-    ///   wird versucht, `Locale.current` zu verwenden; Fallback: "DE".
+    /// - Parameter region: ISO-3166-1 Ländercode (z.B. "DE").
+    ///   - Wenn gesetzt: es wird *nur* dieses Land verwendet (kein stiller Fallback auf US).
+    ///   - Wenn nicht gesetzt: best-effort anhand des Geräte-Landes, danach DE/US.
     func fetchMovieWatchProviders(id: Int, region: String? = nil) async throws -> TMDbWatchProvidersCountry? {
         guard !apiKey.isEmpty else { throw TMDbError.missingAPIKey }
 
@@ -401,9 +402,9 @@ final class TMDbAPI {
             .uppercased()
 
         if let match = decoded.results[preferred] { return match }
-        if let de = decoded.results["DE"] { return de }
-        if let us = decoded.results["US"] { return us }
-        return decoded.results.values.first
+
+        // Kein stiller Fallback (sonst sieht man schnell US/DE-Daten, obwohl man ein anderes Land will).
+        return nil
     }
 
     private static func preferredRegionCode() -> String {

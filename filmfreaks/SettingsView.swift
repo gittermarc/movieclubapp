@@ -12,6 +12,10 @@ struct SettingsView: View {
 
     @Environment(\.dismiss) private var dismiss
 
+    // ✅ NEU: Land-Auswahl für Streaming-Anbieter (TMDb Watch Providers)
+    @AppStorage(WatchProvidersRegionSettings.storageKey)
+    private var watchProvidersRegionCode: String = WatchProvidersRegionSettings.deviceRegionCode()
+
     @State private var showClearCacheConfirm = false
     @State private var isClearingCache = false
 
@@ -33,10 +37,45 @@ struct SettingsView: View {
         return "\(shortText) (\(buildText))"
     }
 
+    private var watchProvidersRegionLabel: String {
+        let device = WatchProvidersRegionSettings.deviceRegionCode()
+        let stored = watchProvidersRegionCode.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if stored.isEmpty {
+            let name = WatchProvidersRegionSettings.germanDisplayName(for: device)
+            let flag = WatchProvidersRegionSettings.flagEmoji(for: device)
+            return "Automatisch (\(flag) \(name))"
+        }
+
+        let effective = WatchProvidersRegionSettings.effectiveRegionCode(from: stored) ?? device
+        let name = WatchProvidersRegionSettings.germanDisplayName(for: effective)
+        let flag = WatchProvidersRegionSettings.flagEmoji(for: effective)
+        return "\(flag) \(name) (\(effective))"
+    }
+
     var body: some View {
         NavigationStack {
             ZStack {
                 List {
+                    Section("Streaming") {
+                        NavigationLink {
+                            WatchProvidersRegionPickerView()
+                        } label: {
+                            HStack {
+                                Label("Streaming-Land", systemImage: "globe")
+                                Spacer()
+                                Text(watchProvidersRegionLabel)
+                                    .foregroundStyle(.secondary)
+                                    .multilineTextAlignment(.trailing)
+                                    .lineLimit(2)
+                            }
+                        }
+
+                        Text("Dieses Land wird für die Streaming-Anbieter (TMDb Watch Providers) verwendet. Je Land kann die Verfügbarkeit stark variieren.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+
                     Section("Cache") {
                         HStack {
                             Text("Cache-Größe")

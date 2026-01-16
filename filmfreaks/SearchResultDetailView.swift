@@ -19,12 +19,17 @@ struct SearchResultDetailView: View {
 
     @Environment(\.dismiss) private var dismiss
 
+    // ✅ NEU: User-Setting für Watch Providers Region (Land)
+    @AppStorage(WatchProvidersRegionSettings.storageKey)
+    private var watchProvidersRegionCode: String = WatchProvidersRegionSettings.deviceRegionCode()
+
     @State private var details: TMDbMovieDetails?
     @State private var isLoading: Bool = false
     @State private var errorMessage: String?
 
     // ✅ NEU: Streaming-Anbieter (Watch Providers)
     @State private var watchProviders: [TMDbWatchProvider] = []
+    @State private var watchProvidersCountry: TMDbWatchProvidersCountry? = nil
     @State private var watchProvidersLink: URL? = nil
     @State private var isLoadingWatchProviders: Bool = false
     @State private var didLoadWatchProviders: Bool = false
@@ -237,24 +242,13 @@ struct SearchResultDetailView: View {
                         }
                     } else if didLoadWatchProviders {
                         section(title: "Film ist verfügbar bei:") {
-                            if watchProviders.isEmpty {
+                            if let country = watchProvidersCountry,
+                               !country.bestEffortProviders.isEmpty {
+                                WatchProvidersAvailabilityView(country: country, link: watchProvidersLink)
+                            } else {
                                 Text("Keine Streaming-Anbieter gefunden.")
                                     .font(.subheadline)
                                     .foregroundStyle(.secondary)
-                            } else {
-                                WatchProvidersIconsRow(providers: watchProviders)
-
-                                if let link = watchProvidersLink {
-                                    Link(destination: link) {
-                                        Label("Mehr Infos", systemImage: "safari")
-                                            .font(.subheadline.weight(.semibold))
-                                            .padding(.horizontal, 10)
-                                            .padding(.vertical, 8)
-                                            .background(Color.gray.opacity(0.12))
-                                            .clipShape(RoundedRectangle(cornerRadius: 10))
-                                    }
-                                    .buttonStyle(.plain)
-                                }
                             }
                         }
                     }
@@ -549,8 +543,46 @@ struct SearchResultDetailView: View {
             isLoadingWatchProviders = true
             didLoadWatchProviders = false
             watchProviders = []
+            watchProvidersCountry = nil
             watchProvidersLink = nil
             Task { await loadDetails() }
+        }
+        .onChange(of: watchProvidersRegionCode) { _, _ in
+            Task { await reloadWatchProvidersOnly() }
+        }
+    }
+
+    private func reloadWatchProvidersOnly() async {
+        await MainActor.run {
+            isLoadingWatchProviders = true
+            didLoadWatchProviders = false
+            watchProviders = []
+            watchProvidersCountry = nil
+            watchProvidersLink = nil
+        }
+
+        do {
+            let region = WatchProvidersRegionSettings.effectiveRegionCode(from: watchProvidersRegionCode)
+            let providersCountry = try await TMDbAPI.shared.fetchMovieWatchProviders(id: result.id, region: region)
+
+            await MainActor.run {
+                self.watchProvidersCountry = providersCountry
+                self.watchProviders = providersCountry?.bestEffortProviders ?? []
+
+                if let linkString = providersCountry?.link {
+                    self.watchProvidersLink = URL(string: linkString)
+                } else {
+                    self.watchProvidersLink = nil
+                }
+
+                self.isLoadingWatchProviders = false
+                self.didLoadWatchProviders = true
+            }
+        } catch {
+            await MainActor.run {
+                self.isLoadingWatchProviders = false
+                self.didLoadWatchProviders = true
+            }
         }
     }
 
@@ -891,12 +923,14 @@ struct SearchResultDetailView: View {
             isLoadingWatchProviders = true
             didLoadWatchProviders = false
             watchProviders = []
+            watchProvidersCountry = nil
             watchProvidersLink = nil
         }
 
         do {
             async let detailsTask = TMDbAPI.shared.fetchMovieDetails(id: result.id)
-            async let providersTask = TMDbAPI.shared.fetchMovieWatchProviders(id: result.id)
+            let region = WatchProvidersRegionSettings.effectiveRegionCode(from: watchProvidersRegionCode)
+            async let providersTask = TMDbAPI.shared.fetchMovieWatchProviders(id: result.id, region: region)
 
             let fetched = try await detailsTask
             let providersCountry = try? await providersTask
@@ -905,6 +939,7 @@ struct SearchResultDetailView: View {
                 self.details = fetched
                 self.isLoading = false
 
+                self.watchProvidersCountry = providersCountry
                 self.watchProviders = providersCountry?.bestEffortProviders ?? []
                 if let linkString = providersCountry?.link {
                     self.watchProvidersLink = URL(string: linkString)
