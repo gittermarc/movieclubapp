@@ -117,6 +117,12 @@ struct SettingsView: View {
                             Text(versionString)
                                 .foregroundStyle(.secondary)
                         }
+
+                        NavigationLink {
+                            TMDbAttributionPrivacyView()
+                        } label: {
+                            Label("TMDB: Attribution & Datenschutz", systemImage: "info.circle")
+                        }
                     }
                 }
                 .navigationTitle("Einstellungen")
