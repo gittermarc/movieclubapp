@@ -44,7 +44,7 @@ struct TMDbAttributionPrivacyView: View {
                         Spacer(minLength: 0)
                     }
 
-                    Text("In filmfreaks stammen Filminfos (Titel, Beschreibung, Cast/Crew, Poster/Backdrops) sowie Streaming-Anbieter aus der TMDB-API.")
+                    Text("In TMC - The Movie Club stammen Filminfos (Titel, Beschreibung, Cast/Crew, Poster/Backdrops) sowie Streaming-Anbieter aus der TMDB-API.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
 
@@ -91,7 +91,7 @@ struct TMDbAttributionPrivacyView: View {
                         .font(.footnote)
                         .foregroundStyle(.secondary)
 
-                    Text("filmfreaks nutzt keinen TMDB-Login. Es werden keine TMDB-Konten verknüpft und keine persönlichen Profile bei TMDB erstellt.")
+                    Text("TMC - The Movie Club nutzt keinen TMDB-Login. Es werden keine TMDB-Konten verknüpft und keine persönlichen Profile bei TMDB erstellt.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
 
