@@ -34,6 +34,18 @@ struct SearchResultDetailView: View {
     @State private var isLoadingWatchProviders: Bool = false
     @State private var didLoadWatchProviders: Bool = false
 
+    @State private var showWatchProvidersRegionPicker: Bool = false
+
+    /// Effektives Land für Watch Providers (leer == automatisch/Device)
+    private var effectiveWatchProvidersRegionCode: String {
+        WatchProvidersRegionSettings.effectiveRegionCode(from: watchProvidersRegionCode)
+        ?? WatchProvidersRegionSettings.deviceRegionCode()
+    }
+
+    private var isWatchProvidersRegionAutomatic: Bool {
+        watchProvidersRegionCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     // ✅ UI-States (wie MovieDetailView)
     @State private var isOverviewExpanded: Bool = false
     @State private var selectedPerson: SRSelectedPerson?
@@ -246,9 +258,12 @@ struct SearchResultDetailView: View {
                                !country.bestEffortProviders.isEmpty {
                                 WatchProvidersAvailabilityView(country: country, link: watchProvidersLink)
                             } else {
-                                Text("Keine Streaming-Anbieter gefunden.")
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
+                                WatchProvidersNoDataHintView(
+                                    regionCode: effectiveWatchProvidersRegionCode,
+                                    isAutomatic: isWatchProvidersRegionAutomatic
+                                ) {
+                                    showWatchProvidersRegionPicker = true
+                                }
                             }
                         }
                     }
@@ -525,6 +540,11 @@ struct SearchResultDetailView: View {
                     Button("Schließen") { isTrailerSafariShown = false }
                 }
                 .padding()
+            }
+        }
+        .sheet(isPresented: $showWatchProvidersRegionPicker) {
+            NavigationStack {
+                WatchProvidersRegionPickerView()
             }
         }
         .onAppear {
