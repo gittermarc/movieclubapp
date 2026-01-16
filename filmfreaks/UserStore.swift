@@ -18,7 +18,7 @@ class UserStore: ObservableObject {
     @Published var users: [User] = [] {
         didSet {
             if isApplyingCloudUpdate { return }
-            saveUsers()
+            PersistenceManager.shared.saveUsers(users, groupId: currentGroupId)
         }
     }
 
@@ -49,7 +49,7 @@ class UserStore: ObservableObject {
         // gleiche Group-ID wie MovieStore verwenden
         let groupIdFromDefaults = UserDefaults.standard.string(forKey: "CurrentGroupId")
         self.currentGroupId = groupIdFromDefaults
-        self.users = Self.loadUsers(forGroupId: groupIdFromDefaults)
+        self.users = PersistenceManager.shared.loadUsers(groupId: groupIdFromDefaults)
 
         if let first = users.first {
             self.selectedUser = first
@@ -70,7 +70,7 @@ class UserStore: ObservableObject {
         self.currentGroupId = groupId
 
         // Erst lokal laden (schnelle UI), dann Cloud (Autorität für Gruppen).
-        self.users = Self.loadUsers(forGroupId: groupId)
+        self.users = PersistenceManager.shared.loadUsers(groupId: groupId)
 
         if let first = users.first {
             self.selectedUser = first
@@ -225,44 +225,4 @@ class UserStore: ObservableObject {
         return UUID(uuid: uuidBytes)
     }
 
-    // MARK: - Persistenz
-
-    private func storageKey(for groupId: String?) -> String {
-        if let id = groupId, !id.isEmpty {
-            return "Users_\(id)"
-        } else {
-            return "Users_Default"
-        }
-    }
-
-    private func saveUsers() {
-        let key = storageKey(for: currentGroupId)
-        do {
-            let data = try JSONEncoder().encode(users)
-            UserDefaults.standard.set(data, forKey: key)
-        } catch {
-            print("UserStore: Fehler beim Speichern der Users für Key \(key): \(error)")
-        }
-    }
-
-    private static func loadUsers(forGroupId groupId: String?) -> [User] {
-        let key: String
-        if let id = groupId, !id.isEmpty {
-            key = "Users_\(id)"
-        } else {
-            key = "Users_Default"
-        }
-
-        guard let data = UserDefaults.standard.data(forKey: key) else {
-            return []
-        }
-
-        do {
-            let decoded = try JSONDecoder().decode([User].self, from: data)
-            return decoded
-        } catch {
-            print("UserStore: Fehler beim Laden der Users für Key \(key): \(error)")
-            return []
-        }
-    }
 }

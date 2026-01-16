@@ -32,7 +32,7 @@ class MovieStore: ObservableObject {
                 return
             }
 
-            PersistenceManager.shared.saveMovies(movies)
+            PersistenceManager.shared.saveMovies(movies, groupId: currentGroupId)
 
             if cloudStore != nil {
                 let oldSnapshot = oldValue
@@ -53,7 +53,7 @@ class MovieStore: ObservableObject {
                 return
             }
 
-            PersistenceManager.shared.saveBacklogMovies(backlogMovies)
+            PersistenceManager.shared.saveBacklogMovies(backlogMovies, groupId: currentGroupId)
 
             if cloudStore != nil {
                 let oldSnapshot = oldValue
@@ -113,10 +113,10 @@ class MovieStore: ObservableObject {
 
         addOrUpdateCurrentGroupInKnownGroups()
 
-        let stored = PersistenceManager.shared.loadMovies()
+        let stored = PersistenceManager.shared.loadMovies(groupId: currentGroupId)
         self.movies = stored
 
-        let backlogStored = PersistenceManager.shared.loadBacklogMovies()
+        let backlogStored = PersistenceManager.shared.loadBacklogMovies(groupId: currentGroupId)
         self.backlogMovies = backlogStored
 
         // ✅ Automatische Migration (lokale Daten)
@@ -485,16 +485,22 @@ class MovieStore: ObservableObject {
 
     // MARK: - Gruppen API
 
+    private func loadLocalCache(for groupId: String?) {
+        isApplyingCloudUpdate = true
+        movies = PersistenceManager.shared.loadMovies(groupId: groupId)
+        backlogMovies = PersistenceManager.shared.loadBacklogMovies(groupId: groupId)
+        isApplyingCloudUpdate = false
+    }
+
     func createNewGroup(withName name: String) {
         let newId = UUID().uuidString
 
         currentGroupId = newId
         currentGroupName = name
 
-        isApplyingCloudUpdate = true
-        movies = []
-        backlogMovies = []
-        isApplyingCloudUpdate = false
+        // Neue Gruppe startet leer – wir laden trotzdem den lokalen Cache,
+        // damit die Persistenz group-scoped sauber greift.
+        loadLocalCache(for: newId)
 
         print("MovieStore: created NEW EMPTY group '\(name)' with id \(newId)")
 
@@ -505,10 +511,8 @@ class MovieStore: ObservableObject {
         currentGroupId = code
         currentGroupName = currentGroupName
 
-        isApplyingCloudUpdate = true
-        movies = []
-        backlogMovies = []
-        isApplyingCloudUpdate = false
+        // Erst lokal (schnell), danach Cloud (Autorität)
+        loadLocalCache(for: code)
 
         addOrUpdateCurrentGroupInKnownGroups()
 
@@ -525,13 +529,12 @@ class MovieStore: ObservableObject {
         currentGroupId = nil
         currentGroupName = nil
 
-        isApplyingCloudUpdate = true
-        movies = []
-        backlogMovies = []
-        isApplyingCloudUpdate = false
+        // Fallback auf "default"-Gruppe (lokal) – danach (best effort) Cloud-Reload.
+        loadLocalCache(for: nil)
 
         Task { await self.loadFromCloud() }
     }
+
 
     // MARK: - bekannte Gruppen verwalten
 
