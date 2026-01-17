@@ -25,6 +25,12 @@ enum RatingCriterion: String, CaseIterable, Identifiable, Codable, Hashable {
 
 struct Rating: Identifiable, Codable, Equatable {
     var id = UUID()
+
+    /// Stable identity of the reviewer (stored; does not change when the name changes).
+    /// For legacy data this can be nil and will be filled during migration.
+    var reviewerId: UUID? = nil
+
+    /// Display name of the reviewer (can be changed without breaking identity).
     var reviewerName: String
 
     /// Sterne pro Kriterium (1–3). 0 bedeutet: nicht bewertet.

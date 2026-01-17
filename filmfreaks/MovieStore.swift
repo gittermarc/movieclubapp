@@ -317,11 +317,31 @@ class MovieStore: ObservableObject {
     
     // MARK: - Ratings (Version B: MovieRating Records)
 
-    /// Merged Ratings: `incoming` überschreibt (case-insensitive) bestehende Ratings pro Reviewer.
+    /// Stable reviewer identity key used to merge ratings.
+    private func reviewerKey(_ r: Rating) -> String {
+        if let rid = r.reviewerId { return rid.uuidString.lowercased() }
+        if let gid = currentGroupId, !gid.isEmpty {
+            return StableID.deterministicUUID(forName: r.reviewerName, groupId: gid).uuidString.lowercased()
+        }
+        return r.reviewerName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
+    /// Ensures reviewerId is present for legacy ratings (best-effort).
+    private func normalizedRating(_ r: Rating) -> Rating {
+        var copy = r
+        if copy.reviewerId == nil, let gid = currentGroupId, !gid.isEmpty {
+            copy.reviewerId = StableID.deterministicUUID(forName: copy.reviewerName, groupId: gid)
+        }
+        return copy
+    }
+
+    /// Merged Ratings: `incoming` überschreibt bestehende Ratings pro Reviewer (stabile IDs).
     private func mergeRatings(existing: [Rating], incoming: [Rating]) -> [Rating] {
-        var out = existing
-        for r in incoming {
-            if let idx = out.firstIndex(where: { $0.reviewerName.lowercased() == r.reviewerName.lowercased() }) {
+        var out = existing.map(normalizedRating)
+        for raw in incoming {
+            let r = normalizedRating(raw)
+            let key = reviewerKey(r)
+            if let idx = out.firstIndex(where: { reviewerKey($0) == key }) {
                 out[idx] = r
             } else {
                 out.append(r)
@@ -365,13 +385,21 @@ class MovieStore: ObservableObject {
         }
     }
 
-    /// Löscht die Bewertung eines Reviewers (case-insensitive) für einen Film.
-    func deleteRating(for movieId: UUID, reviewerName: String) async -> Bool {
+    /// Löscht eine Bewertung für einen Film anhand der stabilen Reviewer-ID.
+    func deleteRating(for movieId: UUID, reviewerId: UUID) async -> Bool {
         // Lokal entfernen
         func remove(from list: inout [Movie]) {
             guard let idx = list.firstIndex(where: { $0.id == movieId }) else { return }
             var m = list[idx]
-            m.ratings.removeAll { $0.reviewerName.lowercased() == reviewerName.lowercased() }
+            m.ratings.removeAll { r in
+                if let rid = r.reviewerId { return rid == reviewerId }
+                // Legacy fallback
+                if let gid = currentGroupId, !gid.isEmpty {
+                    let legacy = StableID.deterministicUUID(forName: r.reviewerName, groupId: gid)
+                    return legacy == reviewerId
+                }
+                return false
+            }
             list[idx] = m
         }
         remove(from: &movies)
@@ -379,12 +407,34 @@ class MovieStore: ObservableObject {
 
         guard let cloudRatingStore else { return true }
         do {
-            try await cloudRatingStore.deleteRating(movieId: movieId, groupId: currentGroupId, reviewerName: reviewerName)
+            try await cloudRatingStore.deleteRating(movieId: movieId, groupId: currentGroupId, reviewerId: reviewerId)
             return true
         } catch {
             print("CloudKit rating delete error: \(error)")
             return false
         }
+    }
+
+    /// Legacy Convenience: Löscht per Name (best-effort) – wird auf reviewerId gemappt, wenn möglich.
+    func deleteRating(for movieId: UUID, reviewerName: String) async -> Bool {
+        let trimmed = reviewerName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return true }
+
+        if let gid = currentGroupId, !gid.isEmpty {
+            let rid = StableID.deterministicUUID(forName: trimmed, groupId: gid)
+            return await deleteRating(for: movieId, reviewerId: rid)
+        }
+
+        // Fallback (no-group): remove by name only locally
+        func remove(from list: inout [Movie]) {
+            guard let idx = list.firstIndex(where: { $0.id == movieId }) else { return }
+            var m = list[idx]
+            m.ratings.removeAll { $0.reviewerName.lowercased() == trimmed.lowercased() }
+            list[idx] = m
+        }
+        remove(from: &movies)
+        remove(from: &backlogMovies)
+        return true
     }
 
 // MARK: - ✅ CAST Migration (Legacy → TMDb Person IDs)

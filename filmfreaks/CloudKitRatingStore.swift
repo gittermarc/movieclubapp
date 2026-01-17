@@ -9,8 +9,9 @@ import Foundation
 import CloudKit
 
 /// CloudKit Store für per-User Ratings (Version B).
+///
 /// Jeder User ist Creator seines Rating-Records → darf ihn auch aktualisieren.
-/// Andere User können die Ratings lesen (Public DB / Schema-Rollen).
+/// Andere User können die Ratings lesen.
 struct CloudKitRatingStore {
 
     // MARK: - CloudKit Setup
@@ -34,18 +35,33 @@ struct CloudKitRatingStore {
     // MARK: - Schema
 
     private let recordType = "MovieRating"
-    private let payloadKey = "payload"          // Data: codierter Rating
-    private let movieIdKey = "movieId"          // String: UUID
-    private let groupIdKey = "groupId"          // String: Invite-Code
-    private let reviewerNameKey = "reviewerName"// String: Name (für Debug/Query)
-    private let updatedAtKey = "updatedAt"      // Date
+    private let payloadKey = "payload"              // Data: codierter Rating
+    private let movieIdKey = "movieId"              // String: UUID
+    private let groupIdKey = "groupId"              // String: Group-ID
+    private let reviewerIdKey = "reviewerId"        // String: UUID (stabile Identität)
+    private let reviewerNameKey = "reviewerName"    // String: Display-Name (optional, Debug/Stats)
+    private let updatedAtKey = "updatedAt"          // Date
 
     // MARK: - Helpers
 
-    private func recordID(groupId: String?, movieId: UUID, reviewerName: String) -> CKRecord.ID {
-        // Stabil & safe: base64-url of "gid|movieId|reviewer"
-        let gid = (groupId?.isEmpty == false) ? groupId! : "nogroup"
-        let raw = "\(gid)|\(movieId.uuidString)|\(reviewerName.lowercased())"
+    private func normalizedGroupId(_ groupId: String?) -> String {
+        (groupId?.isEmpty == false) ? groupId! : "nogroup"
+    }
+
+    private func stableReviewerId(for rating: Rating, groupId: String?) -> UUID {
+        if let rid = rating.reviewerId { return rid }
+        guard let gid = groupId, !gid.isEmpty else {
+            // Offline/no-group: best-effort deterministic based on name only is not stable on rename,
+            // but offline groups are local anyway.
+            return UUID()
+        }
+        return StableID.deterministicUUID(forName: rating.reviewerName, groupId: gid)
+    }
+
+    private func recordID(groupId: String?, movieId: UUID, reviewerId: UUID) -> CKRecord.ID {
+        // Stabil & safe: base64-url of "gid|movieId|reviewerId"
+        let gid = normalizedGroupId(groupId)
+        let raw = gid + "|" + movieId.uuidString + "|" + reviewerId.uuidString.lowercased()
         let data = raw.data(using: .utf8) ?? Data()
         var b64 = data.base64EncodedString()
         b64 = b64.replacingOccurrences(of: "+", with: "-")
@@ -58,19 +74,23 @@ struct CloudKitRatingStore {
 
     func saveRating(_ rating: Rating, movieId: UUID, groupId: String?) async throws {
         let route = routedDatabase(forGroupId: groupId)
-        let baseID = recordID(groupId: groupId, movieId: movieId, reviewerName: rating.reviewerName)
+        let reviewerId = stableReviewerId(for: rating, groupId: groupId)
+
+        let baseID = recordID(groupId: groupId, movieId: movieId, reviewerId: reviewerId)
         let id = route.zoneID.map { CKRecord.ID(recordName: baseID.recordName, zoneID: $0) } ?? baseID
 
         func applyFields(on record: CKRecord) throws -> CKRecord {
-            let data = try JSONEncoder().encode(rating)
+            var ratingToEncode = rating
+            if ratingToEncode.reviewerId == nil {
+                ratingToEncode.reviewerId = reviewerId
+            }
+
+            let data = try JSONEncoder().encode(ratingToEncode)
             record[payloadKey] = data as CKRecordValue
             record[movieIdKey] = movieId.uuidString as CKRecordValue
-            if let gid = groupId, !gid.isEmpty {
-                record[groupIdKey] = gid as CKRecordValue
-            } else {
-                record[groupIdKey] = nil
-            }
-            record[reviewerNameKey] = rating.reviewerName as CKRecordValue
+            record[groupIdKey] = (groupId?.isEmpty == false) ? (groupId! as CKRecordValue) : nil
+            record[reviewerIdKey] = reviewerId.uuidString.lowercased() as CKRecordValue
+            record[reviewerNameKey] = ratingToEncode.reviewerName as CKRecordValue
             record[updatedAtKey] = Date() as CKRecordValue
             return record
         }
@@ -87,7 +107,7 @@ struct CloudKitRatingStore {
             _ = try await route.db.save(recordToSave)
 
         } catch {
-            // Konflikte sind hier selten (ein Record pro User), aber wir behandeln sie robust.
+            // Konflikte sind selten (ein Record pro Reviewer), aber wir behandeln sie robust.
             if let ckError = error as? CKError,
                ckError.code == .serverRecordChanged,
                let serverRecord = ckError.userInfo[CKRecordChangedErrorServerRecordKey] as? CKRecord {
@@ -100,9 +120,9 @@ struct CloudKitRatingStore {
         }
     }
 
-    func deleteRating(movieId: UUID, groupId: String?, reviewerName: String) async throws {
+    func deleteRating(movieId: UUID, groupId: String?, reviewerId: UUID) async throws {
         let route = routedDatabase(forGroupId: groupId)
-        let baseID = recordID(groupId: groupId, movieId: movieId, reviewerName: reviewerName)
+        let baseID = recordID(groupId: groupId, movieId: movieId, reviewerId: reviewerId)
         let id = route.zoneID.map { CKRecord.ID(recordName: baseID.recordName, zoneID: $0) } ?? baseID
         _ = try await route.db.deleteRecord(withID: id)
     }
@@ -114,8 +134,7 @@ struct CloudKitRatingStore {
     func fetchRatings(forGroupId groupId: String?, movieIds: [UUID]? = nil) async throws -> [UUID: [Rating]] {
         let route = routedDatabase(forGroupId: groupId)
 
-        var predicate: NSPredicate
-
+        let predicate: NSPredicate
         if let gid = groupId, !gid.isEmpty {
             predicate = NSPredicate(format: "%K == %@", groupIdKey, gid)
         } else {
@@ -123,17 +142,16 @@ struct CloudKitRatingStore {
             predicate = NSPredicate(format: "%K == NULL", groupIdKey)
         }
 
-        // Optional zusätzlich auf Movie-IDs filtern (in Chunks, weil IN-Listen begrenzt sein können)
+        // Optional zusätzlich auf Movie-IDs filtern (in Chunks)
         if let movieIds, !movieIds.isEmpty {
-            let all = try await fetchRatingsChunked(database: route.db, zoneID: route.zoneID, groupPredicate: predicate, movieIds: movieIds)
-            return all
+            return try await fetchRatingsChunked(database: route.db, zoneID: route.zoneID, groupPredicate: predicate, movieIds: movieIds, groupId: groupId)
         } else {
             let records = try await fetchRecords(database: route.db, zoneID: route.zoneID, predicate: predicate)
-            return try decode(records: records)
+            return try decode(records: records, groupId: groupId)
         }
     }
 
-    private func fetchRatingsChunked(database: CKDatabase, zoneID: CKRecordZone.ID?, groupPredicate: NSPredicate, movieIds: [UUID]) async throws -> [UUID: [Rating]] {
+    private func fetchRatingsChunked(database: CKDatabase, zoneID: CKRecordZone.ID?, groupPredicate: NSPredicate, movieIds: [UUID], groupId: String?) async throws -> [UUID: [Rating]] {
         var merged: [UUID: [Rating]] = [:]
         let chunkSize = 100
 
@@ -147,7 +165,7 @@ struct CloudKitRatingStore {
             ])
 
             let records = try await fetchRecords(database: database, zoneID: zoneID, predicate: chunkPredicate)
-            let decoded = try decode(records: records)
+            let decoded = try decode(records: records, groupId: groupId)
             merged = merge(dictA: merged, dictB: decoded)
 
             start = end
@@ -159,11 +177,10 @@ struct CloudKitRatingStore {
     private func fetchRecords(database: CKDatabase, zoneID: CKRecordZone.ID?, predicate: NSPredicate) async throws -> [CKRecord] {
         let query = CKQuery(recordType: recordType, predicate: predicate)
         query.sortDescriptors = [NSSortDescriptor(key: updatedAtKey, ascending: false)]
-
         return try await queryAllRecords(database: database, query: query, zoneID: zoneID)
     }
 
-    private func decode(records: [CKRecord]) throws -> [UUID: [Rating]] {
+    private func decode(records: [CKRecord], groupId: String?) throws -> [UUID: [Rating]] {
         var dict: [UUID: [Rating]] = [:]
 
         for record in records {
@@ -173,7 +190,18 @@ struct CloudKitRatingStore {
                 let data = record[payloadKey] as? Data
             else { continue }
 
-            let rating = try JSONDecoder().decode(Rating.self, from: data)
+            var rating = try JSONDecoder().decode(Rating.self, from: data)
+
+            // Backfill reviewerId if missing in payload (legacy records)
+            if rating.reviewerId == nil {
+                if let ridString = record[reviewerIdKey] as? String,
+                   let rid = UUID(uuidString: ridString) {
+                    rating.reviewerId = rid
+                } else if let gid = groupId, !gid.isEmpty {
+                    rating.reviewerId = StableID.deterministicUUID(forName: rating.reviewerName, groupId: gid)
+                }
+            }
+
             dict[uuid, default: []].append(rating)
         }
 
@@ -185,12 +213,17 @@ struct CloudKitRatingStore {
         return dict
     }
 
+    private func reviewerKey(_ r: Rating) -> String {
+        if let id = r.reviewerId { return id.uuidString.lowercased() }
+        return r.reviewerName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
     private func uniqByReviewer(_ ratings: [Rating]) -> [Rating] {
         var result: [Rating] = []
         var seen: Set<String> = []
 
         for r in ratings {
-            let key = r.reviewerName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            let key = reviewerKey(r)
             if seen.contains(key) { continue }
             seen.insert(key)
             result.append(r)
@@ -209,7 +242,8 @@ struct CloudKitRatingStore {
     private func mergeRatings(existing: [Rating], incoming: [Rating]) -> [Rating] {
         var out = existing
         for r in incoming {
-            if let idx = out.firstIndex(where: { $0.reviewerName.lowercased() == r.reviewerName.lowercased() }) {
+            let key = reviewerKey(r)
+            if let idx = out.firstIndex(where: { reviewerKey($0) == key }) {
                 out[idx] = r
             } else {
                 out.append(r)

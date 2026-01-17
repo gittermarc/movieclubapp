@@ -55,15 +55,19 @@ struct LegacyGroupMigrationService {
             let ratingsByMovie = try await ratingStore.fetchRatings(forGroupId: legacyGroupId, movieIds: movieIds)
             for (movieId, ratings) in ratingsByMovie {
                 for r in ratings {
-                    try await ratingStore.saveRating(r, movieId: movieId, groupId: newGroup.id)
+                    var copy = r
+                    if copy.reviewerId == nil {
+                        copy.reviewerId = StableID.deterministicUUID(forName: copy.reviewerName, groupId: legacyGroupId)
+                    }
+                    try await ratingStore.saveRating(copy, movieId: movieId, groupId: newGroup.id)
                 }
             }
         }
 
         // 4) Members
-        let memberNames = try await userStore.fetchMembers(forGroupId: legacyGroupId)
-        for name in memberNames {
-            try await userStore.upsertMember(name: name, groupId: newGroup.id)
+        let members = try await userStore.fetchMembers(forGroupId: legacyGroupId)
+        for m in members {
+            try await userStore.upsertMember(id: m.id, name: m.name, groupId: newGroup.id)
         }
 
         // 5) Goals + Custom goals + decade/actor goals

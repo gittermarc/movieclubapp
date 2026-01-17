@@ -7,7 +7,6 @@
 
 import Foundation
 import Combine
-import CryptoKit
 internal import SwiftUI
 
 @MainActor
@@ -101,22 +100,22 @@ class UserStore: ObservableObject {
         defer { isSyncing = false }
 
         do {
-            let names = try await cloudStore.fetchMembers(forGroupId: gid)
+            let members = try await cloudStore.fetchMembers(forGroupId: gid)
 
-            if !names.isEmpty {
-                applyCloudUsers(names: names, groupId: gid)
+            if !members.isEmpty {
+                applyCloudUsers(members: members, groupId: gid)
             } else {
                 // Cloud leer → falls lokal bereits Users existieren, als „Initial-Seed“ hochladen.
                 // (So hat der Gruppenersteller sofort Members in der Cloud.)
                 if !users.isEmpty {
                     for u in users {
-                        do { try await cloudStore.upsertMember(name: u.name, groupId: gid) }
+                        do { try await cloudStore.upsertMember(id: u.id, name: u.name, groupId: gid) }
                         catch { print("CloudKitUserStore upsert bootstrap error: \(error)") }
                     }
 
-                    let names2 = try await cloudStore.fetchMembers(forGroupId: gid)
-                    if !names2.isEmpty {
-                        applyCloudUsers(names: names2, groupId: gid)
+                    let members2 = try await cloudStore.fetchMembers(forGroupId: gid)
+                    if !members2.isEmpty {
+                        applyCloudUsers(members: members2, groupId: gid)
                     }
                 }
             }
@@ -130,12 +129,12 @@ class UserStore: ObservableObject {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
 
-        // doppelte Namen vermeiden
+        // doppelte Namen vermeiden (case-insensitive)
         if users.contains(where: { $0.name.caseInsensitiveCompare(trimmed) == .orderedSame }) {
             return
         }
 
-        let newUser = makeUser(name: trimmed, groupId: currentGroupId)
+        let newUser = User(id: UUID(), name: trimmed)
         users.append(newUser)
 
         if selectedUser == nil {
@@ -145,7 +144,7 @@ class UserStore: ObservableObject {
         // Für Gruppen direkt in Cloud spiegeln.
         if let gid = currentGroupId, !gid.isEmpty {
             Task {
-                do { try await cloudStore.upsertMember(name: trimmed, groupId: gid) }
+                do { try await cloudStore.upsertMember(id: newUser.id, name: trimmed, groupId: gid) }
                 catch { print("UserStore: Fehler beim Cloud-upsert Member: \(error)") }
 
                 // Optional: nachziehen, damit Reihenfolge/Dedupe mit Cloud konsistent ist.
@@ -156,7 +155,7 @@ class UserStore: ObservableObject {
 
     /// Löscht User an den übergebenen Indizes
     func deleteUsers(at offsets: IndexSet) {
-        let namesToDelete = offsets.map { users[$0].name }
+        let idsToDelete = offsets.map { users[$0].id }
         users.remove(atOffsets: offsets)
 
         if let selected = selectedUser, !users.contains(selected) {
@@ -166,8 +165,8 @@ class UserStore: ObservableObject {
         // Cloud delete
         if let gid = currentGroupId, !gid.isEmpty {
             Task {
-                for name in namesToDelete {
-                    do { try await cloudStore.deleteMember(name: name, groupId: gid) }
+                for id in idsToDelete {
+                    do { try await cloudStore.deleteMember(id: id, groupId: gid) }
                     catch { print("UserStore: Fehler beim Cloud-delete Member: \(error)") }
                 }
                 await self.refreshFromCloud(force: false)
@@ -177,52 +176,27 @@ class UserStore: ObservableObject {
 
     // MARK: - Cloud apply
 
-    private func applyCloudUsers(names: [String], groupId: String) {
+    private func applyCloudUsers(members: [CloudKitUserStore.CloudMember], groupId: String) {
+        let previousSelectedId = selectedUser?.id
         let previousSelectedName = selectedUser?.name
 
-        let cloudUsers: [User] = names
-            .map { makeUser(name: $0, groupId: groupId) }
+        let cloudUsers: [User] = members
+            .map { User(id: $0.id, name: $0.name) }
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
 
         isApplyingCloudUpdate = true
         users = cloudUsers
         isApplyingCloudUpdate = false
 
-        if let prev = previousSelectedName,
-           let match = users.first(where: { $0.name.caseInsensitiveCompare(prev) == .orderedSame }) {
+        if let prevId = previousSelectedId,
+           let match = users.first(where: { $0.id == prevId }) {
+            selectedUser = match
+        } else if let prevName = previousSelectedName,
+                  let match = users.first(where: { $0.name.caseInsensitiveCompare(prevName) == .orderedSame }) {
             selectedUser = match
         } else {
             selectedUser = users.first
         }
-    }
-
-    // MARK: - Stabile User-IDs (ohne User.swift zu ändern)
-
-    private func makeUser(name: String, groupId: String?) -> User {
-        var user = User(name: name)
-        if let gid = groupId, !gid.isEmpty {
-            user.id = deterministicUUID(forName: name, groupId: gid)
-        }
-        return user
-    }
-
-    private func deterministicUUID(forName name: String, groupId: String) -> UUID {
-        let canonicalName = name
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .lowercased()
-        let canonicalGroup = groupId.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-
-        let seed = "\(canonicalGroup)|\(canonicalName)"
-        let hash = SHA256.hash(data: Data(seed.utf8))
-        let bytes = Array(hash)
-
-        let uuidBytes: uuid_t = (
-            bytes[0], bytes[1], bytes[2], bytes[3],
-            bytes[4], bytes[5], bytes[6], bytes[7],
-            bytes[8], bytes[9], bytes[10], bytes[11],
-            bytes[12], bytes[13], bytes[14], bytes[15]
-        )
-        return UUID(uuid: uuidBytes)
     }
 
 }
