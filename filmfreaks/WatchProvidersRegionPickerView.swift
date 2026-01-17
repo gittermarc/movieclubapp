@@ -7,8 +7,6 @@
 
 internal import SwiftUI
 
-/// Länder-Picker für TMDb Watch Provider (Streaming/Rent/Buy).
-/// Speichert den ISO-3166-1 Code via @AppStorage.
 struct WatchProvidersRegionPickerView: View {
 
     @Environment(\.dismiss) private var dismiss
@@ -52,11 +50,9 @@ struct WatchProvidersRegionPickerView: View {
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Automatisch")
-                            Text("Gerät: \(WatchProvidersRegionSettings.flagEmoji(for: deviceCode)) \(WatchProvidersRegionSettings.germanDisplayName(for: deviceCode)) (")
+                            Text("Gerät: \(WatchProvidersRegionSettings.flagEmoji(for: deviceCode)) \(WatchProvidersRegionSettings.germanDisplayName(for: deviceCode)) (\(deviceCode))")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
-                                + Text(deviceCode).font(.caption.monospaced()).foregroundStyle(.secondary)
-                                + Text(")").font(.caption).foregroundStyle(.secondary)
                         }
 
                         Spacer()

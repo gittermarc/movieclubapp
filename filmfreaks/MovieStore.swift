@@ -26,19 +26,13 @@ class MovieStore: ObservableObject {
         didSet {
             if isApplyingCloudUpdate { return }
 
-            if let oldData = try? JSONEncoder().encode(oldValue),
-               let newData = try? JSONEncoder().encode(movies),
-               oldData == newData {
-                return
-            }
+            // Cheaper than JSON encoding (and avoids doing work twice).
+            if oldValue == movies { return }
 
             PersistenceManager.shared.saveMovies(movies, groupId: currentGroupId)
 
             if cloudStore != nil {
-                let oldSnapshot = oldValue
-                Task {
-                    await self.syncChanges(newList: movies, oldList: oldSnapshot, isBacklog: false)
-                }
+                enqueueCloudSync(newList: movies, oldList: oldValue, isBacklog: false)
             }
         }
     }
@@ -47,19 +41,12 @@ class MovieStore: ObservableObject {
         didSet {
             if isApplyingCloudUpdate { return }
 
-            if let oldData = try? JSONEncoder().encode(oldValue),
-               let newData = try? JSONEncoder().encode(backlogMovies),
-               oldData == newData {
-                return
-            }
+            if oldValue == backlogMovies { return }
 
             PersistenceManager.shared.saveBacklogMovies(backlogMovies, groupId: currentGroupId)
 
             if cloudStore != nil {
-                let oldSnapshot = oldValue
-                Task {
-                    await self.syncChanges(newList: backlogMovies, oldList: oldSnapshot, isBacklog: true)
-                }
+                enqueueCloudSync(newList: backlogMovies, oldList: oldValue, isBacklog: true)
             }
         }
     }
@@ -86,7 +73,15 @@ class MovieStore: ObservableObject {
 
     private let cloudStore: CloudKitMovieStore?
     private let cloudRatingStore: CloudKitRatingStore?
+
+    // ✅ must be var: we initialize it only after `self` is fully initialized
+    private var cloudSyncCoordinator: MovieCloudSyncCoordinator?
+
     private var isApplyingCloudUpdate = false
+
+    // Combined sync state (fetch + upload). We use a counter to avoid flicker.
+    private var syncCount: Int = 0
+    private var isRefreshingFromCloud: Bool = false
 
     // Throttle gegen zu viele Cloud-Fetches
     private var lastRefreshAt: Date?
@@ -98,6 +93,8 @@ class MovieStore: ObservableObject {
     private var isMigratingCast = false
 
     init(useCloud: Bool = true) {
+
+        // 1) Initialize all stored properties WITHOUT capturing `self`
         if useCloud {
             self.cloudStore = CloudKitMovieStore()
             self.cloudRatingStore = CloudKitRatingStore()
@@ -105,7 +102,9 @@ class MovieStore: ObservableObject {
             self.cloudStore = nil
             self.cloudRatingStore = nil
         }
+        self.cloudSyncCoordinator = nil
 
+        // 2) Load persisted state
         self.knownGroups = Self.loadKnownGroups()
 
         self.currentGroupId = UserDefaults.standard.string(forKey: "CurrentGroupId")
@@ -113,16 +112,27 @@ class MovieStore: ObservableObject {
 
         addOrUpdateCurrentGroupInKnownGroups()
 
+        // 3) Load local caches without triggering persistence/sync noise
+        isApplyingCloudUpdate = true
         let stored = PersistenceManager.shared.loadMovies(groupId: currentGroupId)
         self.movies = stored
 
         let backlogStored = PersistenceManager.shared.loadBacklogMovies(groupId: currentGroupId)
         self.backlogMovies = backlogStored
+        isApplyingCloudUpdate = false
 
         // ✅ Automatische Migration (lokale Daten)
         Task { await self.migrateCastDataIfNeeded() }
 
-        if useCloud {
+        // 4) Now `self` is fully initialized -> safe to capture `self` in closures
+        if useCloud, let cloudStore = self.cloudStore {
+            self.cloudSyncCoordinator = MovieCloudSyncCoordinator(
+                cloudStore: cloudStore,
+                groupIdProvider: { [weak self] in self?.currentGroupId },
+                beginSync: { [weak self] in self?.beginSync() },
+                endSync: { [weak self] in self?.endSync() }
+            )
+
             Task { await self.loadFromCloud() }
         }
     }
@@ -132,10 +142,14 @@ class MovieStore: ObservableObject {
     private func loadFromCloud() async {
         guard let cloudStore else { return }
 
+        if isRefreshingFromCloud { return }
+        isRefreshingFromCloud = true
+
         print("CloudKit: loadFromCloud() START (groupId=\(currentGroupId ?? "nil"))")
-        isSyncing = true
+        beginSync()
         defer {
-            isSyncing = false
+            endSync()
+            isRefreshingFromCloud = false
             print("CloudKit: loadFromCloud() END (groupId=\(currentGroupId ?? "nil"))")
         }
 
@@ -226,7 +240,7 @@ class MovieStore: ObservableObject {
     /// - manuelles Sync
     func refreshFromCloud(force: Bool = false) async {
         guard cloudStore != nil else { return }
-        if isSyncing { return }
+        if isRefreshingFromCloud { return }
 
         if !force, let last = lastRefreshAt, Date().timeIntervalSince(last) < minRefreshInterval {
             return
@@ -236,85 +250,63 @@ class MovieStore: ObservableObject {
         await loadFromCloud()
     }
 
+    // MARK: - Sync state helpers
+
+    private func beginSync() {
+        syncCount += 1
+        if !isSyncing { isSyncing = true }
+    }
+
+    private func endSync() {
+        syncCount = max(0, syncCount - 1)
+        let shouldSync = syncCount > 0
+        if isSyncing != shouldSync { isSyncing = shouldSync }
+    }
 
     private func initialUploadIfNeeded(using cloudStore: CloudKitMovieStore) async throws {
         print("CloudKit: initial upload starting (watched: \(movies.count), backlog: \(backlogMovies.count))")
 
-        await withTaskGroup(of: Void.self) { group in
-            for movie in movies {
-                group.addTask {
-                    do { try await cloudStore.save(movie: movie, isBacklog: false) }
-                    catch { print("CloudKit initial upload (watched) error: \(error)") }
-                }
-            }
-
-            for movie in backlogMovies {
-                group.addTask {
-                    do { try await cloudStore.save(movie: movie, isBacklog: true) }
-                    catch { print("CloudKit initial upload (backlog) error: \(error)") }
-                }
-            }
-
-            await group.waitForAll()
+        // Batch upload instead of one record per Task.
+        let items = movies.map { ($0, false) } + backlogMovies.map { ($0, true) }
+        do {
+            beginSync()
+            defer { endSync() }
+            try await cloudStore.modifyBatch(
+                saveItems: items,
+                deleteIDs: [],
+                groupIdForDeletes: currentGroupId
+            )
+        } catch {
+            // Best-effort; even if some records fail, the next refresh will reconcile.
+            print("CloudKit initial upload error: \(error)")
         }
 
         print("CloudKit: initial upload finished")
     }
 
-    // MARK: - Cloud Sync bei Änderungen
+    // MARK: - Cloud Sync bei Änderungen (debounced + batched)
 
-    private func syncChanges(newList: [Movie], oldList: [Movie], isBacklog: Bool) async {
-        guard let cloudStore else { return }
-        if isApplyingCloudUpdate {
-            print("CloudKit: syncChanges skipped (isApplyingCloudUpdate = true)")
-            return
-        }
-
-        print("CloudKit: syncChanges START (isBacklog = \(isBacklog), newCount = \(newList.count), oldCount = \(oldList.count))")
+    private func enqueueCloudSync(newList: [Movie], oldList: [Movie], isBacklog: Bool) {
+        guard let coordinator = cloudSyncCoordinator else { return }
+        if isApplyingCloudUpdate { return }
 
         let oldById = Dictionary(uniqueKeysWithValues: oldList.map { ($0.id, $0) })
         let newById = Dictionary(uniqueKeysWithValues: newList.map { ($0.id, $0) })
 
-        let oldIDs = Set(oldById.keys)
-        let newIDs = Set(newById.keys)
-
-        let removedIDs = oldIDs.subtracting(newIDs)
+        let removedIDs = Set(oldById.keys).subtracting(Set(newById.keys))
         for id in removedIDs {
-            do {
-                try await cloudStore.delete(movieID: id, groupId: self.currentGroupId)
-                print("CloudKit: deleted record for movieID \(id)")
-            } catch {
-                print("CloudKit delete error: \(error)")
-            }
+            coordinator.queueDelete(movieID: id)
         }
 
         let changedMovies: [Movie] = newList.filter { movie in
             guard let oldMovie = oldById[movie.id] else { return true }
             return !moviesEqualIgnoringRatings(oldMovie, movie)
         }
-
-        if changedMovies.isEmpty {
-            print("CloudKit: syncChanges – no changed movies to upload")
-            print("CloudKit: syncChanges END (isBacklog = \(isBacklog))")
-            return
+        for movie in changedMovies {
+            coordinator.queueSave(movie: movie, isBacklog: isBacklog)
         }
-
-        print("CloudKit: syncChanges – will upload \(changedMovies.count) movies (isBacklog = \(isBacklog))")
-
-        await withTaskGroup(of: Void.self) { group in
-            for movie in changedMovies {
-                group.addTask {
-                    do { try await cloudStore.save(movie: movie, isBacklog: isBacklog) }
-                    catch { print("CloudKit save error: \(error)") }
-                }
-            }
-            await group.waitForAll()
-        }
-
-        print("CloudKit: syncChanges END (isBacklog = \(isBacklog))")
     }
 
-    
     // MARK: - Ratings (Version B: MovieRating Records)
 
     /// Stable reviewer identity key used to merge ratings.
@@ -437,7 +429,7 @@ class MovieStore: ObservableObject {
         return true
     }
 
-// MARK: - ✅ CAST Migration (Legacy → TMDb Person IDs)
+    // MARK: - ✅ CAST Migration (Legacy → TMDb Person IDs)
 
     private func migrateCastDataIfNeeded() async {
         if isMigratingCast { return }
@@ -596,7 +588,6 @@ class MovieStore: ObservableObject {
 
         Task { await self.loadFromCloud() }
     }
-
 
     // MARK: - bekannte Gruppen verwalten
 
