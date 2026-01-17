@@ -10,6 +10,48 @@ internal import Charts
 
 extension StatsView {
 
+    // MARK: - Stable-ID bridging helpers
+
+    /// Display names of all members in the current group.
+    /// (Names are UI only; identity is handled via UUIDs elsewhere.)
+    var memberNames: [String] {
+        userStore.users
+            .map { $0.name.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+    }
+
+    /// Display names of reviewers that have at least one rating in the current filter.
+    /// Uses stable reviewerId where possible; falls back to canonical name keys.
+    var activeReviewerNamesSet: Set<String> {
+        func canon(_ s: String) -> String {
+            s.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        }
+
+        var result: Set<String> = []
+        for key in activeReviewerKeysSet {
+            if key.hasPrefix("id:") {
+                let idStr = String(key.dropFirst(3))
+                if let uuid = UUID(uuidString: idStr), let u = userStore.users.first(where: { $0.id == uuid }) {
+                    let name = u.name.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !name.isEmpty { result.insert(name) }
+                }
+                continue
+            }
+            if key.hasPrefix("name:") {
+                let nameKey = String(key.dropFirst(5))
+                if let u = userStore.users.first(where: { canon($0.name) == nameKey }) {
+                    let name = u.name.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !name.isEmpty { result.insert(name) }
+                } else if !nameKey.isEmpty {
+                    result.insert(nameKey)
+                }
+                continue
+            }
+        }
+        return result
+    }
+
     // MARK: - Cards (Top-Level)
 
     var filterCard: some View {

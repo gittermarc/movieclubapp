@@ -66,16 +66,18 @@ extension StatsView {
         let trimmed = movie.watchedLocation?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return trimmed.isEmpty ? "Ohne Angabe" : trimmed
     }
-
     // MARK: - KPIs
 
     var totalRatingsCount: Int {
         filteredMovies.reduce(0) { $0 + $1.ratings.count }
     }
 
+    /// Unique reviewers within the current filtered set.
+    /// Uses stable reviewerId where possible; falls back to matching by display name.
     var activeReviewersCount: Int {
-        let all = filteredMovies.flatMap { $0.ratings.map { $0.reviewerName } }
-        return Set(all).count
+        Set(filteredMovies.flatMap { movie in
+            movie.ratings.map { reviewerKey(for: $0) }
+        }).count
     }
 
     var ratedMoviesCount: Int {
@@ -90,41 +92,65 @@ extension StatsView {
 
     // MARK: - Group Health
 
-    var memberNames: [String] {
-        userStore.users
-            .map { $0.name.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
+    /// Stable key for a rating's reviewer.
+    /// Prefers reviewerId; otherwise tries to match by name against current members;
+    /// finally falls back to a canonical name key.
+    private func reviewerKey(for rating: Rating) -> String {
+        if let rid = rating.reviewerId {
+            return "id:\(rid.uuidString.lowercased())"
+        }
+        let canon = rating.reviewerName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if !canon.isEmpty, let match = userStore.users.first(where: {
+            $0.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == canon
+        }) {
+            return "id:\(match.id.uuidString.lowercased())"
+        }
+        return "name:\(canon)"
     }
 
-    var activeReviewerNamesSet: Set<String> {
-        let names = filteredMovies
-            .flatMap { $0.ratings.map { $0.reviewerName.trimmingCharacters(in: .whitespacesAndNewlines) } }
-            .filter { !$0.isEmpty }
-        return Set(names)
+
+    /// Members as stable keys (id + name fallback), to support both new and legacy ratings.
+    var memberKeysSet: Set<String> {
+        var set: Set<String> = []
+        for u in userStore.users {
+            set.insert("id:\(u.id.uuidString.lowercased())")
+            let nameKey = u.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            if !nameKey.isEmpty {
+                set.insert("name:\(nameKey)")
+            }
+        }
+        return set
+    }
+
+    /// Reviewers that have at least one rating in the current filtered set.
+    var activeReviewerKeysSet: Set<String> {
+        let keys = filteredMovies
+            .flatMap { $0.ratings.map { reviewerKey(for: $0) } }
+        return Set(keys)
     }
 
     var unratedMoviesCount: Int {
         max(0, filteredMovies.count - ratedMoviesCount)
     }
 
-    /// Filme, die von *allen aktiven* Mitgliedern (mind. eine Bewertung im Zeitraum) bewertet wurden.
+    /// Movies rated by all active members (active = has at least one rating in current filtered set).
     var moviesRatedByAllActiveMembersCount: Int {
-        let active = activeReviewerNamesSet
+        let active = activeReviewerKeysSet
         guard !active.isEmpty else { return 0 }
 
         return filteredMovies.filter { movie in
-            let reviewers = Set(movie.ratings.map { $0.reviewerName.trimmingCharacters(in: .whitespacesAndNewlines) })
+            let reviewers = Set(movie.ratings.map { reviewerKey(for: $0) })
             return active.isSubset(of: reviewers)
         }.count
     }
 
-    /// Filme, die von *allen Mitgliedern* (laut Member-Liste) bewertet wurden.
+    /// Movies rated by all members (from member list).
     var moviesRatedByAllMembersCount: Int {
-        let members = Set(memberNames)
+        let members = memberKeysSet
         guard !members.isEmpty else { return 0 }
 
         return filteredMovies.filter { movie in
-            let reviewers = Set(movie.ratings.map { $0.reviewerName.trimmingCharacters(in: .whitespacesAndNewlines) })
+            let reviewers = Set(movie.ratings.map { reviewerKey(for: $0) })
             return members.isSubset(of: reviewers)
         }.count
     }
@@ -346,8 +372,14 @@ extension StatsView {
         var movieIds = Set<UUID>()
         var scores: [Double] = []
 
+        let idKey = "id:\(user.id.uuidString.lowercased())"
+        let nameKey = "name:\(user.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())"
+
         for movie in filteredMovies {
-            let userRatings = movie.ratings.filter { $0.reviewerName == user.name }
+            let userRatings = movie.ratings.filter { r in
+                let k = reviewerKey(for: r)
+                return k == idKey || k == nameKey
+            }
             if !userRatings.isEmpty {
                 movieIds.insert(movie.id)
                 scores.append(contentsOf: userRatings.map { $0.averageScoreNormalizedTo10 })

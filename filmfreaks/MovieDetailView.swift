@@ -1399,7 +1399,11 @@ struct MovieDetailView: View {
         let name = selectedUser.name
 
         // ✅ Existierende Bewertung für User?
-        let existingIndex = movie.ratings.firstIndex(where: { $0.reviewerName.lowercased() == name.lowercased() })
+        let existingIndex = movie.ratings.firstIndex(where: { r in
+            if let rid = r.reviewerId { return rid == selectedUser.id }
+            return r.reviewerName.trimmingCharacters(in: .whitespacesAndNewlines)
+                .caseInsensitiveCompare(name.trimmingCharacters(in: .whitespacesAndNewlines)) == .orderedSame
+        })
         let existingRating: Rating? = existingIndex.map { movie.ratings[$0] }
 
         // ✅ Wenn keine existiert UND alles Default → kein Save
@@ -1411,6 +1415,7 @@ struct MovieDetailView: View {
         }
 
         var newRating = Rating(
+            reviewerId: selectedUser.id,
             reviewerName: name,
             scores: scores,
             comment: finalComment,
@@ -1463,7 +1468,11 @@ struct MovieDetailView: View {
             return
         }
 
-        if let rating = movie.ratings.first(where: { $0.reviewerName.lowercased() == selectedUser.name.lowercased() }) {
+        if let rating = movie.ratings.first(where: { r in
+            if let rid = r.reviewerId { return rid == selectedUser.id }
+            return r.reviewerName.trimmingCharacters(in: .whitespacesAndNewlines)
+                .caseInsensitiveCompare(selectedUser.name.trimmingCharacters(in: .whitespacesAndNewlines)) == .orderedSame
+        }) {
             var scores: [RatingCriterion: Int] = [:]
             for criterion in RatingCriterion.allCases {
                 scores[criterion] = rating.scores[criterion] ?? 0

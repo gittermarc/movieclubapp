@@ -873,8 +873,13 @@ struct ContentView: View {
         guard let user = filterByUser else {
             return true
         }
-        return movie.ratings.contains {
-            $0.reviewerName.lowercased() == user.name.lowercased()
+        return movie.ratings.contains { rating in
+            if let rid = rating.reviewerId {
+                return rid == user.id
+            }
+            // Legacy/local fallback: compare by display name
+            return rating.reviewerName.trimmingCharacters(in: .whitespacesAndNewlines)
+                .caseInsensitiveCompare(user.name.trimmingCharacters(in: .whitespacesAndNewlines)) == .orderedSame
         }
     }
 
