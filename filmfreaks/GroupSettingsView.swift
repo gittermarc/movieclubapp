@@ -63,22 +63,28 @@ struct GroupSettingsView: View {
                         .background(.thinMaterial)
                         .clipShape(Capsule())
 
-                    if let ctx = activeContext, !ctx.isShared {
-                        Button {
-                            Task {
-                                do {
-                                    let share = try await groupStore.fetchOrCreateShare(for: ctx)
-                                    shareToPresent = share
-                                } catch {
-                                    migrateError = error.localizedDescription
+                    // Alle Aktionen hinter "Optionen"
+                    Menu {
+                        if let ctx = activeContext, !ctx.isShared {
+                            Button {
+                                Task {
+                                    do {
+                                        let share = try await groupStore.fetchOrCreateShare(for: ctx)
+                                        shareToPresent = share
+                                    } catch {
+                                        migrateError = error.localizedDescription
+                                    }
                                 }
+                            } label: {
+                                Label("Gruppe teilen", systemImage: "person.2.badge.plus")
                             }
-                        } label: {
-                            Image(systemName: "person.2.badge.plus")
                         }
-                        .buttonStyle(.bordered)
-                        .accessibilityLabel("Gruppe teilen")
+                    } label: {
+                        Label("Optionen", systemImage: "ellipsis.circle")
                     }
+                    .buttonStyle(.bordered)
+                    .disabled(isPerformingGroupAction)
+                    .accessibilityLabel("Optionen")
                 }
             }
 
@@ -225,36 +231,40 @@ struct GroupSettingsView: View {
                     .padding(.vertical, 6)
                     .background(.thinMaterial)
                     .clipShape(Capsule())
-            } else {
-                Button("Wechseln") {
-                    movieStore.activateCloudGroup(group)
-                    userStore.loadUsers(forGroupId: group.id)
-                    Task {
-                        await movieStore.refreshFromCloud(force: true)
-                        await groupStore.refresh() // keep list consistent after switch
-                    }
-                }
-                .buttonStyle(.bordered)
             }
 
-            if canShare {
-                Button {
-                    Task {
-                        do {
-                            let share = try await groupStore.fetchOrCreateShare(for: group)
-                            shareToPresent = share
-                        } catch {
-                            migrateError = error.localizedDescription
-                        }
-                    }
-                } label: {
-                    Image(systemName: "person.2.badge.plus")
-                }
-                .buttonStyle(.bordered)
-                .accessibilityLabel("Gruppe teilen")
-            }
-
+            // Alles hinter "Optionen" (Wechseln, Teilen, Löschen/Verlassen)
             Menu {
+                if movieStore.currentGroupId != group.id {
+                    Button {
+                        movieStore.activateCloudGroup(group)
+                        userStore.loadUsers(forGroupId: group.id)
+                        Task {
+                            await movieStore.refreshFromCloud(force: true)
+                            await groupStore.refresh() // keep list consistent after switch
+                        }
+                    } label: {
+                        Label("Wechseln", systemImage: "arrow.triangle.2.circlepath")
+                    }
+                }
+
+                if canShare {
+                    Button {
+                        Task {
+                            do {
+                                let share = try await groupStore.fetchOrCreateShare(for: group)
+                                shareToPresent = share
+                            } catch {
+                                migrateError = error.localizedDescription
+                            }
+                        }
+                    } label: {
+                        Label("Gruppe teilen", systemImage: "person.2.badge.plus")
+                    }
+                }
+
+                Divider()
+
                 if canShare {
                     Button(role: .destructive) {
                         pendingGroupAction = PendingGroupAction(kind: .deleteOwned, group: group)
@@ -269,11 +279,11 @@ struct GroupSettingsView: View {
                     }
                 }
             } label: {
-                Image(systemName: "ellipsis.circle")
+                Label("Optionen", systemImage: "ellipsis.circle")
             }
             .buttonStyle(.bordered)
             .disabled(isPerformingGroupAction)
-            .accessibilityLabel("Aktionen")
+            .accessibilityLabel("Optionen")
         }
     }
 
