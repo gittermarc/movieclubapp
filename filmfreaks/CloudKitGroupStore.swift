@@ -93,6 +93,53 @@ final class CloudKitGroupStore: ObservableObject {
         return share
     }
 
+    // MARK: - Delete / Leave
+
+    /// Deletes an Owned group (the current user is the owner).
+    /// This removes the entire record zone in the private database (including all movies/ratings/goals/members).
+    func deleteOwnedGroup(_ group: GroupContext) async throws {
+        guard group.scope == .private else {
+            throw NSError(domain: "CloudKitGroupStore", code: 2, userInfo: [NSLocalizedDescriptionKey: "Nur Owned-Gruppen können gelöscht werden."])
+        }
+
+        let zoneID = CKRecordZone.ID(zoneName: group.zoneName, ownerName: group.ownerName)
+
+        do {
+            try await deleteRecordZone(in: privateDB, zoneID: zoneID)
+        } catch {
+            if let ck = error as? CKError, ck.code == .zoneNotFound {
+                // Already gone -> treat as success.
+            } else {
+                throw error
+            }
+        }
+
+        GroupContextStore.remove(groupId: group.id)
+        await refresh()
+    }
+
+    /// Leaves a Shared group (removes it from the user's shared database).
+    func leaveSharedGroup(_ group: GroupContext) async throws {
+        guard group.scope == .shared else {
+            throw NSError(domain: "CloudKitGroupStore", code: 3, userInfo: [NSLocalizedDescriptionKey: "Nur Shared-Gruppen können verlassen werden."])
+        }
+
+        let zoneID = CKRecordZone.ID(zoneName: group.zoneName, ownerName: group.ownerName)
+
+        do {
+            try await deleteRecordZone(in: sharedDB, zoneID: zoneID)
+        } catch {
+            if let ck = error as? CKError, ck.code == .zoneNotFound {
+                // Already gone -> treat as success.
+            } else {
+                throw error
+            }
+        }
+
+        GroupContextStore.remove(groupId: group.id)
+        await refresh()
+    }
+
     // MARK: - Private helpers
 
     /// IMPORTANT:
@@ -187,5 +234,17 @@ private func modifyRecords(database: CKDatabase, saving: [CKRecord], deleting: [
             }
         }
         database.add(op)
+    }
+}
+
+private func deleteRecordZone(in db: CKDatabase, zoneID: CKRecordZone.ID) async throws {
+    try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
+        db.delete(withRecordZoneID: zoneID) { _, error in
+            if let error {
+                cont.resume(throwing: error)
+            } else {
+                cont.resume(returning: ())
+            }
+        }
     }
 }

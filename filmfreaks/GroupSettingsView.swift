@@ -21,6 +21,9 @@ struct GroupSettingsView: View {
 
     @State private var shareToPresent: CKShare?
 
+    @State private var pendingGroupAction: PendingGroupAction?
+    @State private var isPerformingGroupAction = false
+
     // MARK: - Active group helpers
 
     private var activeContext: GroupContext? {
@@ -92,7 +95,43 @@ struct GroupSettingsView: View {
             CloudSharingControllerView(container: CKContainer.default(), share: wrapper.share)
                 .ignoresSafeArea()
         }
-        .alert("Migration fehlgeschlagen", isPresented: Binding(get: { migrateError != nil }, set: { if !$0 { migrateError = nil } })) {
+        .confirmationDialog(
+            groupActionTitle,
+            isPresented: Binding(
+                get: { pendingGroupAction != nil },
+                set: { if !$0 { pendingGroupAction = nil } }
+            )
+        ) {
+            if let action = pendingGroupAction {
+                switch action.kind {
+                case .deleteOwned:
+                    Button("Gruppe löschen", role: .destructive) {
+                        let a = action
+                        pendingGroupAction = nil
+                        Task { await executeGroupAction(a) }
+                    }
+                case .leaveShared:
+                    Button("Gruppe verlassen", role: .destructive) {
+                        let a = action
+                        pendingGroupAction = nil
+                        Task { await executeGroupAction(a) }
+                    }
+                }
+            }
+
+            Button("Abbrechen", role: .cancel) {
+                pendingGroupAction = nil
+            }
+        } message: {
+            Text(groupActionMessage)
+        }
+        .alert(
+            "Aktion fehlgeschlagen",
+            isPresented: Binding(
+                get: { migrateError != nil },
+                set: { if !$0 { migrateError = nil } }
+            )
+        ) {
             Button("OK", role: .cancel) {}
         } message: {
             Text(migrateError ?? "")
@@ -161,7 +200,7 @@ struct GroupSettingsView: View {
         } header: {
             Text("Cloud-Gruppen (neu)")
         } footer: {
-            Text("Cloud-Gruppen sind privat/shared (nicht mehr Public DB). Teilen läuft über iCloud-Einladung.")
+            Text("Owned-Gruppen kannst du löschen. Shared-Gruppen kannst du verlassen. Teilen läuft über iCloud-Einladung.")
         }
     }
 
@@ -214,6 +253,27 @@ struct GroupSettingsView: View {
                 .buttonStyle(.bordered)
                 .accessibilityLabel("Gruppe teilen")
             }
+
+            Menu {
+                if canShare {
+                    Button(role: .destructive) {
+                        pendingGroupAction = PendingGroupAction(kind: .deleteOwned, group: group)
+                    } label: {
+                        Label("Gruppe löschen", systemImage: "trash")
+                    }
+                } else {
+                    Button(role: .destructive) {
+                        pendingGroupAction = PendingGroupAction(kind: .leaveShared, group: group)
+                    } label: {
+                        Label("Gruppe verlassen", systemImage: "rectangle.portrait.and.arrow.right")
+                    }
+                }
+            } label: {
+                Image(systemName: "ellipsis.circle")
+            }
+            .buttonStyle(.bordered)
+            .disabled(isPerformingGroupAction)
+            .accessibilityLabel("Aktionen")
         }
     }
 
@@ -331,6 +391,63 @@ struct GroupSettingsView: View {
             await movieStore.refreshFromCloud(force: true)
             await userStore.refreshFromCloud(force: true)
             await groupStore.refresh()
+        } catch {
+            migrateError = error.localizedDescription
+        }
+    }
+
+    // MARK: - Delete / Leave
+
+    private enum GroupActionKind {
+        case deleteOwned
+        case leaveShared
+    }
+
+    private struct PendingGroupAction: Identifiable {
+        let id = UUID()
+        let kind: GroupActionKind
+        let group: GroupContext
+    }
+
+    private var groupActionTitle: String {
+        guard let action = pendingGroupAction else { return "" }
+        switch action.kind {
+        case .deleteOwned: return "Gruppe löschen?"
+        case .leaveShared: return "Gruppe verlassen?"
+        }
+    }
+
+    private var groupActionMessage: String {
+        guard let action = pendingGroupAction else { return "" }
+        switch action.kind {
+        case .deleteOwned:
+            return "„\(action.group.name)“ wird endgültig gelöscht (Cloud + lokaler Cache). Das kann nicht rückgängig gemacht werden."
+        case .leaveShared:
+            return "Du verlässt „\(action.group.name)“. Du kannst später nur per Einladung wieder beitreten."
+        }
+    }
+
+    private func executeGroupAction(_ action: PendingGroupAction) async {
+        guard !isPerformingGroupAction else { return }
+        isPerformingGroupAction = true
+        defer { isPerformingGroupAction = false }
+
+        do {
+            switch action.kind {
+            case .deleteOwned:
+                try await groupStore.deleteOwnedGroup(action.group)
+            case .leaveShared:
+                try await groupStore.leaveSharedGroup(action.group)
+            }
+
+            // Local cleanup
+            PersistenceManager.shared.deleteGroupData(groupId: action.group.id)
+            movieStore.knownGroups.removeAll { $0.id == action.group.id }
+
+            if movieStore.currentGroupId == action.group.id {
+                movieStore.leaveCurrentGroup()
+                userStore.loadUsers(forGroupId: nil)
+            }
         } catch {
             migrateError = error.localizedDescription
         }

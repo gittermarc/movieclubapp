@@ -80,6 +80,32 @@ final class PersistenceManager {
         read([User].self, from: fileURL(kind: .users, groupId: groupId)) ?? []
     }
 
+    /// Deletes all locally cached JSON files for a given group.
+    ///
+    /// Note: This does **not** affect CloudKit data. It only cleans up local disk persistence.
+    func deleteGroupData(groupId: String?) {
+        let gid = safeGroupFolderName(for: groupId)
+        let groupDir = baseDir
+            .appendingPathComponent("groups", isDirectory: true)
+            .appendingPathComponent(gid, isDirectory: true)
+
+        lock.lock()
+        let urlsToCancel = pendingWrites.keys.filter { $0.path.hasPrefix(groupDir.path) }
+        for url in urlsToCancel {
+            pendingWrites[url]?.cancel()
+            pendingWrites.removeValue(forKey: url)
+        }
+        lock.unlock()
+
+        do {
+            if FileManager.default.fileExists(atPath: groupDir.path) {
+                try FileManager.default.removeItem(at: groupDir)
+            }
+        } catch {
+            log.error("Delete group dir failed: \(groupDir.path, privacy: .public) – \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
     // Selected User (klein → UserDefaults bleibt ok)
 
     private let selectedUserNameKey = "FilmFreaks.selectedUserName.v1"
