@@ -16,7 +16,24 @@ final class CloudKitGoalStore {
     static let shared = CloudKitGoalStore()
 
     private let container: CKContainer
-    private var database: CKDatabase { container.publicCloudDatabase }
+
+    private func routedDatabase(forGroupId groupId: String?) -> (db: CKDatabase, zoneID: CKRecordZone.ID?) {
+        guard let gid = groupId, !gid.isEmpty, let ctx = GroupContextStore.context(forGroupId: gid) else {
+            return (container.publicCloudDatabase, nil)
+        }
+
+        let zoneID = CKRecordZone.ID(zoneName: ctx.zoneName, ownerName: ctx.ownerName)
+        let db: CKDatabase = (ctx.scope == .shared) ? container.sharedCloudDatabase : container.privateCloudDatabase
+        return (db, zoneID)
+    }
+
+    private func recordID(recordName: String, groupId: String?) -> CKRecord.ID {
+        let route = routedDatabase(forGroupId: groupId)
+        if let zoneID = route.zoneID {
+            return CKRecord.ID(recordName: recordName, zoneID: zoneID)
+        }
+        return CKRecord.ID(recordName: recordName)
+    }
 
     // Yearly goals
     private let viewingGoalRecordType = "ViewingGoal"
@@ -36,47 +53,31 @@ final class CloudKitGoalStore {
     // MARK: - Yearly goals
 
     func fetchGoals(forGroupId groupId: String?) async throws -> [Int: Int] {
+        let route = routedDatabase(forGroupId: groupId)
         let groupValue = groupId ?? ""
 
         let predicate = NSPredicate(format: "%K == %@", groupIdKey, groupValue)
         let query = CKQuery(recordType: viewingGoalRecordType, predicate: predicate)
 
+        let records = try await queryAllRecords(database: route.db, query: query, zoneID: route.zoneID)
+
         var goals: [Int: Int] = [:]
-        var cursor: CKQueryOperation.Cursor? = nil
-
-        repeat {
-            let page: (matchResults: [(CKRecord.ID, Result<CKRecord, Error>)],
-                       queryCursor: CKQueryOperation.Cursor?)
-
-            if let c = cursor {
-                page = try await database.records(continuingMatchFrom: c)
-            } else {
-                page = try await database.records(matching: query)
+        goals.reserveCapacity(records.count)
+        for record in records {
+            let year = record[yearKey] as? Int ?? 0
+            let target = record[targetKey] as? Int ?? 0
+            if year > 0 && target > 0 {
+                goals[year] = target
             }
-
-            cursor = page.queryCursor
-
-            for (_, recordResult) in page.matchResults {
-                switch recordResult {
-                case .success(let record):
-                    let year = record[yearKey] as? Int ?? 0
-                    let target = record[targetKey] as? Int ?? 0
-                    if year > 0 && target > 0 {
-                        goals[year] = target
-                    }
-                case .failure(let error):
-                    print("CloudKitGoalStore fetchGoals error: \(error)")
-                }
-            }
-        } while cursor != nil
-
+        }
         return goals
     }
 
     func saveGoal(year: Int, target: Int, groupId: String?) async throws {
+        let route = routedDatabase(forGroupId: groupId)
         let groupValue = groupId ?? ""
         let recordName = "goal_\(groupValue)_\(year)"
-        let recordID = CKRecord.ID(recordName: recordName)
+        let recordID = self.recordID(recordName: recordName, groupId: groupId)
 
         func applyFields(on record: CKRecord) -> CKRecord {
             record[groupIdKey] = groupValue as CKRecordValue
@@ -89,13 +90,13 @@ final class CloudKitGoalStore {
         do {
             let baseRecord: CKRecord
             do {
-                baseRecord = try await database.record(for: recordID)
+                baseRecord = try await route.db.record(for: recordID)
             } catch {
                 baseRecord = CKRecord(recordType: viewingGoalRecordType, recordID: recordID)
             }
 
             let recordToSave = applyFields(on: baseRecord)
-            _ = try await database.save(recordToSave)
+            _ = try await route.db.save(recordToSave)
 
         } catch {
             throw error
@@ -107,14 +108,15 @@ final class CloudKitGoalStore {
     private func customGoalsRecordID(for groupId: String?) -> CKRecord.ID {
         let groupValue = groupId ?? ""
         let suffix = groupValue.isEmpty ? "default" : groupValue
-        return CKRecord.ID(recordName: "customGoals_\(suffix)")
+        return recordID(recordName: "customGoals_\(suffix)", groupId: groupId)
     }
 
     func fetchCustomGoals(forGroupId groupId: String?) async throws -> ViewingCustomGoalsPayload {
+        let route = routedDatabase(forGroupId: groupId)
         let recordID = customGoalsRecordID(for: groupId)
 
         do {
-            let record = try await database.record(for: recordID)
+            let record = try await route.db.record(for: recordID)
             if let data = record[payloadKey] as? Data {
                 do {
                     return try JSONDecoder().decode(ViewingCustomGoalsPayload.self, from: data)
@@ -135,6 +137,7 @@ final class CloudKitGoalStore {
     }
 
     func saveCustomGoals(_ payload: ViewingCustomGoalsPayload, groupId: String?) async throws {
+        let route = routedDatabase(forGroupId: groupId)
         let recordID = customGoalsRecordID(for: groupId)
 
         func applyFields(on record: CKRecord) throws -> CKRecord {
@@ -147,13 +150,13 @@ final class CloudKitGoalStore {
         do {
             let baseRecord: CKRecord
             do {
-                baseRecord = try await database.record(for: recordID)
+                baseRecord = try await route.db.record(for: recordID)
             } catch {
                 baseRecord = CKRecord(recordType: customGoalsRecordType, recordID: recordID)
             }
 
             let recordToSave = try applyFields(on: baseRecord)
-            _ = try await database.save(recordToSave)
+            _ = try await route.db.save(recordToSave)
 
         } catch {
             // Konflikt: Server hat inzwischen eine andere Version
@@ -164,7 +167,7 @@ final class CloudKitGoalStore {
                 let updatedRecord = try applyFields(on: serverRecord)
 
                 do {
-                    _ = try await database.save(updatedRecord)
+                    _ = try await route.db.save(updatedRecord)
                 } catch {
                     if let second = error as? CKError, second.code == .serverRecordChanged {
                         // Server-Version gewinnt – akzeptieren
@@ -220,5 +223,46 @@ final class CloudKitGoalStore {
             out.append(g)
         }
         return out
+    }
+}
+
+// MARK: - Zone-aware query helper
+
+private func queryAllRecords(database: CKDatabase, query: CKQuery, zoneID: CKRecordZone.ID?) async throws -> [CKRecord] {
+    try await withCheckedThrowingContinuation { cont in
+        var collected: [CKRecord] = []
+
+        func run(cursor: CKQueryOperation.Cursor?) {
+            let op: CKQueryOperation
+            if let cursor {
+                op = CKQueryOperation(cursor: cursor)
+            } else {
+                op = CKQueryOperation(query: query)
+                op.zoneID = zoneID
+            }
+
+            op.recordMatchedBlock = { _, result in
+                if case .success(let record) = result {
+                    collected.append(record)
+                }
+            }
+
+            op.queryResultBlock = { result in
+                switch result {
+                case .success(let nextCursor):
+                    if let nextCursor {
+                        run(cursor: nextCursor)
+                    } else {
+                        cont.resume(returning: collected)
+                    }
+                case .failure(let error):
+                    cont.resume(throwing: error)
+                }
+            }
+
+            database.add(op)
+        }
+
+        run(cursor: nil)
     }
 }

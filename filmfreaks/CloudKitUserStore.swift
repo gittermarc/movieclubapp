@@ -23,7 +23,14 @@ import CloudKit
 struct CloudKitUserStore {
 
     private let container: CKContainer
-    private var database: CKDatabase { container.publicCloudDatabase }
+    private func routedDatabase(forGroupId groupId: String) -> (db: CKDatabase, zoneID: CKRecordZone.ID?) {
+        guard let ctx = GroupContextStore.context(forGroupId: groupId) else {
+            return (container.publicCloudDatabase, nil)
+        }
+        let zoneID = CKRecordZone.ID(zoneName: ctx.zoneName, ownerName: ctx.ownerName)
+        let db: CKDatabase = (ctx.scope == .shared) ? container.sharedCloudDatabase : container.privateCloudDatabase
+        return (db, zoneID)
+    }
 
     private let recordType = "GroupMember"
     private let groupIdKey = "groupId"
@@ -41,44 +48,35 @@ struct CloudKitUserStore {
             .lowercased()
     }
 
-    private func recordID(groupId: String, name: String) -> CKRecord.ID {
+    private func recordID(groupId: String, name: String, zoneID: CKRecordZone.ID?) -> CKRecord.ID {
         let canonical = Self.canonicalName(name)
-        return CKRecord.ID(recordName: "\(groupId)|\(canonical)")
+        let recordName = "\(groupId)|\(canonical)"
+        if let zoneID { return CKRecord.ID(recordName: recordName, zoneID: zoneID) }
+        return CKRecord.ID(recordName: recordName)
     }
 
     // MARK: - Fetch
 
     func fetchMembers(forGroupId groupId: String) async throws -> [String] {
+        let route = routedDatabase(forGroupId: groupId)
         let predicate = NSPredicate(format: "%K == %@", groupIdKey, groupId)
         let query = CKQuery(recordType: recordType, predicate: predicate)
 
+        let records: [CKRecord]
+        if let zoneID = route.zoneID {
+            records = try await queryAllRecords(database: route.db, query: query, zoneID: zoneID)
+        } else {
+            records = try await queryAllRecords(database: route.db, query: query, zoneID: nil)
+        }
+
         var names: [String] = []
-        var cursor: CKQueryOperation.Cursor? = nil
-
-        repeat {
-            let result: ([(CKRecord.ID, Result<CKRecord, any Error>)], CKQueryOperation.Cursor?)
-            if let c = cursor {
-                result = try await database.records(continuingMatchFrom: c)
-            } else {
-                result = try await database.records(matching: query)
+        names.reserveCapacity(records.count)
+        for record in records {
+            if let name = record[nameKey] as? String {
+                let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty { names.append(trimmed) }
             }
-            let (matchResults, newCursor) = result
-            cursor = newCursor
-
-            for (_, recordResult) in matchResults {
-                switch recordResult {
-                case .success(let record):
-                    if let name = record[nameKey] as? String {
-                        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-                        if !trimmed.isEmpty {
-                            names.append(trimmed)
-                        }
-                    }
-                case .failure(let error):
-                    print("CloudKitUserStore fetch error: \(error)")
-                }
-            }
-        } while cursor != nil
+        }
 
         // Dedupe + stable sort
         let unique = Array(Set(names.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }))
@@ -88,10 +86,11 @@ struct CloudKitUserStore {
     // MARK: - Upsert
 
     func upsertMember(name: String, groupId: String) async throws {
+        let route = routedDatabase(forGroupId: groupId)
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
 
-        let recordID = recordID(groupId: groupId, name: trimmed)
+        let recordID = recordID(groupId: groupId, name: trimmed, zoneID: route.zoneID)
 
         func applyFields(on record: CKRecord) -> CKRecord {
             record[groupIdKey] = groupId as CKRecordValue
@@ -103,18 +102,18 @@ struct CloudKitUserStore {
         do {
             let baseRecord: CKRecord
             do {
-                baseRecord = try await database.record(for: recordID)
+                baseRecord = try await route.db.record(for: recordID)
             } catch {
                 baseRecord = CKRecord(recordType: recordType, recordID: recordID)
             }
-            _ = try await database.save(applyFields(on: baseRecord))
+            _ = try await route.db.save(applyFields(on: baseRecord))
         } catch {
             if let ckError = error as? CKError,
                ckError.code == .serverRecordChanged,
                let serverRecord = ckError.userInfo[CKRecordChangedErrorServerRecordKey] as? CKRecord {
                 // Server-Version als Basis nehmen – wir wollen zumindest sicherstellen,
                 // dass groupId/name korrekt gesetzt sind.
-                _ = try await database.save(applyFields(on: serverRecord))
+                _ = try await route.db.save(applyFields(on: serverRecord))
                 return
             }
             throw error
@@ -124,10 +123,52 @@ struct CloudKitUserStore {
     // MARK: - Delete
 
     func deleteMember(name: String, groupId: String) async throws {
+        let route = routedDatabase(forGroupId: groupId)
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
 
-        let recordID = recordID(groupId: groupId, name: trimmed)
-        _ = try await database.deleteRecord(withID: recordID)
+        let recordID = recordID(groupId: groupId, name: trimmed, zoneID: route.zoneID)
+        _ = try await route.db.deleteRecord(withID: recordID)
+    }
+}
+
+// MARK: - Zone-aware query helper
+
+private func queryAllRecords(database: CKDatabase, query: CKQuery, zoneID: CKRecordZone.ID?) async throws -> [CKRecord] {
+    try await withCheckedThrowingContinuation { cont in
+        var collected: [CKRecord] = []
+
+        func run(cursor: CKQueryOperation.Cursor?) {
+            let op: CKQueryOperation
+            if let cursor {
+                op = CKQueryOperation(cursor: cursor)
+            } else {
+                op = CKQueryOperation(query: query)
+                op.zoneID = zoneID
+            }
+
+            op.recordMatchedBlock = { _, result in
+                if case .success(let record) = result {
+                    collected.append(record)
+                }
+            }
+
+            op.queryResultBlock = { result in
+                switch result {
+                case .success(let nextCursor):
+                    if let nextCursor {
+                        run(cursor: nextCursor)
+                    } else {
+                        cont.resume(returning: collected)
+                    }
+                case .failure(let error):
+                    cont.resume(throwing: error)
+                }
+            }
+
+            database.add(op)
+        }
+
+        run(cursor: nil)
     }
 }

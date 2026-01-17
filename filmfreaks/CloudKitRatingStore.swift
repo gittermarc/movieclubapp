@@ -17,9 +17,14 @@ struct CloudKitRatingStore {
 
     private let container: CKContainer
 
-    /// Public Database, damit alle Gruppenmitglieder Ratings lesen können.
-    private var database: CKDatabase {
-        container.publicCloudDatabase
+    private func routedDatabase(forGroupId groupId: String?) -> (db: CKDatabase, zoneID: CKRecordZone.ID?) {
+        guard let gid = groupId, !gid.isEmpty, let ctx = GroupContextStore.context(forGroupId: gid) else {
+            return (container.publicCloudDatabase, nil)
+        }
+
+        let zoneID = CKRecordZone.ID(zoneName: ctx.zoneName, ownerName: ctx.ownerName)
+        let db: CKDatabase = (ctx.scope == .shared) ? container.sharedCloudDatabase : container.privateCloudDatabase
+        return (db, zoneID)
     }
 
     init(container: CKContainer = .default()) {
@@ -52,7 +57,9 @@ struct CloudKitRatingStore {
     // MARK: - Save / Delete
 
     func saveRating(_ rating: Rating, movieId: UUID, groupId: String?) async throws {
-        let id = recordID(groupId: groupId, movieId: movieId, reviewerName: rating.reviewerName)
+        let route = routedDatabase(forGroupId: groupId)
+        let baseID = recordID(groupId: groupId, movieId: movieId, reviewerName: rating.reviewerName)
+        let id = route.zoneID.map { CKRecord.ID(recordName: baseID.recordName, zoneID: $0) } ?? baseID
 
         func applyFields(on record: CKRecord) throws -> CKRecord {
             let data = try JSONEncoder().encode(rating)
@@ -71,13 +78,13 @@ struct CloudKitRatingStore {
         do {
             let base: CKRecord
             do {
-                base = try await database.record(for: id)
+                base = try await route.db.record(for: id)
             } catch {
                 base = CKRecord(recordType: recordType, recordID: id)
             }
 
             let recordToSave = try applyFields(on: base)
-            _ = try await database.save(recordToSave)
+            _ = try await route.db.save(recordToSave)
 
         } catch {
             // Konflikte sind hier selten (ein Record pro User), aber wir behandeln sie robust.
@@ -86,7 +93,7 @@ struct CloudKitRatingStore {
                let serverRecord = ckError.userInfo[CKRecordChangedErrorServerRecordKey] as? CKRecord {
 
                 let updated = try applyFields(on: serverRecord)
-                _ = try await database.save(updated)
+                _ = try await route.db.save(updated)
                 return
             }
             throw error
@@ -94,8 +101,10 @@ struct CloudKitRatingStore {
     }
 
     func deleteRating(movieId: UUID, groupId: String?, reviewerName: String) async throws {
-        let id = recordID(groupId: groupId, movieId: movieId, reviewerName: reviewerName)
-        _ = try await database.deleteRecord(withID: id)
+        let route = routedDatabase(forGroupId: groupId)
+        let baseID = recordID(groupId: groupId, movieId: movieId, reviewerName: reviewerName)
+        let id = route.zoneID.map { CKRecord.ID(recordName: baseID.recordName, zoneID: $0) } ?? baseID
+        _ = try await route.db.deleteRecord(withID: id)
     }
 
     // MARK: - Fetch
@@ -103,6 +112,8 @@ struct CloudKitRatingStore {
     /// Lädt alle Ratings für eine Gruppe (und optional gefiltert auf Movie-IDs).
     /// Rückgabe: [movieUUID: [Rating]]
     func fetchRatings(forGroupId groupId: String?, movieIds: [UUID]? = nil) async throws -> [UUID: [Rating]] {
+        let route = routedDatabase(forGroupId: groupId)
+
         var predicate: NSPredicate
 
         if let gid = groupId, !gid.isEmpty {
@@ -114,15 +125,15 @@ struct CloudKitRatingStore {
 
         // Optional zusätzlich auf Movie-IDs filtern (in Chunks, weil IN-Listen begrenzt sein können)
         if let movieIds, !movieIds.isEmpty {
-            let all = try await fetchRatingsChunked(groupPredicate: predicate, movieIds: movieIds)
+            let all = try await fetchRatingsChunked(database: route.db, zoneID: route.zoneID, groupPredicate: predicate, movieIds: movieIds)
             return all
         } else {
-            let records = try await fetchRecords(predicate: predicate)
+            let records = try await fetchRecords(database: route.db, zoneID: route.zoneID, predicate: predicate)
             return try decode(records: records)
         }
     }
 
-    private func fetchRatingsChunked(groupPredicate: NSPredicate, movieIds: [UUID]) async throws -> [UUID: [Rating]] {
+    private func fetchRatingsChunked(database: CKDatabase, zoneID: CKRecordZone.ID?, groupPredicate: NSPredicate, movieIds: [UUID]) async throws -> [UUID: [Rating]] {
         var merged: [UUID: [Rating]] = [:]
         let chunkSize = 100
 
@@ -135,7 +146,7 @@ struct CloudKitRatingStore {
                 NSPredicate(format: "%K IN %@", movieIdKey, Array(chunk))
             ])
 
-            let records = try await fetchRecords(predicate: chunkPredicate)
+            let records = try await fetchRecords(database: database, zoneID: zoneID, predicate: chunkPredicate)
             let decoded = try decode(records: records)
             merged = merge(dictA: merged, dictB: decoded)
 
@@ -145,37 +156,11 @@ struct CloudKitRatingStore {
         return merged
     }
 
-    private func fetchRecords(predicate: NSPredicate) async throws -> [CKRecord] {
+    private func fetchRecords(database: CKDatabase, zoneID: CKRecordZone.ID?, predicate: NSPredicate) async throws -> [CKRecord] {
         let query = CKQuery(recordType: recordType, predicate: predicate)
         query.sortDescriptors = [NSSortDescriptor(key: updatedAtKey, ascending: false)]
 
-        var collected: [CKRecord] = []
-        var cursor: CKQueryOperation.Cursor? = nil
-
-        repeat {
-            // Dein SDK liefert hier ein Array von Tupeln + Cursor zurück (siehe CloudKitMovieStore).
-            let result: ([(CKRecord.ID, Result<CKRecord, any Error>)], CKQueryOperation.Cursor?)
-
-            if let c = cursor {
-                result = try await database.records(continuingMatchFrom: c)
-            } else {
-                result = try await database.records(matching: query)
-            }
-
-            let (matchResults, newCursor) = result
-            cursor = newCursor
-
-            for (_, recordResult) in matchResults {
-                switch recordResult {
-                case .success(let record):
-                    collected.append(record)
-                case .failure(let error):
-                    print("CloudKit rating fetch error for record: \(error)")
-                }
-            }
-        } while cursor != nil
-
-        return collected
+        return try await queryAllRecords(database: database, query: query, zoneID: zoneID)
     }
 
     private func decode(records: [CKRecord]) throws -> [UUID: [Rating]] {
@@ -231,5 +216,46 @@ struct CloudKitRatingStore {
             }
         }
         return out
+    }
+}
+
+// MARK: - Zone-aware query helper
+
+private func queryAllRecords(database: CKDatabase, query: CKQuery, zoneID: CKRecordZone.ID?) async throws -> [CKRecord] {
+    try await withCheckedThrowingContinuation { cont in
+        var collected: [CKRecord] = []
+
+        func run(cursor: CKQueryOperation.Cursor?) {
+            let op: CKQueryOperation
+            if let cursor {
+                op = CKQueryOperation(cursor: cursor)
+            } else {
+                op = CKQueryOperation(query: query)
+                op.zoneID = zoneID
+            }
+
+            op.recordMatchedBlock = { _, result in
+                if case .success(let record) = result {
+                    collected.append(record)
+                }
+            }
+
+            op.queryResultBlock = { result in
+                switch result {
+                case .success(let nextCursor):
+                    if let nextCursor {
+                        run(cursor: nextCursor)
+                    } else {
+                        cont.resume(returning: collected)
+                    }
+                case .failure(let error):
+                    cont.resume(throwing: error)
+                }
+            }
+
+            database.add(op)
+        }
+
+        run(cursor: nil)
     }
 }

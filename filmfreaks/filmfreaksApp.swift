@@ -10,6 +10,8 @@ import Foundation
 
 @main
 struct filmfreaksApp: App {
+    @UIApplicationDelegateAdaptor(CloudKitShareAppDelegate.self) private var appDelegate
+
     init() {
         // Make HTTP caching for images much more effective across app launches.
         let memory = 100 * 1024 * 1024  // 100 MB
@@ -19,6 +21,7 @@ struct filmfreaksApp: App {
 
     @StateObject var movieStore = MovieStore(useCloud: true)
     @StateObject var userStore = UserStore()
+    @StateObject var groupStore = CloudKitGroupStore()
 
     @Environment(\.scenePhase) private var scenePhase
 
@@ -30,6 +33,7 @@ struct filmfreaksApp: App {
                 ContentView()
                     .environmentObject(movieStore)
                     .environmentObject(userStore)
+                    .environmentObject(groupStore)
 
                 if showSplash {
                     SplashView {
@@ -47,6 +51,7 @@ struct filmfreaksApp: App {
                 // Wenn die App wieder aktiv wird: Cloud-Daten nachziehen.
                 // (Ohne Subscriptions ist das der einfachste Weg, damit Bewertungen/Filme anderer Geräte sichtbar werden.)
                 Task {
+                    await groupStore.refresh()
                     await movieStore.refreshFromCloud(force: false)
                     await userStore.refreshFromCloud(force: false)
                 }

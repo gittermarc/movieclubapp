@@ -281,7 +281,7 @@ class MovieStore: ObservableObject {
         let removedIDs = oldIDs.subtracting(newIDs)
         for id in removedIDs {
             do {
-                try await cloudStore.delete(movieID: id)
+                try await cloudStore.delete(movieID: id, groupId: self.currentGroupId)
                 print("CloudKit: deleted record for movieID \(id)")
             } catch {
                 print("CloudKit delete error: \(error)")
@@ -514,6 +514,18 @@ class MovieStore: ObservableObject {
         // Erst lokal (schnell), danach Cloud (Autorität)
         loadLocalCache(for: code)
 
+        addOrUpdateCurrentGroupInKnownGroups()
+
+        Task { await self.loadFromCloud() }
+    }
+
+    /// Aktiviert eine CloudKit-Sharing Gruppe (private/shared DB) als aktuelle Gruppe.
+    func activateCloudGroup(_ group: GroupContext) {
+        currentGroupId = group.id
+        currentGroupName = group.name
+
+        // Erst lokal (schnell), danach Cloud (Autorität)
+        loadLocalCache(for: group.id)
         addOrUpdateCurrentGroupInKnownGroups()
 
         Task { await self.loadFromCloud() }
