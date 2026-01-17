@@ -15,7 +15,7 @@ struct MovieDetailView: View {
     @EnvironmentObject var movieStore: MovieStore
     @Environment(\.dismiss) private var dismiss
 
-    // ✅ NEU: User-Setting für Watch Providers Region (Land)
+    // Watch Providers Region (Land)
     @AppStorage(WatchProvidersRegionSettings.storageKey)
     private var watchProvidersRegionCode: String = WatchProvidersRegionSettings.deviceRegionCode()
 
@@ -28,18 +28,16 @@ struct MovieDetailView: View {
     @State private var localComment: String = ""
     @State private var localFazitScore: Int? = nil
 
-    // TMDb-Details
+    // TMDb Details
     @State private var details: TMDbMovieDetails?
     @State private var isLoadingDetails = false
     @State private var detailsError: String?
 
-    // ✅ NEU: Streaming-Anbieter (Watch Providers)
-    @State private var watchProviders: [TMDbWatchProvider] = []
+    // Streaming-Anbieter (Watch Providers)
     @State private var watchProvidersCountry: TMDbWatchProvidersCountry? = nil
     @State private var watchProvidersLink: URL? = nil
     @State private var isLoadingWatchProviders: Bool = false
     @State private var didLoadWatchProviders: Bool = false
-
     @State private var showWatchProvidersRegionPicker: Bool = false
 
     /// Effektives Land für Watch Providers (leer == automatisch/Device)
@@ -52,22 +50,22 @@ struct MovieDetailView: View {
         watchProvidersRegionCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    // ✅ NEU: Aufklapp-Status der Einzelbewertungen
+    // Aufklapp-Status der Einzelbewertungen
     @State private var expandedRatingIds: Set<UUID> = []
 
-    // ✅ Quick Win: Overview expand
+    // Overview expand
     @State private var isOverviewExpanded = false
 
-    // ✅ Quick Win: Cast klickbar
+    // Cast klickbar
     @State private var selectedPerson: SelectedPerson?
 
-    // ✅ Quick Win: Save-UX (nicht bei jedem Tap speichern)
+    // Save-UX
     @State private var hasPendingRatingChanges = false
 
-    // ✅ Trailer Fallback: In-App (SFSafariViewController)
+    // Trailer Fallback: In-App (SFSafariViewController)
     @State private var isTrailerSafariShown = false
 
-    // ✅ NEU: Save-Toast
+    // Save-Toast
     @State private var showSaveToast = false
     @State private var saveToastText = "Bewertung gespeichert"
     @State private var toastDismissWorkItem: DispatchWorkItem?
@@ -95,12 +93,10 @@ struct MovieDetailView: View {
         ?? []
     }
 
-    // ✅ Trailer: wir arbeiten mit Key (für watch-url)
     private var trailerVideo: TMDbVideo? {
         guard let videos = details?.videos?.results else { return nil }
         let youtube = videos.filter { $0.site.lowercased() == "youtube" }
 
-        // erst Trailer, dann Teaser als Fallback
         if let trailer = youtube.first(where: { $0.type.lowercased() == "trailer" }) { return trailer }
         if let teaser = youtube.first(where: { $0.type.lowercased() == "teaser" }) { return teaser }
         return youtube.first
@@ -152,7 +148,6 @@ struct MovieDetailView: View {
     private var originalTitleText: String? {
         let o = (details?.original_title ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         guard !o.isEmpty else { return nil }
-        // Nur anzeigen, wenn er sich sinnvoll unterscheidet
         if o.caseInsensitiveCompare(details?.title ?? "") == .orderedSame { return nil }
         if o.caseInsensitiveCompare(movie.title) == .orderedSame { return nil }
         return o
@@ -161,7 +156,6 @@ struct MovieDetailView: View {
     private var originalLanguageText: String? {
         let code = (details?.original_language ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         guard !code.isEmpty else { return nil }
-        // Deutsche Anzeige, falls möglich
         let locale = Locale(identifier: "de_DE")
         return locale.localizedString(forLanguageCode: code)?.capitalized ?? code.uppercased()
     }
@@ -191,11 +185,10 @@ struct MovieDetailView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
 
-                    // ✅ Quick Win: Hero-Header (blurred Poster Background)
-                    heroHeader
+                    MovieDetailHeroHeaderView(movie: movie)
 
                     // Titel & Basisinfos
-                    section {
+                    MovieDetailSectionCard {
                         VStack(alignment: .leading, spacing: 8) {
                             Text(movie.title)
                                 .font(.title2.bold())
@@ -209,7 +202,6 @@ struct MovieDetailView: View {
                                     .fixedSize(horizontal: false, vertical: true)
                             }
 
-                            // ✅ Release + Originaltitel/Sprache (Quick Win #2)
                             VStack(alignment: .leading, spacing: 4) {
                                 Text("Jahr: \(movie.year)")
                                     .font(.subheadline)
@@ -246,9 +238,9 @@ struct MovieDetailView: View {
                         }
                     }
 
-                    // ✅ NEU: Streaming-Anbieter vor Handlung
+                    // Watch Providers
                     if isLoadingWatchProviders {
-                        section(title: "Film ist verfügbar bei:") {
+                        MovieDetailSectionCard(title: "Film ist verfügbar bei:") {
                             HStack(spacing: 10) {
                                 ProgressView()
                                 Text("Suche Streaming-Anbieter …")
@@ -257,7 +249,7 @@ struct MovieDetailView: View {
                             }
                         }
                     } else if didLoadWatchProviders {
-                        section(title: "Film ist verfügbar bei:") {
+                        MovieDetailSectionCard(title: "Film ist verfügbar bei:") {
                             if let country = watchProvidersCountry,
                                !country.bestEffortProviders.isEmpty {
                                 WatchProvidersAvailabilityView(country: country, link: watchProvidersLink)
@@ -272,9 +264,9 @@ struct MovieDetailView: View {
                         }
                     }
 
-                    // ✅ Quick Win #1: Handlung/Overview (mit „Mehr anzeigen“)
+                    // Handlung
                     if let overviewText {
-                        section(title: "Handlung") {
+                        MovieDetailSectionCard(title: "Handlung") {
                             VStack(alignment: .leading, spacing: 10) {
                                 Text(overviewText)
                                     .font(.subheadline)
@@ -302,118 +294,23 @@ struct MovieDetailView: View {
                         }
                     }
 
-                    // ✅ Gesehen / Ort / Vorgeschlagen von (und Backlog-CTA)
-                    section(title: isBacklog ? "Backlog" : "Gesehen") {
-                        VStack(alignment: .leading, spacing: 12) {
-
-                            if isBacklog {
-                                Text("Dieser Film ist noch im Backlog.")
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
-
-                                Button {
-                                    markAsWatched()
-                                } label: {
-                                    HStack {
-                                        Image(systemName: "checkmark.circle.fill")
-                                        Text("Als gesehen markieren")
-                                    }
-                                    .font(.subheadline.weight(.semibold))
-                                    .padding(.horizontal, 12)
-                                    .padding(.vertical, 10)
-                                    .frame(maxWidth: .infinity)
-                                    .background(Color.green.opacity(0.18))
-                                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                                }
-                                .buttonStyle(.plain)
-                            } else {
-                                DatePicker(
-                                    "Gesehen am",
-                                    selection: $localWatchedDate,
-                                    displayedComponents: .date
-                                )
-                                .datePickerStyle(.compact)
-                            }
-
-                            // Ort
-                            HStack {
-                                Text("Ort")
-                                    .font(.subheadline.weight(.semibold))
-                                Spacer()
-
-                                Menu {
-                                    Button {
-                                        localWatchedLocation = ""
-                                    } label: {
-                                        Label("Ohne Angabe", systemImage: localWatchedLocation.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "checkmark" : "")
-                                    }
-
-                                    Divider()
-
-                                    ForEach(locationOptions, id: \.self) { loc in
-                                        Button {
-                                            localWatchedLocation = loc
-                                        } label: {
-                                            Label(loc, systemImage: localWatchedLocation == loc ? "checkmark" : "")
-                                        }
-                                    }
-                                } label: {
-                                    HStack(spacing: 6) {
-                                        Text(localWatchedLocation.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Ohne Angabe" : localWatchedLocation)
-                                            .font(.caption)
-                                        Image(systemName: "chevron.up.chevron.down")
-                                            .font(.caption2)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                    .padding(.horizontal, 10)
-                                    .padding(.vertical, 6)
-                                    .background(Color.gray.opacity(0.12))
-                                    .clipShape(Capsule())
-                                }
-                            }
-
-                            // Vorgeschlagen von
-                            HStack {
-                                Text("Vorgeschlagen von")
-                                    .font(.subheadline.weight(.semibold))
-                                Spacer()
-
-                                Menu {
-                                    Button {
-                                        localSuggestedBy = ""
-                                    } label: {
-                                        Label("Ohne Angabe", systemImage: localSuggestedBy.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "checkmark" : "")
-                                    }
-
-                                    Divider()
-
-                                    ForEach(suggestedByOptions, id: \.self) { name in
-                                        Button {
-                                            localSuggestedBy = name
-                                        } label: {
-                                            Label(name, systemImage: localSuggestedBy == name ? "checkmark" : "")
-                                        }
-                                    }
-                                } label: {
-                                    HStack(spacing: 6) {
-                                        Text(localSuggestedBy.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Ohne Angabe" : localSuggestedBy)
-                                            .font(.caption)
-                                        Image(systemName: "chevron.up.chevron.down")
-                                            .font(.caption2)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                    .padding(.horizontal, 10)
-                                    .padding(.vertical, 6)
-                                    .background(Color.gray.opacity(0.12))
-                                    .clipShape(Capsule())
-                                }
-                            }
+                    // Gesehen / Ort / Vorgeschlagen von
+                    MovieDetailSectionCard(title: isBacklog ? "Backlog" : "Gesehen") {
+                        MovieDetailWatchedSectionView(
+                            isBacklog: isBacklog,
+                            localWatchedDate: $localWatchedDate,
+                            localWatchedLocation: $localWatchedLocation,
+                            localSuggestedBy: $localSuggestedBy,
+                            locationOptions: locationOptions,
+                            suggestedByOptions: suggestedByOptions
+                        ) {
+                            markAsWatched()
                         }
                     }
 
-                    // TMDb Infos
+                    // TMDb Loading/Error
                     if isLoadingDetails {
-                        section {
+                        MovieDetailSectionCard {
                             HStack {
                                 ProgressView()
                                 Text("Lade zusätzliche Infos …")
@@ -423,13 +320,14 @@ struct MovieDetailView: View {
                     }
 
                     if let error = detailsError {
-                        section {
+                        MovieDetailSectionCard {
                             Text(error)
                                 .font(.caption)
                                 .foregroundStyle(.red)
                         }
                     }
 
+                    // Infos
                     if runtimeText != nil
                         || director != nil
                         || !castList.isEmpty
@@ -437,190 +335,41 @@ struct MovieDetailView: View {
                         || trailerKey != nil
                         || !genreNames.isEmpty {
 
-                        section(title: "Infos zum Film") {
-                            VStack(alignment: .leading, spacing: 10) {
-
-                                if let runtimeText {
-                                    Text("Laufzeit: \(runtimeText)")
-                                        .font(.subheadline)
-                                        .foregroundStyle(.secondary)
-                                }
-
-                                if !genreNames.isEmpty {
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text("Genre")
-                                            .font(.subheadline).bold()
-
-                                        LazyVGrid(
-                                            columns: [GridItem(.adaptive(minimum: 80), spacing: 8)],
-                                            alignment: .leading,
-                                            spacing: 8
-                                        ) {
-                                            ForEach(genreNames, id: \.self) { genre in
-                                                Text(genre)
-                                                    .font(.caption)
-                                                    .padding(.horizontal, 10)
-                                                    .padding(.vertical, 6)
-                                                    .background(Color.blue.opacity(0.1))
-                                                    .foregroundStyle(.primary)
-                                                    .clipShape(Capsule())
-                                            }
-                                        }
-                                    }
-                                }
-
-                                if let director {
-                                    HStack(alignment: .firstTextBaseline, spacing: 4) {
-                                        Text("Regie:")
-                                            .font(.subheadline).bold()
-                                        Text(director)
-                                            .font(.subheadline)
-                                    }
-                                }
-
-                                // ✅ Quick Win #4: Cast klickbar (✅ Sheet im Style der StatsView)
-                                if !castList.isEmpty {
-                                    VStack(alignment: .leading, spacing: 8) {
-                                        Text("Hauptdarsteller")
-                                            .font(.subheadline).bold()
-
-                                        ZStack(alignment: .trailing) {
-                                            ScrollView(.horizontal, showsIndicators: false) {
-                                                HStack(spacing: 8) {
-                                                    ForEach(castList, id: \.id) { person in
-                                                        Button {
-                                                            selectedPerson = SelectedPerson(
-                                                                id: person.id,
-                                                                name: person.name,
-                                                                subtitle: person.character
-                                                            )
-                                                        } label: {
-                                                            HStack(alignment: .center, spacing: 8) {
-                                                                castAvatar(profilePath: person.profile_path)
-
-                                                                VStack(alignment: .leading, spacing: 2) {
-                                                                    Text(person.name)
-                                                                        .font(.caption.weight(.semibold))
-                                                                        .foregroundStyle(.primary)
-                                                                        .lineLimit(1)
-
-                                                                    if let role = person.character?.trimmingCharacters(in: .whitespacesAndNewlines),
-                                                                       !role.isEmpty {
-                                                                        Text(role)
-                                                                            .font(.caption2)
-                                                                            .foregroundStyle(.secondary)
-                                                                            .lineLimit(1)
-                                                                    }
-                                                                }
-                                                            }
-                                                            .padding(.horizontal, 10)
-                                                            .padding(.vertical, 8)
-                                                            .background(Color.blue.opacity(0.12))
-                                                            .clipShape(RoundedRectangle(cornerRadius: 12))
-                                                        }
-                                                        .buttonStyle(.plain)
-                                                    }
-                                                }
-                                            }
-                                            if castList.count >= 9 {
-                                                LinearGradient(
-                                                    colors: [
-                                                        Color(.secondarySystemBackground),
-                                                        Color(.secondarySystemBackground).opacity(0.0)
-                                                    ],
-                                                    startPoint: .trailing,
-                                                    endPoint: .leading
-                                                )
-                                                .frame(width: 28)
-                                                .allowsHitTesting(false)
-                                            }
-                                        }
-                                    }
-                                }
-
-                                if let keywordsText {
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text("Schlüsselwörter")
-                                            .font(.subheadline).bold()
-                                        Text(keywordsText)
-                                            .font(.subheadline)
-                                    }
-                                }
-
-                                // ✅ Trailer: Inline-Embed deaktiviert (zu oft „Video nicht verfügbar“ in WKWebView).
-                                if let key = trailerKey {
-                                    trailerInlineBlock(videoId: key)
-                                }
-                            }
+                        MovieDetailSectionCard(title: "Infos zum Film") {
+                            MovieDetailFilmInfoSectionView(
+                                movie: movie,
+                                runtimeText: runtimeText,
+                                genreNames: genreNames,
+                                director: director,
+                                castList: castList,
+                                keywordsText: keywordsText,
+                                trailerKey: trailerKey,
+                                trailerWatchURL: trailerWatchURL,
+                                selectedPerson: $selectedPerson,
+                                isTrailerSafariShown: $isTrailerSafariShown
+                            )
                         }
                     }
 
-                    // ✅ Rating Eingabe
-                    section(title: "Bewertung") {
-                        if userStore.selectedUser == nil {
-                            Text("Bitte wähle oben in der App eine Person aus, um zu bewerten.")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                        } else {
-                            VStack(alignment: .leading, spacing: 12) {
-                                ForEach(RatingCriterion.allCases) { criterion in
-                                    ratingRow(for: criterion)
-                                }
-
-                                fazitRow()
-
-                                VStack(alignment: .leading, spacing: 6) {
-                                    Text("Kommentar (optional)")
-                                        .font(.subheadline.weight(.semibold))
-
-                                    TextEditor(text: $localComment)
-                                        .frame(minHeight: 80)
-                                        .padding(8)
-                                        .background(Color.gray.opacity(0.10))
-                                        .clipShape(RoundedRectangle(cornerRadius: 10))
-                                        .onChange(of: localComment) { _, _ in
-                                            hasPendingRatingChanges = true
-                                        }
-                                }
-
-                                if hasPendingRatingChanges {
-                                    Text("Änderungen noch nicht gespeichert.")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-
-                                Button {
-                                    saveRating()
-                                } label: {
-                                    HStack {
-                                        Image(systemName: "square.and.arrow.down")
-                                        Text(hasPendingRatingChanges ? "Änderungen speichern" : "Bewertung speichern")
-                                    }
-                                    .font(.subheadline.weight(.semibold))
-                                    .padding(.horizontal, 12)
-                                    .padding(.vertical, 10)
-                                    .frame(maxWidth: .infinity)
-                                    .background(Color.blue.opacity(0.16))
-                                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                                }
-                                .buttonStyle(.plain)
-                            }
+                    // Bewertung Eingabe
+                    MovieDetailSectionCard(title: "Bewertung") {
+                        MovieDetailRatingInputSection(
+                            hasSelectedUser: userStore.selectedUser != nil,
+                            localScores: $localScores,
+                            localComment: $localComment,
+                            localFazitScore: $localFazitScore,
+                            hasPendingRatingChanges: $hasPendingRatingChanges
+                        ) {
+                            saveRating()
                         }
                     }
 
-                    // ✅ Kompakt: Einzelbewertungen (Ø/10 + Kommentar; Kriterien erst bei Tap)
-                    section(title: "Einzelbewertungen") {
-                        if sortedRatings.isEmpty {
-                            Text("Noch keine Bewertungen vorhanden.")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                        } else {
-                            VStack(alignment: .leading, spacing: 10) {
-                                ForEach(sortedRatings) { rating in
-                                    ratingSummaryCardCompact(rating)
-                                }
-                            }
-                        }
+                    // Einzelbewertungen
+                    MovieDetailSectionCard(title: "Einzelbewertungen") {
+                        MovieDetailRatingsListSection(
+                            ratings: sortedRatings,
+                            expandedRatingIds: $expandedRatingIds
+                        )
                     }
 
                     Spacer()
@@ -668,27 +417,7 @@ struct MovieDetailView: View {
                 WatchProvidersRegionPickerView()
             }
         }
-        .onAppear {
-            // Onboarding: zählt, wie oft die Detailansicht geöffnet wurde (pro Gruppe)
-            OnboardingProgress.incrementDetailOpenCount(forGroupId: movie.groupId ?? movieStore.currentGroupId)
-
-            if let existing = movie.watchedDate {
-                localWatchedDate = existing
-            } else {
-                localWatchedDate = Date()
-                if !isBacklog {
-                    movie.watchedDate = localWatchedDate
-                }
-            }
-
-            localWatchedLocation = movie.watchedLocation ?? ""
-            localSuggestedBy = movie.suggestedBy ?? ""
-            loadExistingRatingForSelectedUser()
-
-            if movie.tmdbId != nil {
-                Task { await loadDetails() }
-            }
-        }
+        .onAppear { handleOnAppear() }
         .onChange(of: localWatchedDate) { _, newDate in
             guard !isBacklog else { return }
             if movie.watchedDate != newDate {
@@ -719,6 +448,28 @@ struct MovieDetailView: View {
         }
     }
 
+    private func handleOnAppear() {
+        // Onboarding: zählt, wie oft die Detailansicht geöffnet wurde (pro Gruppe)
+        OnboardingProgress.incrementDetailOpenCount(forGroupId: movie.groupId ?? movieStore.currentGroupId)
+
+        if let existing = movie.watchedDate {
+            localWatchedDate = existing
+        } else {
+            localWatchedDate = Date()
+            if !isBacklog {
+                movie.watchedDate = localWatchedDate
+            }
+        }
+
+        localWatchedLocation = movie.watchedLocation ?? ""
+        localSuggestedBy = movie.suggestedBy ?? ""
+        loadExistingRatingForSelectedUser()
+
+        if movie.tmdbId != nil {
+            Task { await loadDetails() }
+        }
+    }
+
     // MARK: - Toast UI
 
     private var saveToastView: some View {
@@ -741,7 +492,6 @@ struct MovieDetailView: View {
 
     private func presentSaveToast(_ text: String = "Bewertung gespeichert") {
         saveToastText = text
-
         toastDismissWorkItem?.cancel()
 
         withAnimation(.spring(response: 0.35, dampingFraction: 0.9)) {
@@ -771,564 +521,9 @@ struct MovieDetailView: View {
         gen.notificationOccurred(.warning)
     }
 
-    // MARK: - Trailer Block (ohne Embed)
-
-    @ViewBuilder
-    private func trailerInlineBlock(videoId: String) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Trailer")
-                .font(.subheadline).bold()
-
-            if trailerWatchURL != nil {
-                Button {
-                    isTrailerSafariShown = true
-                } label: {
-                    ZStack {
-                        // Preview: Poster (kein Backdrop vorhanden)
-                        Group {
-                            if let url = movie.posterURL {
-                                CachedAsyncImage(url: url) { phase in
-                                    switch phase {
-                                    case .empty:
-                                        Rectangle().foregroundStyle(.gray.opacity(0.15))
-                                    case .success(let image):
-                                        image
-                                            .resizable()
-                                            .scaledToFill()
-                                    case .failure:
-                                        Rectangle().foregroundStyle(.gray.opacity(0.15))
-                                    @unknown default:
-                                        Rectangle().foregroundStyle(.gray.opacity(0.15))
-                                    }
-                                }
-                            } else {
-                                Rectangle().foregroundStyle(.gray.opacity(0.15))
-                            }
-                        }
-                        .frame(maxWidth: .infinity)
-                        .aspectRatio(16.0/9.0, contentMode: .fit)
-                        .clipped()
-                        .overlay(
-                            LinearGradient(
-                                colors: [
-                                    Color.black.opacity(0.25),
-                                    Color.black.opacity(0.55)
-                                ],
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
-                        )
-                        .clipShape(RoundedRectangle(cornerRadius: 14))
-
-                        // Play-Overlay
-                        HStack(spacing: 10) {
-                            Image(systemName: "play.circle.fill")
-                                .font(.system(size: 42, weight: .semibold))
-                            Text("Trailer abspielen")
-                                .font(.headline.weight(.semibold))
-                        }
-                        .foregroundStyle(.white)
-                        .shadow(color: .black.opacity(0.25), radius: 10, x: 0, y: 4)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 10)
-                        .background(Color.black.opacity(0.25))
-                        .clipShape(RoundedRectangle(cornerRadius: 14))
-                    }
-                }
-                .buttonStyle(.plain)
-
-                HStack(spacing: 10) {
-                    Button {
-                        isTrailerSafariShown = true
-                    } label: {
-                        HStack(spacing: 6) {
-                            Image(systemName: "safari.fill")
-                            Text("In App öffnen")
-                        }
-                        .font(.subheadline.weight(.semibold))
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 8)
-                        .background(Color.orange.opacity(0.14))
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
-                    }
-                    .buttonStyle(.plain)
-
-                    if let trailerWatchURL {
-                        Link(destination: trailerWatchURL) {
-                            HStack(spacing: 6) {
-                                Image(systemName: "arrow.up.right.square")
-                                Text("In YouTube öffnen")
-                            }
-                            .font(.subheadline.weight(.semibold))
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 8)
-                            .background(Color.blue.opacity(0.12))
-                            .clipShape(RoundedRectangle(cornerRadius: 10))
-                        }
-                    }
-                }
-
-            } else {
-                Text("Trailer nicht verfügbar.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-
-            // ✅ Datenschutzhinweis (unaufdringlich, aber klar)
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Datenschutz")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-
-                Text("Beim Abspielen wird ein YouTube-Video geöffnet. Dabei kann eine Verbindung zu YouTube/Google hergestellt und personenbezogene Daten (z. B. IP-Adresse) übertragen werden.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                Link(destination: URL(string: "https://policies.google.com/privacy")!) {
-                    Text("Google/YouTube Datenschutzerklärung öffnen")
-                        .font(.caption.weight(.semibold))
-                }
-            }
-            .padding(.top, 2)
-        }
-        .padding(.top, 4)
-    }
-
-    // MARK: - Hero Header
-
-    private var heroHeader: some View {
-        ZStack(alignment: .bottomLeading) {
-
-            // Background (blurred)
-            Group {
-                if let url = movie.posterURL {
-                    CachedAsyncImage(url: url) { phase in
-                        switch phase {
-                        case .empty:
-                            Rectangle().foregroundStyle(.gray.opacity(0.15))
-                        case .success(let image):
-                            image
-                                .resizable()
-                                .scaledToFill()
-                        case .failure:
-                            Rectangle().foregroundStyle(.gray.opacity(0.15))
-                        @unknown default:
-                            Rectangle().foregroundStyle(.gray.opacity(0.15))
-                        }
-                    }
-                } else {
-                    Rectangle().foregroundStyle(.gray.opacity(0.15))
-                }
-            }
-            .frame(height: 320)
-            .clipped()
-            .blur(radius: 18)
-            .overlay(
-                LinearGradient(
-                    colors: [
-                        Color.black.opacity(0.55),
-                        Color.black.opacity(0.15),
-                        Color.black.opacity(0.55)
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 18))
-
-            // Foreground Poster Card
-            HStack(alignment: .bottom, spacing: 14) {
-                Group {
-                    if let url = movie.posterURL {
-                        CachedAsyncImage(url: url) { phase in
-                            switch phase {
-                            case .empty:
-                                ZStack {
-                                    RoundedRectangle(cornerRadius: 14).foregroundStyle(.gray.opacity(0.25))
-                                    ProgressView()
-                                }
-                            case .success(let image):
-                                image
-                                    .resizable()
-                                    .scaledToFill()
-                            case .failure:
-                                placeholderPoster
-                            @unknown default:
-                                placeholderPoster
-                            }
-                        }
-                    } else {
-                        placeholderPoster
-                    }
-                }
-                .frame(width: 120, height: 180)
-                .clipShape(RoundedRectangle(cornerRadius: 14))
-                .shadow(color: Color.black.opacity(0.25), radius: 10, x: 0, y: 6)
-
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(movie.title)
-                        .font(.headline.weight(.bold))
-                        .foregroundStyle(.white)
-                        .lineLimit(2)
-
-                    Text(movie.year)
-                        .font(.subheadline)
-                        .foregroundStyle(.white.opacity(0.85))
-
-                    if let tmdb = movie.tmdbRating {
-                        HStack(spacing: 6) {
-                            Image(systemName: "star.fill")
-                            Text(String(format: "%.1f / 10", tmdb))
-                        }
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.white.opacity(0.9))
-                    }
-
-                    Spacer(minLength: 0)
-                }
-                .padding(.bottom, 6)
-
-                Spacer()
-            }
-            .padding(16)
-        }
-    }
-
-    // MARK: - Rating UI (Eingabe)
-
-    @ViewBuilder
-    private func ratingRow(for criterion: RatingCriterion) -> some View {
-        let current = localScores[criterion] ?? 0
-
-        VStack(alignment: .leading, spacing: 6) {
-            Text(criterion.rawValue)
-                .font(.subheadline.weight(.semibold))
-
-            HStack(spacing: 10) {
-                Button {
-                    localScores[criterion] = 0
-                    hasPendingRatingChanges = true
-                } label: {
-                    Text("–")
-                        .font(.title3.weight(.semibold))
-                        .foregroundStyle(current == 0 ? Color.primary : Color.secondary)
-                        .frame(width: 20)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("\(criterion.rawValue) nicht bewertet")
-
-                ForEach(1...3, id: \.self) { value in
-                    Button {
-                        localScores[criterion] = value
-                        hasPendingRatingChanges = true
-                    } label: {
-                        Image(systemName: value <= current ? "star.fill" : "star")
-                            .font(.title3)
-                            .foregroundStyle(value <= current ? Color.yellow : Color.secondary)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("\(criterion.rawValue) \(value) von 3")
-                }
-
-                Spacer()
-
-                Text(current == 0 ? "– / 3" : "\(current) / 3")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        }
-
-        .padding(10)
-        .background(Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-    }
-
-    // MARK: - Fazit UI (1–10, separat)
-
-    @ViewBuilder
-    private func fazitRow() -> some View {
-        let current = localFazitScore
-
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Fazit (optional)")
-                .font(.subheadline.weight(.semibold))
-
-            HStack(spacing: 10) {
-                Button {
-                    localFazitScore = nil
-                    hasPendingRatingChanges = true
-                } label: {
-                    Text("–")
-                        .font(.title3.weight(.semibold))
-                        .foregroundStyle(current == nil ? Color.primary : Color.secondary)
-                        .frame(width: 20)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Fazit nicht vergeben")
-
-                HStack(spacing: 4) {
-                    ForEach(1...10, id: \.self) { value in
-                        Button {
-                            localFazitScore = value
-                            hasPendingRatingChanges = true
-                        } label: {
-                            RoundedRectangle(cornerRadius: 3)
-                                .fill(colorForFazit(value).opacity(fazitOpacity(for: value, current: current)))
-                                .frame(width: 18, height: 18)
-                                .overlay {
-                                    RoundedRectangle(cornerRadius: 3)
-                                        .stroke(Color.primary.opacity(0.06), lineWidth: 1)
-                                }
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("Fazit \(value) von 10")
-                    }
-                }
-
-                Spacer()
-
-                Text(current == nil ? "– / 10" : "\(current!) / 10")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .padding(10)
-        .background(Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-    }
-
-    private func fazitOpacity(for value: Int, current: Int?) -> Double {
-        guard let current else { return 0.22 }
-        return value <= current ? 1.0 : 0.12
-    }
-
-    private func colorForFazit(_ value: Int) -> Color {
-        // Linear von Rot (1) nach Grün (10)
-        let clamped = min(10, max(1, value))
-        let t = Double(clamped - 1) / 9.0
-        let r = 1.0 - t
-        let g = 0.15 + (0.85 * t)
-        return Color(red: r, green: g, blue: 0.0)
-    }
-
-    // MARK: - Einzelbewertungen (kompakt + aufklappbar)
-
-    private func isExpandedBinding(for rating: Rating) -> Binding<Bool> {
-        Binding(
-            get: { expandedRatingIds.contains(rating.id) },
-            set: { newValue in
-                if newValue {
-                    expandedRatingIds.insert(rating.id)
-                } else {
-                    expandedRatingIds.remove(rating.id)
-                }
-            }
-        )
-    }
-
-    @ViewBuilder
-    private func ratingSummaryCardCompact(_ rating: Rating) -> some View {
-        let comment = (rating.comment ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let hasComment = !comment.isEmpty
-
-        DisclosureGroup(isExpanded: isExpandedBinding(for: rating)) {
-            // Inhalt: Kriterien + voller Kommentar (nur wenn expanded)
-            VStack(alignment: .leading, spacing: 10) {
-
-                VStack(alignment: .leading, spacing: 6) {
-
-                    // Fazit (separat, 1–10)
-                    HStack(spacing: 8) {
-                        Text("Fazit")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .frame(width: 90, alignment: .leading)
-
-                        if let f = rating.fazitScore {
-                            Text("Fazit \(f) / 10")
-                                .font(.caption2.weight(.semibold))
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(colorForFazit(f).opacity(0.18))
-                                .clipShape(Capsule())
-                        } else {
-                            Text("Fazit –")
-                                .font(.caption2.weight(.semibold))
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(Color.gray.opacity(0.12))
-                                .clipShape(Capsule())
-                        }
-
-                        Spacer()
-                    }
-
-                    ForEach(RatingCriterion.allCases) { criterion in
-                        let score = rating.scores[criterion] ?? 0
-                        HStack(spacing: 8) {
-                            Text(criterion.rawValue)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .frame(width: 90, alignment: .leading)
-
-                            starsView(score: score)
-
-                            Spacer()
-
-                            Text(score == 0 ? "–" : "\(score)/3")
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-
-                if hasComment {
-                    Text(comment)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .padding(.top, 8)
-        } label: {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(alignment: .firstTextBaseline) {
-                    Text(rating.reviewerName)
-                        .font(.subheadline.weight(.semibold))
-
-                    Spacer()
-
-                    HStack(spacing: 8) {
-                        Text(String(format: "%.1f / 10", rating.averageScoreNormalizedTo10))
-                            .font(.caption.weight(.semibold))
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(Color.blue.opacity(0.12))
-                            .clipShape(Capsule())
-
-                        if let f = rating.fazitScore {
-                            Text("Fazit \(f)/10")
-                                .font(.caption.weight(.semibold))
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(colorForFazit(f).opacity(0.18))
-                                .clipShape(Capsule())
-                        } else {
-                            Text("Fazit –")
-                                .font(.caption.weight(.semibold))
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(Color.gray.opacity(0.10))
-                                .clipShape(Capsule())
-                        }
-                    }
-                }
-
-                if hasComment {
-                    Text(comment)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                }
-            }
-        }
-        .padding(10)
-        .background(Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-    }
-
-    @ViewBuilder
-    private func starsView(score: Int) -> some View {
-        HStack(spacing: 6) {
-            Text("–")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .opacity(score == 0 ? 1 : 0)
-                .frame(width: 10, alignment: .leading)
-
-            HStack(spacing: 3) {
-                ForEach(1...3, id: \.self) { idx in
-                    Image(systemName: idx <= score ? "star.fill" : "star")
-                        .font(.caption)
-                        .foregroundStyle(idx <= score ? Color.yellow : Color.secondary)
-                }
-            }
-        }
-    }
-
-    // MARK: - Helper Views / Funktionen
-
-    @ViewBuilder
-    private func castAvatar(profilePath: String?) -> some View {
-        let size: CGFloat = 34
-
-        if let path = profilePath,
-           let url = URL(string: "https://image.tmdb.org/t/p/w92\(path)") {
-            CachedAsyncImage(url: url) { phase in
-                switch phase {
-                case .empty:
-                    ZStack {
-                        Circle().foregroundStyle(.gray.opacity(0.18))
-                        ProgressView().scaleEffect(0.75)
-                    }
-
-                case .success(let image):
-                    image
-                        .resizable()
-                        .scaledToFill()
-
-                case .failure:
-                    ZStack {
-                        Circle().foregroundStyle(.gray.opacity(0.18))
-                        Image(systemName: "person.fill")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                    }
-
-                @unknown default:
-                    ZStack {
-                        Circle().foregroundStyle(.gray.opacity(0.18))
-                        Image(systemName: "person.fill")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            }
-            .frame(width: size, height: size)
-            .clipShape(Circle())
-            .overlay(
-                Circle().stroke(Color.primary.opacity(0.08), lineWidth: 1)
-            )
-        } else {
-            ZStack {
-                Circle().foregroundStyle(.gray.opacity(0.18))
-                Image(systemName: "person.fill")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-            }
-            .frame(width: size, height: size)
-            .overlay(
-                Circle().stroke(Color.primary.opacity(0.08), lineWidth: 1)
-            )
-        }
-    }
-
-    private var placeholderPoster: some View {
-        Rectangle()
-            .foregroundStyle(.gray.opacity(0.2))
-            .overlay {
-                VStack {
-                    Image(systemName: "film")
-                        .font(.largeTitle)
-                    Text("Kein Poster verfügbar")
-                        .font(.subheadline)
-                }
-                .foregroundStyle(.secondary)
-            }
-    }
+    // MARK: - Options
 
     private var locationOptions: [String] {
-        // Feste Orte (immer verfügbar) + Mitglieder
-        // Hinweis: Wir vermeiden Duplikate, falls ein Mitglied zufällig genauso heißt.
         var options: [String] = []
 
         func appendUnique(_ value: String) {
@@ -1339,11 +534,9 @@ struct MovieDetailView: View {
             }
         }
 
-        // Immer anbieten:
         appendUnique("Heimkino")
         appendUnique("Kino")
 
-        // Danach Mitglieder
         for name in userStore.users.map({ $0.name }) {
             appendUnique(name)
         }
@@ -1354,6 +547,8 @@ struct MovieDetailView: View {
     private var suggestedByOptions: [String] {
         userStore.users.map { $0.name }
     }
+
+    // MARK: - Rating Helpers
 
     private func normalizedScoresFromLocal() -> [RatingCriterion: Int] {
         var scores: [RatingCriterion: Int] = [:]
@@ -1373,23 +568,6 @@ struct MovieDetailView: View {
         return allZero && comment == nil && fazit == nil
     }
 
-    private func ratingPayloadEquals(existing: Rating, scores: [RatingCriterion: Int], comment: String?, fazit: Int?) -> Bool {
-        // scores vergleichen (für alle Kriterien)
-        for criterion in RatingCriterion.allCases {
-            let a = existing.scores[criterion] ?? 0
-            let b = scores[criterion] ?? 0
-            if a != b { return false }
-        }
-
-        let existingComment = (existing.comment ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let normalizedExistingComment: String? = existingComment.isEmpty ? nil : existingComment
-
-        if normalizedExistingComment != comment { return false }
-        if existing.fazitScore != fazit { return false }
-
-        return true
-    }
-
     private func saveRating() {
         guard let selectedUser = userStore.selectedUser else { return }
 
@@ -1398,7 +576,6 @@ struct MovieDetailView: View {
         let fazit = localFazitScore
         let name = selectedUser.name
 
-        // ✅ Existierende Bewertung für User?
         let existingIndex = movie.ratings.firstIndex(where: { r in
             if let rid = r.reviewerId { return rid == selectedUser.id }
             return r.reviewerName.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1406,7 +583,6 @@ struct MovieDetailView: View {
         })
         let existingRating: Rating? = existingIndex.map { movie.ratings[$0] }
 
-        // ✅ Wenn keine existiert UND alles Default → kein Save
         if existingRating == nil, isAllDefault(scores: scores, comment: finalComment, fazit: fazit) {
             hasPendingRatingChanges = false
             hapticWarning()
@@ -1422,7 +598,6 @@ struct MovieDetailView: View {
             fazitScore: fazit
         )
 
-        // ✅ Wenn existiert: Stabiler ID-Transfer + No-Op Check
         if let index = existingIndex {
             let old = movie.ratings[index]
             newRating.id = old.id
@@ -1442,11 +617,9 @@ struct MovieDetailView: View {
             }
         }
 
-        // ✅ CloudKit Version B: Rating separat speichern (MovieRating Record)
         Task {
             let ok = await movieStore.upsertRating(for: movie.id, rating: newRating)
 
-            // ✅ Änderungen sind jetzt explizit gespeichert (lokal); Cloud kann trotzdem failen.
             hasPendingRatingChanges = false
 
             if ok {
@@ -1490,9 +663,10 @@ struct MovieDetailView: View {
             localFazitScore = nil
         }
 
-        // ✅ frisch geladen => nix pending
         hasPendingRatingChanges = false
     }
+
+    // MARK: - Backlog
 
     private func markAsWatched() {
         if let index = movieStore.backlogMovies.firstIndex(where: { $0.id == movie.id }) {
@@ -1507,43 +681,17 @@ struct MovieDetailView: View {
         dismiss()
     }
 
-    private func section<Content: View>(
-        @ViewBuilder content: () -> Content
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 8) { content() }
-            .padding()
-            .background(
-                RoundedRectangle(cornerRadius: 14)
-                    .fill(Color(.secondarySystemBackground))
-            )
-            .shadow(color: Color.black.opacity(0.03), radius: 3, x: 0, y: 1)
-    }
-
-    private func section<Content: View>(
-        title: String,
-        @ViewBuilder content: () -> Content
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title).font(.headline)
-            content()
-        }
-        .padding()
-        .background(
-            RoundedRectangle(cornerRadius: 14)
-                .fill(Color(.secondarySystemBackground))
-        )
-        .shadow(color: Color.black.opacity(0.03), radius: 3, x: 0, y: 1)
-    }
+    // MARK: - TMDb Load
 
     private func loadDetails() async {
         guard let id = movie.tmdbId else { return }
+
         await MainActor.run {
             isLoadingDetails = true
             detailsError = nil
 
             isLoadingWatchProviders = true
             didLoadWatchProviders = false
-            watchProviders = []
             watchProvidersCountry = nil
             watchProvidersLink = nil
         }
@@ -1571,7 +719,7 @@ struct MovieDetailView: View {
 
                 let keywordIds = fetched.keywords?.allKeywords.map { $0.id }
 
-                // ✅ Cast als {personId, name} persistieren
+                // Cast als {personId, name} persistieren
                 let castMembers = fetched.credits?.cast
                     .prefix(30)
                     .map {
@@ -1582,7 +730,7 @@ struct MovieDetailView: View {
                     }
                     .filter { !$0.name.isEmpty }
 
-                // ✅ Directors als {personId, name} persistieren (für Director-Goals)
+                // Directors als {personId, name} persistieren (für Director-Goals)
                 let directorMembers = fetched.credits?.crew
                     .filter { ($0.job ?? "").lowercased() == "director" }
                     .map {
@@ -1616,14 +764,14 @@ struct MovieDetailView: View {
                 if let directorMembers, !directorMembers.isEmpty {
                     self.movie.directors = directorMembers
                 }
+
                 self.movie.tmdbRating = fetched.vote_average
                 if let posterPath = fetched.poster_path {
                     self.movie.posterPath = posterPath
                 }
 
-                // ✅ Watch Providers
+                // Watch Providers
                 self.watchProvidersCountry = providersCountry
-                self.watchProviders = providersCountry?.bestEffortProviders ?? []
                 if let linkString = providersCountry?.link {
                     self.watchProvidersLink = URL(string: linkString)
                 } else {
@@ -1634,7 +782,6 @@ struct MovieDetailView: View {
 
                 self.isLoadingDetails = false
             }
-
         } catch TMDbError.missingAPIKey {
             await MainActor.run {
                 self.detailsError = "TMDb API-Key fehlt. Bitte TMDB_API_KEY in der Info.plist setzen."
@@ -1660,7 +807,6 @@ struct MovieDetailView: View {
         await MainActor.run {
             isLoadingWatchProviders = true
             didLoadWatchProviders = false
-            watchProviders = []
             watchProvidersCountry = nil
             watchProvidersLink = nil
         }
@@ -1671,8 +817,6 @@ struct MovieDetailView: View {
 
             await MainActor.run {
                 self.watchProvidersCountry = providersCountry
-                self.watchProviders = providersCountry?.bestEffortProviders ?? []
-
                 if let linkString = providersCountry?.link {
                     self.watchProvidersLink = URL(string: linkString)
                 } else {
@@ -1686,244 +830,6 @@ struct MovieDetailView: View {
             await MainActor.run {
                 self.isLoadingWatchProviders = false
                 self.didLoadWatchProviders = true
-            }
-        }
-    }
-}
-
-// MARK: - Cast Sheet Helper
-
-private struct SelectedPerson: Identifiable {
-    let id: Int
-    let name: String
-    let subtitle: String?
-}
-
-// MARK: - Person Detail Sheet (Style angelehnt an StatsView)
-
-private struct TMDbPersonDetailSheet: View {
-    let personId: Int
-    let fallbackName: String
-    let roleOrCharacter: String?
-
-    @Environment(\.dismiss) private var dismiss
-
-    @State private var isLoading: Bool = false
-    @State private var errorText: String? = nil
-    @State private var details: TMDbPersonDetails? = nil
-    @State private var isBioExpanded: Bool = false
-
-    private var biographyText: String? {
-        let t = (details?.biography ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        return t.isEmpty ? nil : t
-    }
-
-    private var roleText: String? {
-        let t = (roleOrCharacter ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        return t.isEmpty ? nil : t
-    }
-
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-
-                    if isLoading {
-                        HStack(spacing: 8) {
-                            ProgressView()
-                            Text("Lade Personendaten …")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                        }
-                        .frame(maxWidth: .infinity, alignment: .center)
-                        .padding(.top, 40)
-
-                    } else if let errorText {
-                        Text(errorText)
-                            .font(.subheadline)
-                            .foregroundStyle(.red)
-                            .padding(.top, 40)
-
-                    } else if let details {
-
-                        // Bild (✅ Option A: nix abschneiden)
-                        if let path = details.profile_path,
-                           let url = URL(string: "https://image.tmdb.org/t/p/w500\(path)") {
-                            CachedAsyncImage(url: url) { phase in
-                                switch phase {
-                                case .empty:
-                                    Rectangle()
-                                        .foregroundStyle(.gray.opacity(0.2))
-                                        .frame(maxWidth: .infinity)
-                                        .frame(height: 260)
-
-                                case .success(let image):
-                                    image
-                                        .resizable()
-                                        .scaledToFit()
-                                        .frame(maxWidth: .infinity)
-                                        .frame(height: 260)
-                                        .background(Color.gray.opacity(0.08))
-
-                                case .failure:
-                                    Rectangle()
-                                        .foregroundStyle(.gray.opacity(0.2))
-                                        .frame(maxWidth: .infinity)
-                                        .frame(height: 260)
-                                        .overlay {
-                                            Image(systemName: "person.crop.rectangle")
-                                                .font(.largeTitle)
-                                                .foregroundStyle(.secondary)
-                                        }
-
-                                @unknown default:
-                                    Rectangle()
-                                        .foregroundStyle(.gray.opacity(0.2))
-                                        .frame(maxWidth: .infinity)
-                                        .frame(height: 260)
-                                }
-                            }
-                            .clipShape(RoundedRectangle(cornerRadius: 18))
-                        }
-
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text(details.name)
-                                .font(.title2.bold())
-
-                            if let roleText {
-                                Text(roleText)
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
-                            }
-
-                            if let dept = details.known_for_department,
-                               !dept.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                Text(dept)
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
-                            }
-
-                            HStack(spacing: 10) {
-                                if let birthday = details.birthday, !birthday.isEmpty {
-                                    Label(birthday, systemImage: "gift.fill")
-                                        .font(.caption)
-                                        .padding(.horizontal, 8)
-                                        .padding(.vertical, 4)
-                                        .background(Color.gray.opacity(0.12))
-                                        .clipShape(Capsule())
-                                }
-
-                                if let place = details.place_of_birth, !place.isEmpty {
-                                    Label(place, systemImage: "mappin.and.ellipse")
-                                        .font(.caption)
-                                        .padding(.horizontal, 8)
-                                        .padding(.vertical, 4)
-                                        .background(Color.gray.opacity(0.12))
-                                        .clipShape(Capsule())
-                                }
-
-                                if let popularity = details.popularity {
-                                    Label(String(format: "Popularity %.1f", popularity),
-                                          systemImage: "sparkles")
-                                        .font(.caption)
-                                        .padding(.horizontal, 8)
-                                        .padding(.vertical, 4)
-                                        .background(Color.yellow.opacity(0.15))
-                                        .clipShape(Capsule())
-                                }
-                            }
-                        }
-
-                        if let aliases = details.also_known_as, !aliases.isEmpty {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Auch bekannt als")
-                                    .font(.subheadline.weight(.semibold))
-                                Text(aliases.joined(separator: ", "))
-                                    .font(.footnote)
-                                    .foregroundStyle(.secondary)
-                            }
-                            .padding(.top, 6)
-                        }
-
-                        VStack(alignment: .leading, spacing: 10) {
-                            Text("Biografie")
-                                .font(.headline)
-
-                            if let biographyText {
-                                Text(biographyText)
-                                    .font(.subheadline)
-                                    .lineLimit(isBioExpanded ? nil : 10)
-                                    .fixedSize(horizontal: false, vertical: true)
-
-                                Button {
-                                    withAnimation(.easeInOut(duration: 0.2)) {
-                                        isBioExpanded.toggle()
-                                    }
-                                } label: {
-                                    HStack(spacing: 6) {
-                                        Text(isBioExpanded ? "Weniger anzeigen" : "Mehr anzeigen")
-                                        Image(systemName: isBioExpanded ? "chevron.up" : "chevron.down")
-                                    }
-                                    .font(.subheadline.weight(.semibold))
-                                    .padding(.horizontal, 10)
-                                    .padding(.vertical, 8)
-                                    .background(Color.gray.opacity(0.12))
-                                    .clipShape(RoundedRectangle(cornerRadius: 10))
-                                }
-                                .buttonStyle(.plain)
-                            } else {
-                                Text("Keine Biografie verfügbar.")
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                        .padding(.top, 6)
-
-                    } else {
-                        // „Fallback“ Zustand (sollte selten vorkommen)
-                        Text("Keine Personendaten geladen.")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .padding(.top, 40)
-                    }
-                }
-                .padding()
-            }
-            .navigationTitle("Darsteller")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Fertig") { dismiss() }
-                }
-            }
-            .task {
-                await load()
-            }
-        }
-    }
-
-    private func load() async {
-        await MainActor.run {
-            isLoading = true
-            errorText = nil
-            details = nil
-        }
-
-        do {
-            let fetched = try await TMDbAPI.shared.fetchPersonDetails(id: personId)
-            await MainActor.run {
-                details = fetched
-                isLoading = false
-            }
-        } catch TMDbError.missingAPIKey {
-            await MainActor.run {
-                errorText = "TMDb API-Key fehlt."
-                isLoading = false
-            }
-        } catch {
-            await MainActor.run {
-                errorText = "Fehler beim Laden der Personendaten."
-                isLoading = false
             }
         }
     }
