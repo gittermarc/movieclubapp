@@ -160,6 +160,140 @@ struct CloudKitMovieStore {
 
     // MARK: - Speichern (Upsert)
 
+    // MARK: - Merge helpers (3-way merge)
+
+    private func sanitizedMovieForCloud(_ movie: Movie) -> Movie {
+        var m = movie
+        m.ratings = []
+        return m
+    }
+
+    private func decodeMoviePayload(from record: CKRecord) throws -> Movie? {
+        guard let data = record[payloadKey] as? Data else {
+            return nil
+        }
+
+        var decoded = try JSONDecoder().decode(Movie.self, from: data)
+        decoded.ratings = []
+
+        // Prefer groupId from record field if present (payload can be legacy/empty).
+        if let gid = record[groupIdKey] as? String, !gid.isEmpty {
+            decoded.groupId = gid
+        }
+
+        return decoded
+    }
+
+    private func mergeRequired<T: Equatable>(ancestor: T, server: T, client: T) -> T {
+        let clientChanged = client != ancestor
+        let serverChanged = server != ancestor
+
+        switch (clientChanged, serverChanged) {
+        case (false, false):
+            return server
+        case (true, false):
+            return client
+        case (false, true):
+            return server
+        case (true, true):
+            // True conflict (both changed differently): server wins to avoid overwriting others.
+            return (client == server) ? server : server
+        }
+    }
+
+    private func mergeOptional<T: Equatable>(ancestor: T?, server: T?, client: T?) -> T? {
+        let clientChanged = client != ancestor
+        let serverChanged = server != ancestor
+
+        switch (clientChanged, serverChanged) {
+        case (false, false):
+            return server
+        case (true, false):
+            return client
+        case (false, true):
+            return server
+        case (true, true):
+            if client == server { return server }
+            // If one side is missing, keep the other. Otherwise: server wins (safer; avoids overwriting others).
+            if server == nil { return client }
+            if client == nil { return server }
+            return server
+        }
+    }
+
+    private func mergeArray<T: Hashable>(ancestor: [T]?, server: [T]?, client: [T]?) -> [T]? {
+        let a = ancestor ?? []
+        let s = server ?? []
+        let c = client ?? []
+
+        let clientChanged = Set(c) != Set(a)
+        let serverChanged = Set(s) != Set(a)
+
+        switch (clientChanged, serverChanged) {
+        case (false, false):
+            return s.isEmpty ? nil : s
+        case (true, false):
+            return c.isEmpty ? nil : c
+        case (false, true):
+            return s.isEmpty ? nil : s
+        case (true, true):
+            // Both changed: union (server order first, then client extras).
+            var out = s
+            var seen = Set(out)
+            for v in c where !seen.contains(v) {
+                out.append(v)
+                seen.insert(v)
+            }
+            return out.isEmpty ? nil : out
+        }
+    }
+
+    private func mergeMovies(
+        ancestor: Movie?,
+        server: Movie,
+        client: Movie,
+        forcedGroupId: String?
+    ) -> Movie {
+        // If we don't have an ancestor, use the server record as a stable baseline.
+        let a = ancestor ?? server
+
+        var merged = server
+
+        // Required
+        merged.title = mergeRequired(ancestor: a.title, server: server.title, client: client.title)
+        merged.year  = mergeRequired(ancestor: a.year,  server: server.year,  client: client.year)
+
+        // Optionals / scalars
+        merged.tmdbRating      = mergeOptional(ancestor: a.tmdbRating, server: server.tmdbRating, client: client.tmdbRating)
+        merged.posterPath      = mergeOptional(ancestor: a.posterPath, server: server.posterPath, client: client.posterPath)
+        merged.watchedDate     = mergeOptional(ancestor: a.watchedDate, server: server.watchedDate, client: client.watchedDate)
+        merged.watchedLocation = mergeOptional(ancestor: a.watchedLocation, server: server.watchedLocation, client: client.watchedLocation)
+        merged.tmdbId          = mergeOptional(ancestor: a.tmdbId, server: server.tmdbId, client: client.tmdbId)
+
+        merged.suggestedBy     = mergeOptional(ancestor: a.suggestedBy, server: server.suggestedBy, client: client.suggestedBy)
+        merged.groupName       = mergeOptional(ancestor: a.groupName, server: server.groupName, client: client.groupName)
+
+        // Arrays
+        merged.genres     = mergeArray(ancestor: a.genres, server: server.genres, client: client.genres)
+        merged.genreIds   = mergeArray(ancestor: a.genreIds, server: server.genreIds, client: client.genreIds)
+        merged.keywords   = mergeArray(ancestor: a.keywords, server: server.keywords, client: client.keywords)
+        merged.keywordIds = mergeArray(ancestor: a.keywordIds, server: server.keywordIds, client: client.keywordIds)
+        merged.cast       = mergeArray(ancestor: a.cast, server: server.cast, client: client.cast)
+        merged.directors  = mergeArray(ancestor: a.directors, server: server.directors, client: client.directors)
+
+        // Ratings are stored separately (MovieRating records) and are not part of the Movie payload in CloudKit.
+        merged.ratings = []
+
+        // Group routing safety:
+        // - record field `groupIdKey` is authoritative for Cloud routing
+        // - payload value should not "jump" across groups
+        if let forcedGroupId {
+            merged.groupId = forcedGroupId
+        }
+
+        return merged
+    }
+
     func save(movie: Movie, isBacklog: Bool) async throws {
         let route = routedDatabase(forGroupId: movie.groupId)
         let recordID: CKRecord.ID
@@ -169,56 +303,101 @@ struct CloudKitMovieStore {
             recordID = CKRecord.ID(recordName: movie.id.uuidString)
         }
 
-        func applyFields(on record: CKRecord) throws -> CKRecord {
-            var movieForCloud = movie
-            movieForCloud.ratings = []
-            let data = try JSONEncoder().encode(movieForCloud)
+        func applyFields(on record: CKRecord, movie: Movie, isBacklog: Bool) throws -> CKRecord {
+            let cleanMovie = sanitizedMovieForCloud(movie)
+            let data = try JSONEncoder().encode(cleanMovie)
             record[payloadKey]   = data as CKRecordValue
             record[isBacklogKey] = isBacklog as CKRecordValue
             record[updatedAtKey] = Date() as CKRecordValue
 
-            if let gid = movie.groupId, !gid.isEmpty {
+            if let gid = cleanMovie.groupId, !gid.isEmpty {
                 record[groupIdKey] = gid as CKRecordValue
             } else {
                 record[groupIdKey] = nil
             }
+
             return record
         }
 
-        do {
-            let baseRecord: CKRecord
+        var attempts = 0
+
+        while true {
+            attempts += 1
+
             do {
-                baseRecord = try await route.db.record(for: recordID)
+                let baseRecord: CKRecord
+                do {
+                    baseRecord = try await route.db.record(for: recordID)
+                } catch {
+                    baseRecord = CKRecord(recordType: recordType, recordID: recordID)
+                }
+
+                let recordToSave = try applyFields(on: baseRecord, movie: movie, isBacklog: isBacklog)
+                _ = try await route.db.save(recordToSave)
+                return
+
             } catch {
-                baseRecord = CKRecord(recordType: recordType, recordID: recordID)
-            }
+                guard let ckError = error as? CKError,
+                      ckError.code == .serverRecordChanged,
+                      let serverRecord = ckError.userInfo[CKRecordChangedErrorServerRecordKey] as? CKRecord
+                else {
+                    throw error
+                }
 
-            let recordToSave = try applyFields(on: baseRecord)
-            _ = try await route.db.save(recordToSave)
+                let clientRecord = ckError.userInfo[CKRecordChangedErrorClientRecordKey] as? CKRecord
+                let ancestorRecord = ckError.userInfo[CKRecordChangedErrorAncestorRecordKey] as? CKRecord
 
-        } catch {
-            if let ckError = error as? CKError,
-               ckError.code == .serverRecordChanged,
-               let serverRecord = ckError.userInfo[CKRecordChangedErrorServerRecordKey] as? CKRecord {
+                let serverMovie = (try? decodeMoviePayload(from: serverRecord)) ?? sanitizedMovieForCloud(movie)
+                let clientMovie: Movie = {
+                    if let clientRecord, let decoded = try? decodeMoviePayload(from: clientRecord) {
+                        return decoded
+                    }
+                    return sanitizedMovieForCloud(movie)
+                }()
 
-                let updatedRecord = try applyFields(on: serverRecord)
+                let ancestorMovie: Movie? = {
+                    if let ancestorRecord {
+                        return try? decodeMoviePayload(from: ancestorRecord)
+                    }
+                    return nil
+                }()
+
+                let mergedMovie = mergeMovies(
+                    ancestor: ancestorMovie,
+                    server: serverMovie,
+                    client: clientMovie,
+                    forcedGroupId: movie.groupId
+                )
+
+                let serverIsBacklog = (serverRecord[isBacklogKey] as? Bool) ?? false
+                let clientIsBacklog = (clientRecord?[isBacklogKey] as? Bool) ?? isBacklog
+                let ancestorIsBacklog = ancestorRecord?[isBacklogKey] as? Bool
+
+                let mergedIsBacklog: Bool = {
+                    if let ancestorIsBacklog {
+                        return mergeRequired(ancestor: ancestorIsBacklog, server: serverIsBacklog, client: clientIsBacklog)
+                    }
+                    // Without an ancestor, keep server unless both happen to match.
+                    return (serverIsBacklog == clientIsBacklog) ? serverIsBacklog : serverIsBacklog
+                }()
+
+                let mergedRecord = try applyFields(on: serverRecord, movie: mergedMovie, isBacklog: mergedIsBacklog)
 
                 do {
-                    _ = try await route.db.save(updatedRecord)
+                    _ = try await route.db.save(mergedRecord)
+                    return
                 } catch {
                     if let second = error as? CKError,
-                       second.code == .serverRecordChanged {
-                        return
-                    } else {
-                        throw error
+                       second.code == .serverRecordChanged,
+                       attempts < 3 {
+                        continue
                     }
+                    throw error
                 }
-                return
             }
-
-            throw error
         }
     }
+
 
     // MARK: - Batched modify (Phase 2)
 
@@ -243,7 +422,14 @@ struct CloudKitMovieStore {
             return (key, db, zoneID)
         }
 
-        var groupedSaves: [RouteKey: (db: CKDatabase, zoneID: CKRecordZone.ID?, records: [CKRecord])] = [:]
+        // We keep a mapping from CKRecord.ID -> (Movie,isBacklog) so that we can
+        // resolve `serverRecordChanged` conflicts by falling back to the 3-way merge in `save(movie:isBacklog:)`.
+        var groupedSaves: [RouteKey: (
+            db: CKDatabase,
+            zoneID: CKRecordZone.ID?,
+            records: [CKRecord],
+            originals: [CKRecord.ID: (movie: Movie, isBacklog: Bool)]
+        )] = [:]
         groupedSaves.reserveCapacity(3)
 
         for (movie, isBacklog) in saveItems {
@@ -273,9 +459,13 @@ struct CloudKitMovieStore {
             }
 
             if groupedSaves[route.key] == nil {
-                groupedSaves[route.key] = (route.db, route.zoneID, [])
+                groupedSaves[route.key] = (route.db, route.zoneID, [], [:])
             }
-            groupedSaves[route.key]?.records.append(record)
+
+            var bucket = groupedSaves[route.key]!
+            bucket.records.append(record)
+            bucket.originals[recordID] = (movie: movie, isBacklog: isBacklog)
+            groupedSaves[route.key] = bucket
         }
 
         let deleteRoute = routeKey(forGroupId: groupIdForDeletes)
@@ -288,6 +478,46 @@ struct CloudKitMovieStore {
 
         let maxPerOp = 200
 
+        func handleSaveFailure(_ error: Error, originalsByID: [CKRecord.ID: (movie: Movie, isBacklog: Bool)]) async throws {
+            guard let ck = error as? CKError else { throw error }
+
+            // Most common: partial failure (some records succeeded, some failed)
+            if ck.code == .partialFailure,
+               let perItem = ck.userInfo[CKPartialErrorsByItemIDKey] as? [CKRecord.ID: Error] {
+
+                var firstNonConflict: Error?
+
+                for (recordID, itemError) in perItem {
+                    if let itemCK = itemError as? CKError, itemCK.code == .serverRecordChanged,
+                       let original = originalsByID[recordID] {
+                        // Resolve by saving individually with 3-way merge.
+                        try await self.save(movie: original.movie, isBacklog: original.isBacklog)
+                    } else {
+                        // Preserve the first non-conflict error.
+                        if firstNonConflict == nil {
+                            firstNonConflict = itemError
+                        }
+                    }
+                }
+
+                if let firstNonConflict {
+                    throw firstNonConflict
+                }
+
+                return
+            }
+
+            // Rare: operation-level serverRecordChanged. Fall back to individual saves.
+            if ck.code == .serverRecordChanged {
+                for (_, original) in originalsByID {
+                    try await self.save(movie: original.movie, isBacklog: original.isBacklog)
+                }
+                return
+            }
+
+            throw error
+        }
+
         for (_, bucket) in groupedSaves {
             let records = bucket.records
             if records.isEmpty { continue }
@@ -296,7 +526,22 @@ struct CloudKitMovieStore {
             while start < records.count {
                 let end = min(start + maxPerOp, records.count)
                 let slice = Array(records[start..<end])
-                try await modifyRecords(database: bucket.db, saving: slice, deleting: [])
+
+                // Build recordID -> original mapping for this slice.
+                var originalsByID: [CKRecord.ID: (movie: Movie, isBacklog: Bool)] = [:]
+                originalsByID.reserveCapacity(slice.count)
+                for r in slice {
+                    if let original = bucket.originals[r.recordID] {
+                        originalsByID[r.recordID] = original
+                    }
+                }
+
+                do {
+                    try await modifyRecords(database: bucket.db, saving: slice, deleting: [])
+                } catch {
+                    try await handleSaveFailure(error, originalsByID: originalsByID)
+                }
+
                 start = end
             }
         }
