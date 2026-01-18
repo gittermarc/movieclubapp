@@ -53,10 +53,24 @@ class MovieStore: ObservableObject {
 
     @Published var isSyncing: Bool = false
 
+    // MARK: - Sync transparency (per group)
+
+    /// Number of locally queued changes that still need to be pushed to iCloud.
+    @Published var pendingCloudChangesCount: Int = 0
+
+    /// Timestamp of the last successful sync (fetch or upload) for the current group.
+    @Published var lastCloudSyncAt: Date?
+
+    /// Last sync error message (best effort). Cleared on success.
+    @Published var lastCloudSyncError: String?
+
     @Published var currentGroupId: String? {
         didSet {
             UserDefaults.standard.set(currentGroupId, forKey: "CurrentGroupId")
             addOrUpdateCurrentGroupInKnownGroups()
+
+            // Load per-group sync meta (pending, last sync, last error)
+            loadSyncMetaForCurrentGroup()
         }
     }
 
@@ -89,6 +103,9 @@ class MovieStore: ObservableObject {
 
     private static let knownGroupsKey = "KnownGroups"
 
+    // UserDefaults base key (per group)
+    private static let syncMetaPrefix = "MovieStore.SyncMeta."
+
     // ✅ Migration Guard
     private var isMigratingCast = false
 
@@ -110,6 +127,9 @@ class MovieStore: ObservableObject {
         self.currentGroupId = UserDefaults.standard.string(forKey: "CurrentGroupId")
         self.currentGroupName = UserDefaults.standard.string(forKey: "CurrentGroupName")
 
+        // Load per-group sync meta (pending, last sync, last error)
+        loadSyncMetaForCurrentGroup()
+
         addOrUpdateCurrentGroupInKnownGroups()
 
         // 3) Load local caches without triggering persistence/sync noise
@@ -130,8 +150,21 @@ class MovieStore: ObservableObject {
                 cloudStore: cloudStore,
                 groupIdProvider: { [weak self] in self?.currentGroupId },
                 beginSync: { [weak self] in self?.beginSync() },
-                endSync: { [weak self] in self?.endSync() }
+                endSync: { [weak self] in self?.endSync() },
+                networkIsAvailable: { NetworkMonitor.shared.isConnected },
+                pendingCountDidChange: { [weak self] count, groupId in
+                    self?.applyPendingCount(count, forGroupId: groupId)
+                },
+                batchDidSucceed: { [weak self] groupId in
+                    self?.markCloudSyncSuccess(forGroupId: groupId)
+                },
+                batchDidFail: { [weak self] error, groupId in
+                    self?.markCloudSyncFailure(error, forGroupId: groupId)
+                }
             )
+
+            // Load initial sync meta (now that we have currentGroupId).
+            loadSyncMetaForCurrentGroup()
 
             Task { await self.loadFromCloud() }
         }
@@ -222,10 +255,14 @@ class MovieStore: ObservableObject {
                 try await initialUploadIfNeeded(using: cloudStore)
             }
 
+            // A successful fetch counts as a successful sync.
+            markCloudSyncSuccess(forGroupId: currentGroupId)
+
             // ✅ Automatische Migration (Cloud-Daten)
             await migrateCastDataIfNeeded()
 
         } catch {
+            markCloudSyncFailure(error, forGroupId: currentGroupId)
             print("Fehler beim Laden aus CloudKit: \(error)")
         }
     }
@@ -248,6 +285,12 @@ class MovieStore: ObservableObject {
         lastRefreshAt = Date()
 
         await loadFromCloud()
+    }
+
+    /// Triggers an immediate upload attempt for any queued local changes.
+    /// Useful when the device just came back online.
+    func flushPendingCloudChanges() {
+        cloudSyncCoordinator?.flushImmediately()
     }
 
     // MARK: - Sync state helpers
@@ -276,12 +319,66 @@ class MovieStore: ObservableObject {
                 deleteIDs: [],
                 groupIdForDeletes: currentGroupId
             )
+            markCloudSyncSuccess(forGroupId: currentGroupId)
         } catch {
             // Best-effort; even if some records fail, the next refresh will reconcile.
+            markCloudSyncFailure(error, forGroupId: currentGroupId)
             print("CloudKit initial upload error: \(error)")
         }
 
         print("CloudKit: initial upload finished")
+    }
+
+    // MARK: - Sync meta persistence (per group)
+
+    private func groupKey(_ groupId: String?) -> String {
+        let gid = (groupId ?? currentGroupId)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return gid.isEmpty ? "__default__" : gid
+    }
+
+    private func syncKey(_ suffix: String, groupId: String?) -> String {
+        Self.syncMetaPrefix + groupKey(groupId) + "." + suffix
+    }
+
+    private func loadSyncMetaForCurrentGroup() {
+        let gid = currentGroupId
+        let defaults = UserDefaults.standard
+        pendingCloudChangesCount = defaults.integer(forKey: syncKey("pendingCount", groupId: gid))
+        lastCloudSyncAt = defaults.object(forKey: syncKey("lastSyncAt", groupId: gid)) as? Date
+        lastCloudSyncError = defaults.string(forKey: syncKey("lastError", groupId: gid))
+    }
+
+    private func applyPendingCount(_ count: Int, forGroupId groupId: String?) {
+        let defaults = UserDefaults.standard
+
+        // Persist per group, but only update UI if this is the active group.
+        defaults.set(count, forKey: syncKey("pendingCount", groupId: groupId))
+
+        if groupKey(groupId) == groupKey(currentGroupId) {
+            pendingCloudChangesCount = count
+        }
+    }
+
+    private func markCloudSyncSuccess(forGroupId groupId: String?) {
+        let date = Date()
+        let defaults = UserDefaults.standard
+        defaults.set(date, forKey: syncKey("lastSyncAt", groupId: groupId))
+        defaults.removeObject(forKey: syncKey("lastError", groupId: groupId))
+
+        if groupKey(groupId) == groupKey(currentGroupId) {
+            lastCloudSyncAt = date
+            lastCloudSyncError = nil
+        }
+    }
+
+    private func markCloudSyncFailure(_ error: Error, forGroupId groupId: String?) {
+        let message = String(describing: error)
+        let defaults = UserDefaults.standard
+        defaults.set(message, forKey: syncKey("lastError", groupId: groupId))
+
+        if groupKey(groupId) == groupKey(currentGroupId) {
+            lastCloudSyncError = message
+        }
     }
 
     // MARK: - Cloud Sync bei Änderungen (debounced + batched)

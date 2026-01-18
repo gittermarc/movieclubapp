@@ -8,9 +8,51 @@
 import Foundation
 import Combine
 internal import SwiftUI
+import CloudKit
 
 @MainActor
 class UserStore: ObservableObject {
+
+    // MARK: - Per-Group Sync Status Persistence
+
+    private struct SyncStatus: Codable, Equatable {
+        var lastSuccessAt: Date?
+        var lastAttemptAt: Date?
+        var lastErrorMessage: String?
+        var lastErrorAt: Date?
+    }
+
+    private static let syncStatusByGroupKey = "UserStore_SyncStatusByGroup"
+    private static let localGroupSyncKey = "__local__"
+
+    private var syncStatusByGroup: [String: SyncStatus] = [:]
+
+    private func syncKey(for groupId: String?) -> String {
+        let trimmed = (groupId ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? Self.localGroupSyncKey : trimmed
+    }
+
+    private func applySyncStatusForCurrentGroup() {
+        let key = syncKey(for: currentGroupId)
+        let status = syncStatusByGroup[key] ?? SyncStatus()
+        lastCloudSyncSuccessAt = status.lastSuccessAt
+        lastCloudSyncAttemptAt = status.lastAttemptAt
+        lastCloudSyncErrorMessage = status.lastErrorMessage
+        lastCloudSyncErrorAt = status.lastErrorAt
+    }
+
+    private func persistSyncStatusByGroup() {
+        guard let data = try? JSONEncoder().encode(syncStatusByGroup) else { return }
+        UserDefaults.standard.set(data, forKey: Self.syncStatusByGroupKey)
+    }
+
+    private static func loadSyncStatusByGroup() -> [String: SyncStatus] {
+        guard let data = UserDefaults.standard.data(forKey: syncStatusByGroupKey),
+              let decoded = try? JSONDecoder().decode([String: SyncStatus].self, from: data) else {
+            return [:]
+        }
+        return decoded
+    }
 
     // MARK: - Public state
 
@@ -26,6 +68,20 @@ class UserStore: ObservableObject {
 
     /// Wird gesetzt, während wir Members aus iCloud laden oder Änderungen pushen.
     @Published var isSyncing: Bool = false
+
+    // MARK: - Sync UX / Trust (subtle status indicators)
+
+    /// Last time we successfully fetched or wrote members to iCloud.
+    @Published var lastCloudSyncSuccessAt: Date?
+
+    /// Last time we attempted any member sync.
+    @Published var lastCloudSyncAttemptAt: Date?
+
+    /// Human-readable last iCloud sync error (if any).
+    @Published var lastCloudSyncErrorMessage: String?
+
+    /// When the last iCloud sync error happened.
+    @Published var lastCloudSyncErrorAt: Date?
 
     // MARK: - Private state
 
@@ -45,9 +101,16 @@ class UserStore: ObservableObject {
     // MARK: - Init
 
     init() {
+        // Per-group sync status (so Settings show the right group)
+        self.syncStatusByGroup = Self.loadSyncStatusByGroup()
+
         // gleiche Group-ID wie MovieStore verwenden
         let groupIdFromDefaults = UserDefaults.standard.string(forKey: "CurrentGroupId")
         self.currentGroupId = groupIdFromDefaults
+
+        // Ensure published status matches the current group immediately.
+        applySyncStatusForCurrentGroup()
+
         self.users = PersistenceManager.shared.loadUsers(groupId: groupIdFromDefaults)
 
         if let first = users.first {
@@ -67,6 +130,9 @@ class UserStore: ObservableObject {
     /// Wird aufgerufen, wenn die Gruppe wechselt (neue Gruppe / join / wechseln)
     func loadUsers(forGroupId groupId: String?) {
         self.currentGroupId = groupId
+
+        // Switch the displayed sync status immediately when the group changes.
+        applySyncStatusForCurrentGroup()
 
         // Erst lokal laden (schnelle UI), dann Cloud (Autorität für Gruppen).
         self.users = PersistenceManager.shared.loadUsers(groupId: groupId)
@@ -96,6 +162,7 @@ class UserStore: ObservableObject {
         lastRefreshAt = Date()
 
         if isSyncing { return }
+        lastCloudSyncAttemptAt = Date()
         isSyncing = true
         defer { isSyncing = false }
 
@@ -104,6 +171,7 @@ class UserStore: ObservableObject {
 
             if !members.isEmpty {
                 applyCloudUsers(members: members, groupId: gid)
+                recordCloudSyncSuccess()
             } else {
                 // Cloud leer → falls lokal bereits Users existieren, als „Initial-Seed“ hochladen.
                 // (So hat der Gruppenersteller sofort Members in der Cloud.)
@@ -116,12 +184,71 @@ class UserStore: ObservableObject {
                     let members2 = try await cloudStore.fetchMembers(forGroupId: gid)
                     if !members2.isEmpty {
                         applyCloudUsers(members: members2, groupId: gid)
+                        recordCloudSyncSuccess()
                     }
+                } else {
+                    // Cloud fetch succeeded, just no members yet.
+                    recordCloudSyncSuccess()
                 }
             }
         } catch {
+            recordCloudSyncError(error)
             print("UserStore: Fehler beim Laden aus CloudKit: \(error)")
         }
+    }
+
+    // MARK: - Sync status recording
+
+    private func recordCloudSyncSuccess() {
+        let now = Date()
+        lastCloudSyncSuccessAt = now
+        lastCloudSyncAttemptAt = now
+        lastCloudSyncErrorMessage = nil
+        lastCloudSyncErrorAt = nil
+
+        let key = syncKey(for: currentGroupId)
+        var status = syncStatusByGroup[key] ?? SyncStatus()
+        status.lastSuccessAt = now
+        status.lastAttemptAt = now
+        status.lastErrorMessage = nil
+        status.lastErrorAt = nil
+        syncStatusByGroup[key] = status
+        persistSyncStatusByGroup()
+    }
+
+    private func recordCloudSyncError(_ error: Error) {
+        let now = Date()
+        let msg = humanReadableCloudError(error)
+
+        lastCloudSyncAttemptAt = now
+        lastCloudSyncErrorAt = now
+        lastCloudSyncErrorMessage = msg
+
+        let key = syncKey(for: currentGroupId)
+        var status = syncStatusByGroup[key] ?? SyncStatus()
+        status.lastAttemptAt = now
+        status.lastErrorAt = now
+        status.lastErrorMessage = msg
+        syncStatusByGroup[key] = status
+        persistSyncStatusByGroup()
+    }
+
+    private func humanReadableCloudError(_ error: Error) -> String {
+        if let ck = error as? CKError {
+            switch ck.code {
+            case .notAuthenticated:
+                return "iCloud nicht verfügbar – bitte iCloud-Login prüfen."
+            case .networkUnavailable, .networkFailure:
+                return "Netzwerkproblem – Sync wird automatisch später erneut versucht."
+            case .serviceUnavailable, .requestRateLimited, .zoneBusy:
+                return "iCloud ist gerade beschäftigt – wir versuchen es gleich nochmal."
+            case .quotaExceeded:
+                return "iCloud-Speicher voll – bitte Speicher prüfen."
+            default:
+                break
+            }
+        }
+        return String(describing: error)
     }
 
     /// Neuen User für die aktuelle Gruppe anlegen

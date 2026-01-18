@@ -12,6 +12,10 @@ struct SettingsView: View {
 
     @Environment(\.dismiss) private var dismiss
 
+    @EnvironmentObject private var movieStore: MovieStore
+    @EnvironmentObject private var userStore: UserStore
+    @EnvironmentObject private var networkMonitor: NetworkMonitor
+
     // ✅ NEU: Land-Auswahl für Streaming-Anbieter (TMDb Watch Providers)
     @AppStorage(WatchProvidersRegionSettings.storageKey)
     private var watchProvidersRegionCode: String = WatchProvidersRegionSettings.deviceRegionCode()
@@ -53,10 +57,77 @@ struct SettingsView: View {
         return "\(flag) \(name) (\(effective))"
     }
 
+    // MARK: - Sync UI helpers
+
+    private var isOffline: Bool {
+        !networkMonitor.isConnected
+    }
+
+    private var isSyncingNow: Bool {
+        movieStore.isSyncing || userStore.isSyncing
+    }
+
+    private var syncStatusText: String {
+        if isOffline { return "Offline" }
+        if isSyncingNow { return "Synchronisiere …" }
+        if let err = movieStore.lastCloudSyncError, !err.isEmpty { return "Problem" }
+        return "OK"
+    }
+
+    private var syncStatusIcon: String {
+        if isOffline { return "wifi.slash" }
+        if isSyncingNow { return "arrow.triangle.2.circlepath" }
+        if let err = movieStore.lastCloudSyncError, !err.isEmpty { return "exclamationmark.triangle" }
+        return "checkmark.circle"
+    }
+
+    private var pendingText: String {
+        let c = movieStore.pendingCloudChangesCount
+        return c > 0 ? String(c) : "keine"
+    }
+
+    private var lastSyncText: String {
+        guard let date = movieStore.lastCloudSyncAt else { return "—" }
+        let f = RelativeDateTimeFormatter()
+        f.unitsStyle = .short
+        return f.localizedString(for: date, relativeTo: Date())
+    }
+
     var body: some View {
         NavigationStack {
             ZStack {
                 List {
+                    Section("iCloud & Sync") {
+                        HStack {
+                            Label("Status", systemImage: syncStatusIcon)
+                            Spacer()
+                            Text(syncStatusText)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        HStack {
+                            Text("Ausstehende Änderungen")
+                            Spacer()
+                            Text(pendingText)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        HStack {
+                            Text("Zuletzt synchronisiert")
+                            Spacer()
+                            Text(lastSyncText)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        if let err = movieStore.lastCloudSyncError, !err.isEmpty {
+                            Text(err)
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(3)
+                                .accessibilityLabel("Letzter Sync-Fehler: \(err)")
+                        }
+                    }
+
                     Section("Streaming") {
                         NavigationLink {
                             WatchProvidersRegionPickerView()

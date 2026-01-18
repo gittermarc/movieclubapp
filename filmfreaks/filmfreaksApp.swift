@@ -22,6 +22,7 @@ struct filmfreaksApp: App {
     @StateObject var movieStore = MovieStore(useCloud: true)
     @StateObject var userStore = UserStore()
     @StateObject var groupStore = CloudKitGroupStore()
+    @StateObject var networkMonitor = NetworkMonitor.shared
 
     @Environment(\.scenePhase) private var scenePhase
 
@@ -34,6 +35,7 @@ struct filmfreaksApp: App {
                     .environmentObject(movieStore)
                     .environmentObject(userStore)
                     .environmentObject(groupStore)
+                    .environmentObject(networkMonitor)
 
                 if showSplash {
                     SplashView {

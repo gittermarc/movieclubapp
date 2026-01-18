@@ -47,6 +47,7 @@ struct ContentView: View {
 
     @EnvironmentObject var movieStore: MovieStore
     @EnvironmentObject var userStore: UserStore
+    @EnvironmentObject var networkMonitor: NetworkMonitor
 
     @State private var showingSearchMovie = false
     @State private var showingUsers = false
@@ -76,6 +77,41 @@ struct ContentView: View {
 
     private var filterLabelText: String {
         filterByUser?.name ?? "Alle"
+    }
+
+    // MARK: - Sync mini status (subtle)
+
+    private var shouldShowSyncStatusLine: Bool {
+        if !networkMonitor.isConnected { return true }
+        if movieStore.isSyncing || userStore.isSyncing { return true }
+        if movieStore.pendingCloudChangesCount > 0 { return true }
+        if let err = movieStore.lastCloudSyncError, !err.isEmpty { return true }
+        return false
+    }
+
+    private var syncStatusLineIcon: String {
+        if !networkMonitor.isConnected { return "wifi.slash" }
+        if movieStore.isSyncing || userStore.isSyncing { return "arrow.triangle.2.circlepath" }
+        if let err = movieStore.lastCloudSyncError, !err.isEmpty { return "exclamationmark.triangle" }
+        if movieStore.pendingCloudChangesCount > 0 { return "clock.arrow.circlepath" }
+        return "checkmark.circle"
+    }
+
+    private var syncStatusLineText: String {
+        if !networkMonitor.isConnected {
+            return "Offline – Änderungen werden später synchronisiert"
+        }
+        if movieStore.isSyncing || userStore.isSyncing {
+            return "Synchronisiere …"
+        }
+        if movieStore.pendingCloudChangesCount > 0 {
+            let c = movieStore.pendingCloudChangesCount
+            return c == 1 ? "1 Änderung ausstehend" : "\(c) Änderungen ausstehend"
+        }
+        if let err = movieStore.lastCloudSyncError, !err.isEmpty {
+            return "Sync-Problem – Details in Einstellungen"
+        }
+        return ""
     }
 
     private var filterHintText: String? {
@@ -355,6 +391,20 @@ struct ContentView: View {
                     .padding(.top, 6)
                     .padding(.bottom, 4)
 
+                    if shouldShowSyncStatusLine {
+                        HStack(spacing: 6) {
+                            Image(systemName: syncStatusLineIcon)
+                            Text(syncStatusLineText)
+                                .lineLimit(2)
+                            Spacer(minLength: 0)
+                        }
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal)
+                        .padding(.bottom, 6)
+                        .accessibilityLabel(syncStatusLineText)
+                    }
+
                     // MARK: - Inhalt: entweder Empty State oder Listen
                     if hasAnyMoviesInCurrentGroup {
 
@@ -402,22 +452,6 @@ struct ContentView: View {
                     }
                 }
 
-                // iCloud-Sync Overlay (nur wenn aktiv)
-                if movieStore.isSyncing {
-                    Color.black.opacity(0.1)
-                        .ignoresSafeArea()
-
-                    VStack(spacing: 12) {
-                        ProgressView()
-                        Text("iCloud-Sync …")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-                    .padding(16)
-                    .background(.ultraThinMaterial)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .shadow(radius: 8)
-                }
             }
             .navigationTitle("The Movie Club")
             .onAppear {
@@ -426,6 +460,11 @@ struct ContentView: View {
                     showingQuickStart = true
                 }
                 updateOnboardingCompletionFlag()
+            }
+            .onChange(of: networkMonitor.isConnected) { _, isConnected in
+                if isConnected {
+                    movieStore.flushPendingCloudChanges()
+                }
             }
             .onChange(of: movieStore.currentGroupId) { _, _ in
                 updateOnboardingCompletionFlag()
