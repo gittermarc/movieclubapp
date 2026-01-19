@@ -742,7 +742,7 @@ struct ContentView: View {
                     onboardingRow(
                         isDone: isGroupStepComplete,
                         title: "Gruppe einrichten",
-                        subtitle: "Erstellen oder beitreten (Invite-Code)",
+                        subtitle: "Erstellen oder per iCloud-Einladung beitreten",
                         actionTitle: "Gruppen"
                     ) {
                         showingGroupSettings = true

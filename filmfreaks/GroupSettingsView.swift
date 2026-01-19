@@ -14,7 +14,6 @@ struct GroupSettingsView: View {
     @EnvironmentObject private var groupStore: CloudKitGroupStore
 
     @State private var newCloudGroupName: String = ""
-    @State private var legacyInviteCode: String = ""
 
     @State private var isMigratingLegacy = false
     @State private var migrateError: String?
@@ -292,45 +291,41 @@ struct GroupSettingsView: View {
     private var legacySection: some View {
         Section {
             VStack(alignment: .leading, spacing: 8) {
-                Text("Legacy-Gruppe beitreten")
+                Text("Legacy-Gruppen (Altbestand)")
                     .font(.headline)
 
-                HStack {
-                    TextField("Invite-Code", text: $legacyInviteCode)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-
-                    Button("Beitreten") {
-                        let code = legacyInviteCode.trimmingCharacters(in: .whitespacesAndNewlines)
-                        guard !code.isEmpty else { return }
-                        movieStore.joinGroup(withInviteCode: code)
-                        userStore.loadUsers(forGroupId: code)
-                        legacyInviteCode = ""
-                    }
-                    .buttonStyle(.bordered)
-                }
+                Text("Beitritt ist deaktiviert. Hier siehst du nur Legacy-Gruppen, die diese App bereits kennt. Migration ist nur möglich, wenn die Legacy-Gruppe aktuell aktiv ist.")
+                    .foregroundStyle(.secondary)
             }
 
             let legacyKnown = movieStore.knownGroups.filter { GroupContextStore.context(forGroupId: $0.id) == nil }
 
-            if !legacyKnown.isEmpty {
+            if legacyKnown.isEmpty {
+                Text("Keine bekannten Legacy-Gruppen.")
+                    .foregroundStyle(.secondary)
+            } else {
                 DisclosureGroup("Bekannte Legacy-Gruppen") {
                     ForEach(legacyKnown) { g in
-                        HStack {
-                            Button {
-                                movieStore.joinGroup(withInviteCode: g.id)
-                                userStore.loadUsers(forGroupId: g.id)
-                            } label: {
-                                HStack {
-                                    Text(g.name ?? "Unnamed")
-                                    Spacer()
-                                    if movieStore.currentGroupId == g.id {
-                                        Image(systemName: "checkmark.circle.fill")
-                                            .foregroundStyle(.tint)
-                                    }
-                                }
+                        HStack(spacing: 12) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(g.displayName)
+                                    .font(.body)
+                                    .lineLimit(1)
+                                Text("Legacy")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
                             }
-                            .buttonStyle(.plain)
+
+                            Spacer()
+
+                            if movieStore.currentGroupId == g.id {
+                                Text("Aktiv")
+                                    .font(.caption.weight(.semibold))
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 6)
+                                    .background(.thinMaterial)
+                                    .clipShape(Capsule())
+                            }
 
                             Button(role: .destructive) {
                                 movieStore.knownGroups.removeAll { $0.id == g.id }
@@ -352,9 +347,7 @@ struct GroupSettingsView: View {
                         .foregroundStyle(.secondary)
 
                     Button {
-                        Task {
-                            await migrateCurrentLegacyGroup()
-                        }
+                        Task { await migrateCurrentLegacyGroup() }
                     } label: {
                         HStack {
                             if isMigratingLegacy {
