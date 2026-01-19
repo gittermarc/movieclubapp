@@ -187,13 +187,61 @@ class MovieStore: ObservableObject {
         }
 
         do {
-            let entries = try await cloudStore.fetchMovies(forGroupId: currentGroupId)
-            print("CloudKit: fetchMovies(forGroupId:) returned \(entries.count) entries")
+            let gid = currentGroupId
+            let isZoneGroup: Bool = {
+                guard let gid, !gid.isEmpty else { return false }
+                return GroupContextStore.context(forGroupId: gid) != nil
+            }()
 
-            var watched = entries.filter { !$0.isBacklog }.map { $0.movie }
-            var backlog = entries.filter { $0.isBacklog }.map { $0.movie }
+            var watched: [Movie] = []
+            var backlog: [Movie] = []
 
-            // ✅ Ratings sind jetzt eigene CloudKit-Records (MovieRating).
+            if isZoneGroup {
+                // Phase 2: inkrementell per Zone-Changes.
+                let changes = try await cloudStore.fetchMovieChanges(forGroupId: gid)
+                print("CloudKit: zone changes movies → changed: \(changes.changed.count), deleted: \(changes.deletedMovieIDs.count), initial: \(changes.isInitial)")
+
+                // Start from current local state (local-first) and apply deltas.
+                watched = self.movies
+                backlog = self.backlogMovies
+
+                // Remove deletes
+                if !changes.deletedMovieIDs.isEmpty {
+                    let del = Set(changes.deletedMovieIDs)
+                    watched.removeAll { del.contains($0.id) }
+                    backlog.removeAll { del.contains($0.id) }
+                }
+
+                // Apply changes (replace/move/insert)
+                for entry in changes.changed {
+                    let id = entry.movie.id
+                    watched.removeAll { $0.id == id }
+                    backlog.removeAll { $0.id == id }
+                    if entry.isBacklog {
+                        backlog.append(entry.movie)
+                    } else {
+                        watched.append(entry.movie)
+                    }
+                }
+
+                // If this was an initial zone fetch and we got no records, the zone is empty.
+                if changes.isInitial && changes.changed.isEmpty && changes.deletedMovieIDs.isEmpty {
+                    try await initialUploadIfNeeded(using: cloudStore)
+                }
+
+            } else {
+                // Legacy / public DB: full fetch per query
+                let entries = try await cloudStore.fetchMovies(forGroupId: gid)
+                print("CloudKit: fetchMovies(forGroupId:) returned \(entries.count) entries")
+                watched = entries.filter { !$0.isBacklog }.map { $0.movie }
+                backlog = entries.filter { $0.isBacklog }.map { $0.movie }
+
+                if entries.isEmpty {
+                    try await initialUploadIfNeeded(using: cloudStore)
+                }
+            }
+
+            // ✅ Ratings sind eigene CloudKit-Records (MovieRating).
             //    Damit uns lokale/offline Ratings beim Cloud-Reload nicht verloren gehen,
             //    konservieren wir erstmal die aktuell im Speicher vorhandenen Ratings.
             let localRatingsByMovieId: [UUID: [Rating]] = {
@@ -218,28 +266,69 @@ class MovieStore: ObservableObject {
             // ✅ Cloud-Ratings laden und in die Movies mergen
             if let cloudRatingStore = self.cloudRatingStore {
                 do {
-                    let ids = Array(Set(watched.map(\.id) + backlog.map(\.id)))
-                    let cloudRatingsByMovieId = try await cloudRatingStore.fetchRatings(forGroupId: currentGroupId, movieIds: ids)
+                    if isZoneGroup {
+                        // Phase 2: inkrementell per Zone-Changes
+                        let changes = try await cloudRatingStore.fetchRatingChanges(forGroupId: gid)
+                        let changedTotal = changes.changedByMovieId.values.reduce(0) { $0 + $1.count }
+                        print("CloudKit: zone changes ratings → changed: \(changedTotal), deleted: \(changes.deletedKeys.count), initial: \(changes.isInitial)")
 
-                    watched = watched.map { m in
-                        var copy = m
-                        copy.ratings = mergeRatings(existing: copy.ratings, incoming: cloudRatingsByMovieId[copy.id] ?? [])
-                        return copy
-                    }
-                    backlog = backlog.map { m in
-                        var copy = m
-                        copy.ratings = mergeRatings(existing: copy.ratings, incoming: cloudRatingsByMovieId[copy.id] ?? [])
-                        return copy
-                    }
+                        watched = watched.map { m in
+                            var copy = m
+                            if let incoming = changes.changedByMovieId[copy.id] {
+                                copy.ratings = mergeRatings(existing: copy.ratings, incoming: incoming)
+                            }
+                            if !changes.deletedKeys.isEmpty {
+                                let delKeys = changes.deletedKeys.filter { $0.movieId == copy.id }.map { $0.reviewerKey }
+                                if !delKeys.isEmpty {
+                                    let delSet = Set(delKeys)
+                                    copy.ratings.removeAll { delSet.contains(reviewerKey($0)) }
+                                }
+                            }
+                            return copy
+                        }
+                        backlog = backlog.map { m in
+                            var copy = m
+                            if let incoming = changes.changedByMovieId[copy.id] {
+                                copy.ratings = mergeRatings(existing: copy.ratings, incoming: incoming)
+                            }
+                            if !changes.deletedKeys.isEmpty {
+                                let delKeys = changes.deletedKeys.filter { $0.movieId == copy.id }.map { $0.reviewerKey }
+                                if !delKeys.isEmpty {
+                                    let delSet = Set(delKeys)
+                                    copy.ratings.removeAll { delSet.contains(reviewerKey($0)) }
+                                }
+                            }
+                            return copy
+                        }
 
-                    let total = cloudRatingsByMovieId.values.reduce(0) { $0 + $1.count }
-                    print("CloudKit: fetched ratings → \(total) total")
+                    } else {
+                        // Legacy/public: query by movie ids (chunked)
+                        let ids = Array(Set(watched.map(\.id) + backlog.map(\.id)))
+                        let cloudRatingsByMovieId = try await cloudRatingStore.fetchRatings(forGroupId: gid, movieIds: ids)
+
+                        watched = watched.map { m in
+                            var copy = m
+                            copy.ratings = mergeRatings(existing: copy.ratings, incoming: cloudRatingsByMovieId[copy.id] ?? [])
+                            return copy
+                        }
+                        backlog = backlog.map { m in
+                            var copy = m
+                            copy.ratings = mergeRatings(existing: copy.ratings, incoming: cloudRatingsByMovieId[copy.id] ?? [])
+                            return copy
+                        }
+
+                        let total = cloudRatingsByMovieId.values.reduce(0) { $0 + $1.count }
+                        print("CloudKit: fetched ratings → \(total) total")
+                    }
                 } catch {
                     print("CloudKit: ratings fetch error: \(error)")
                 }
             }
 
-            let nameFromData = entries.compactMap { $0.movie.groupName }.first
+            let nameFromData: String? = {
+                // In Zone-Gruppen brauchen wir keine Entries-Liste mehr; best-effort aus den Movies.
+                (watched + backlog).compactMap { $0.groupName }.first
+            }()
 
             isApplyingCloudUpdate = true
             self.movies = watched
@@ -250,10 +339,6 @@ class MovieStore: ObservableObject {
             isApplyingCloudUpdate = false
 
             print("CloudKit: applied group data → watched: \(watched.count), backlog: \(backlog.count)")
-
-            if entries.isEmpty {
-                try await initialUploadIfNeeded(using: cloudStore)
-            }
 
             // A successful fetch counts as a successful sync.
             markCloudSyncSuccess(forGroupId: currentGroupId)

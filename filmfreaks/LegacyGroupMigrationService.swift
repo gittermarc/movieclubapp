@@ -41,33 +41,43 @@ struct LegacyGroupMigrationService {
         // 2) Movies
         let entries = try await movieStore.fetchMovies(forGroupId: legacyGroupId)
 
-        // Save movies into new group
-        for entry in entries {
-            var m = entry.movie
-            m.groupId = newGroup.id
-            m.groupName = newGroup.name
-            try await movieStore.save(movie: m, isBacklog: entry.isBacklog)
+        // Save movies into new group (batched)
+        if !entries.isEmpty {
+            let saveItems: [(Movie, Bool)] = entries.map { entry in
+                var m = entry.movie
+                m.groupId = newGroup.id
+                m.groupName = newGroup.name
+                return (m, entry.isBacklog)
+            }
+            try await movieStore.modifyBatch(saveItems: saveItems, deleteIDs: [], groupIdForDeletes: newGroup.id)
         }
 
         // 3) Ratings (per-movie)
         let movieIds = Array(Set(entries.map { $0.movie.id }))
         if !movieIds.isEmpty {
             let ratingsByMovie = try await ratingStore.fetchRatings(forGroupId: legacyGroupId, movieIds: movieIds)
+            var batch: [(rating: Rating, movieId: UUID)] = []
+            batch.reserveCapacity(ratingsByMovie.values.reduce(0) { $0 + $1.count })
+
             for (movieId, ratings) in ratingsByMovie {
                 for r in ratings {
                     var copy = r
                     if copy.reviewerId == nil {
                         copy.reviewerId = StableID.deterministicUUID(forName: copy.reviewerName, groupId: legacyGroupId)
                     }
-                    try await ratingStore.saveRating(copy, movieId: movieId, groupId: newGroup.id)
+                    batch.append((rating: copy, movieId: movieId))
                 }
+            }
+
+            if !batch.isEmpty {
+                try await ratingStore.saveRatingsBatch(batch, groupId: newGroup.id)
             }
         }
 
         // 4) Members
         let members = try await userStore.fetchMembers(forGroupId: legacyGroupId)
-        for m in members {
-            try await userStore.upsertMember(id: m.id, name: m.name, groupId: newGroup.id)
+        if !members.isEmpty {
+            try await userStore.upsertMembersBatch(members, groupId: newGroup.id)
         }
 
         // 5) Goals + Custom goals + decade/actor goals

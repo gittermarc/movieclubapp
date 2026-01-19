@@ -70,7 +70,157 @@ struct CloudKitRatingStore {
         return CKRecord.ID(recordName: b64)
     }
 
+    /// Parsed content of our stable recordName encoding.
+    private struct ParsedRecordName {
+        let movieId: UUID
+        let reviewerKey: String
+    }
+
+    private func parseRecordName(_ recordName: String) -> ParsedRecordName? {
+        // We store a base64-url string of: "gid|movieId|reviewerId"
+        var b64 = recordName
+        b64 = b64.replacingOccurrences(of: "-", with: "+")
+        b64 = b64.replacingOccurrences(of: "_", with: "/")
+        // pad
+        let mod = b64.count % 4
+        if mod != 0 {
+            b64 += String(repeating: "=", count: 4 - mod)
+        }
+        guard let data = Data(base64Encoded: b64),
+              let raw = String(data: data, encoding: .utf8)
+        else { return nil }
+
+        let parts = raw.split(separator: "|", omittingEmptySubsequences: false)
+        guard parts.count == 3 else { return nil }
+        let movie = String(parts[1])
+        let reviewer = String(parts[2])
+        guard let movieId = UUID(uuidString: movie) else { return nil }
+        // We use reviewerId if possible, else fall back to raw reviewer token.
+        if let reviewerId = UUID(uuidString: reviewer) {
+            return ParsedRecordName(movieId: movieId, reviewerKey: reviewerId.uuidString.lowercased())
+        }
+        return ParsedRecordName(movieId: movieId, reviewerKey: reviewer.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())
+    }
+
     // MARK: - Save / Delete
+
+    // MARK: - Phase 2: Batched Saves (Migration / Initial Upload)
+
+    /// Speichert viele Ratings in einem oder mehreren `CKModifyRecordsOperation` Batches.
+    /// Wird v.a. bei Legacy-Migration genutzt.
+    func saveRatingsBatch(
+        _ items: [(rating: Rating, movieId: UUID)],
+        groupId: String?
+    ) async throws {
+        guard !items.isEmpty else { return }
+
+        let route = routedDatabase(forGroupId: groupId)
+        let reviewerIds: [UUID] = items.map { stableReviewerId(for: $0.rating, groupId: groupId) }
+
+        let maxPerOp = 200
+        var start = 0
+
+        while start < items.count {
+            let end = min(items.count, start + maxPerOp)
+            let slice = Array(items[start..<end])
+
+            var records: [CKRecord] = []
+            records.reserveCapacity(slice.count)
+
+            for (idx, item) in slice.enumerated() {
+                let reviewerId = reviewerIds[start + idx]
+                let baseID = recordID(groupId: groupId, movieId: item.movieId, reviewerId: reviewerId)
+                let id = route.zoneID.map { CKRecord.ID(recordName: baseID.recordName, zoneID: $0) } ?? baseID
+
+                var ratingToEncode = item.rating
+                if ratingToEncode.reviewerId == nil { ratingToEncode.reviewerId = reviewerId }
+
+                let record = CKRecord(recordType: recordType, recordID: id)
+                let data = try JSONEncoder().encode(ratingToEncode)
+                record[payloadKey] = data as CKRecordValue
+                record[movieIdKey] = item.movieId.uuidString as CKRecordValue
+                record[groupIdKey] = (groupId?.isEmpty == false) ? (groupId! as CKRecordValue) : nil
+                record[reviewerIdKey] = reviewerId.uuidString.lowercased() as CKRecordValue
+                record[reviewerNameKey] = ratingToEncode.reviewerName as CKRecordValue
+                record[updatedAtKey] = Date() as CKRecordValue
+
+                records.append(record)
+            }
+
+            try await modifyRecords(database: route.db, saving: records, deleting: [])
+            start = end
+        }
+    }
+
+    // MARK: - Phase 2: Inkrementelle Zone-Changes (Sharing-Gruppen)
+
+    struct RatingChanges {
+        /// Alle geaenderten/neu hinzugekommenen Ratings (voll decodiert) gruppiert nach MovieId.
+        let changedByMovieId: [UUID: [Rating]]
+        /// Deletes kommen als (movieId, reviewerIdKey) zurueck.
+        let deletedKeys: [(movieId: UUID, reviewerKey: String)]
+        let isInitial: Bool
+    }
+
+    /// Holt Rating-Aenderungen fuer Sharing-Gruppen inkrementell.
+    /// Fuer legacy/public (ohne Zone) gibt es ein leeres Delta zurueck.
+    func fetchRatingChanges(forGroupId groupId: String?) async throws -> RatingChanges {
+        guard let gid = groupId, !gid.isEmpty, let ctx = GroupContextStore.context(forGroupId: gid) else {
+            return RatingChanges(changedByMovieId: [:], deletedKeys: [], isInitial: false)
+        }
+
+        let route = routedDatabase(forGroupId: gid)
+        guard let zoneID = route.zoneID else {
+            return RatingChanges(changedByMovieId: [:], deletedKeys: [], isInitial: false)
+        }
+
+        let scope: CloudKitZoneChangeTokenStore.Scope = (ctx.scope == .shared) ? .shared : .private
+        let namespace = "ratings"
+        let previous = CloudKitZoneChangeTokenStore.token(namespace: namespace, scope: scope, zoneID: zoneID)
+
+        let result = try await CloudKitZoneChanges.fetchAllChanges(database: route.db, zoneID: zoneID, previousToken: previous)
+        CloudKitZoneChangeTokenStore.setToken(result.newChangeToken, namespace: namespace, scope: scope, zoneID: zoneID)
+
+        // Decode changed ratings
+        var changed: [UUID: [Rating]] = [:]
+        for record in result.changedRecords where record.recordType == recordType {
+            guard
+                let movieIdString = record[movieIdKey] as? String,
+                let movieUUID = UUID(uuidString: movieIdString),
+                let data = record[payloadKey] as? Data
+            else { continue }
+
+            var rating = try JSONDecoder().decode(Rating.self, from: data)
+
+            if rating.reviewerId == nil {
+                if let ridString = record[reviewerIdKey] as? String,
+                   let rid = UUID(uuidString: ridString) {
+                    rating.reviewerId = rid
+                } else {
+                    rating.reviewerId = StableID.deterministicUUID(forName: rating.reviewerName, groupId: gid)
+                }
+            }
+
+            changed[movieUUID, default: []].append(rating)
+        }
+
+        // Normalize per movie (uniq)
+        for (k, list) in changed {
+            changed[k] = uniqByReviewer(list)
+        }
+
+        // Deletes: we need to infer (movieId, reviewerKey). We encode recordName as base64 of gid|movieId|reviewerId.
+        // We can reconstruct movieId + reviewerId by decoding the base64.
+        var deleted: [(movieId: UUID, reviewerKey: String)] = []
+        for rid in result.deletedRecordIDs {
+            guard result.deletedRecordTypesByID[rid] == recordType else { continue }
+            if let parsed = parseRecordName(rid.recordName) {
+                deleted.append((movieId: parsed.movieId, reviewerKey: parsed.reviewerKey))
+            }
+        }
+
+        return RatingChanges(changedByMovieId: changed, deletedKeys: deleted, isInitial: (previous == nil))
+    }
 
     func saveRating(_ rating: Rating, movieId: UUID, groupId: String?) async throws {
         let route = routedDatabase(forGroupId: groupId)
@@ -253,6 +403,46 @@ struct CloudKitRatingStore {
     }
 }
 
+// MARK: - Internal helpers (Phase 2)
+
+private func modifyRecords(database: CKDatabase, saving: [CKRecord], deleting: [CKRecord.ID]) async throws {
+    try await withCheckedThrowingContinuation { cont in
+        let op = CKModifyRecordsOperation(recordsToSave: saving, recordIDsToDelete: deleting)
+        op.savePolicy = .changedKeys
+        op.modifyRecordsResultBlock = { result in
+            switch result {
+            case .success:
+                cont.resume(returning: ())
+            case .failure(let error):
+                cont.resume(throwing: error)
+            }
+        }
+        database.add(op)
+    }
+}
+
+private func parseRecordName(_ recordName: String) -> (movieId: UUID, reviewerKey: String)? {
+    // Reverse of base64-url encoding in recordID():
+    // raw = "gid|movieId|reviewerId"
+    var b64 = recordName
+    b64 = b64.replacingOccurrences(of: "-", with: "+")
+    b64 = b64.replacingOccurrences(of: "_", with: "/")
+    // Pad to multiple of 4
+    let mod = b64.count % 4
+    if mod != 0 {
+        b64 += String(repeating: "=", count: 4 - mod)
+    }
+    guard let data = Data(base64Encoded: b64),
+          let raw = String(data: data, encoding: .utf8) else { return nil }
+    let parts = raw.split(separator: "|")
+    guard parts.count == 3 else { return nil }
+    let moviePart = String(parts[1])
+    let reviewerPart = String(parts[2])
+    guard let movieId = UUID(uuidString: moviePart) else { return nil }
+    // reviewerKey is stored in MovieStore as reviewerId uuid string lowercased.
+    return (movieId: movieId, reviewerKey: reviewerPart.lowercased())
+}
+
 // MARK: - Zone-aware query helper
 
 private func queryAllRecords(database: CKDatabase, query: CKQuery, zoneID: CKRecordZone.ID?) async throws -> [CKRecord] {
@@ -293,3 +483,4 @@ private func queryAllRecords(database: CKDatabase, query: CKQuery, zoneID: CKRec
         run(cursor: nil)
     }
 }
+

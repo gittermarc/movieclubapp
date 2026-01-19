@@ -123,6 +123,50 @@ struct CloudKitUserStore {
 
     // MARK: - Upsert
 
+    // MARK: - Phase 2: Batched Upserts (Migration / Initial Upload)
+
+    /// Upsert vieler Members in Batches (CKModifyRecordsOperation).
+    ///
+    /// - Note: In Shared Zones kann es passieren, dass ein Client nicht in die Zone schreiben darf;
+    ///   dann wirft die Operation einen Fehler. Migration nutzt i.d.R. den Owner -> ok.
+    func upsertMembersBatch(
+        _ members: [CloudMember],
+        groupId: String
+    ) async throws {
+        guard !members.isEmpty else { return }
+
+        let route = routedDatabase(forGroupId: groupId)
+        let maxPerOp = 200
+        var start = 0
+
+        while start < members.count {
+            let end = min(members.count, start + maxPerOp)
+            let slice = Array(members[start..<end])
+
+            var records: [CKRecord] = []
+            records.reserveCapacity(slice.count)
+
+            for m in slice {
+                let trimmed = m.name.trimmingCharacters(in: .whitespacesAndNewlines)
+                if trimmed.isEmpty { continue }
+
+                let id = recordIDNew(groupId: groupId, memberId: m.id, zoneID: route.zoneID)
+                let record = CKRecord(recordType: recordType, recordID: id)
+                record[groupIdKey] = groupId as CKRecordValue
+                record[memberIdKey] = m.id.uuidString.lowercased() as CKRecordValue
+                record[nameKey] = trimmed as CKRecordValue
+                record[updatedAtKey] = Date() as CKRecordValue
+                records.append(record)
+            }
+
+            if !records.isEmpty {
+                try await modifyRecords(database: route.db, saving: records, deleting: [])
+            }
+
+            start = end
+        }
+    }
+
     func upsertMember(id: UUID, name: String, groupId: String) async throws {
         let route = routedDatabase(forGroupId: groupId)
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -230,6 +274,24 @@ private func queryAllRecords(database: CKDatabase, query: CKQuery, zoneID: CKRec
         }
 
         run(cursor: nil)
+    }
+}
+
+// MARK: - CloudKit async helper (completion -> async)
+
+private func modifyRecords(database: CKDatabase, saving: [CKRecord], deleting: [CKRecord.ID]) async throws {
+    try await withCheckedThrowingContinuation { cont in
+        let op = CKModifyRecordsOperation(recordsToSave: saving, recordIDsToDelete: deleting)
+        op.savePolicy = .changedKeys
+        op.modifyRecordsResultBlock = { result in
+            switch result {
+            case .success:
+                cont.resume(returning: ())
+            case .failure(let error):
+                cont.resume(throwing: error)
+            }
+        }
+        database.add(op)
     }
 }
 
