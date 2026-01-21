@@ -14,34 +14,23 @@ extension Notification.Name {
 
 final class CloudKitShareAppDelegate: NSObject, UIApplicationDelegate {
 
+    /// SwiftUI apps use scenes. Starting with iOS 13 (and increasingly in newer iOS versions),
+    /// CloudKit delivers share-acceptance callbacks to the window scene delegate.
+    /// We install a scene delegate so `windowScene(_:userDidAcceptCloudKitShareWith:)` is reliably called.
+    func application(
+        _ application: UIApplication,
+        configurationForConnecting connectingSceneSession: UISceneSession,
+        options: UIScene.ConnectionOptions
+    ) -> UISceneConfiguration {
+        let sceneConfig = UISceneConfiguration(name: nil, sessionRole: connectingSceneSession.role)
+        sceneConfig.delegateClass = CloudKitShareSceneDelegate.self
+        return sceneConfig
+    }
+
     func application(
         _ application: UIApplication,
         userDidAcceptCloudKitShareWith cloudKitShareMetadata: CKShare.Metadata
     ) {
-        // `containerIdentifier` has been optional/non-optional depending on SDK.
-        // Casting to `String?` compiles in both cases.
-        let identifier = (cloudKitShareMetadata.containerIdentifier as String?)
-        let container: CKContainer = {
-            if let id = identifier {
-                return CKContainer(identifier: id)
-            }
-            return .default()
-        }()
-
-        let op = CKAcceptSharesOperation(shareMetadatas: [cloudKitShareMetadata])
-        op.perShareResultBlock = { metadata, result in
-            switch result {
-            case .success:
-                NotificationCenter.default.post(name: .cloudKitShareAccepted, object: metadata)
-            case .failure(let error):
-                print("CKAcceptSharesOperation perShareResult error: \(error)")
-            }
-        }
-        op.acceptSharesResultBlock = { result in
-            if case .failure(let error) = result {
-                print("CKAcceptSharesOperation error: \(error)")
-            }
-        }
-        container.add(op)
+        CloudKitShareAcceptance.accept(cloudKitShareMetadata)
     }
 }
