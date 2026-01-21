@@ -84,6 +84,14 @@ final class CloudKitGoalStore {
             record[yearKey] = year as CKRecordValue
             record[targetKey] = target as CKRecordValue
             record[updatedAtKey] = Date() as CKRecordValue
+
+            // CloudKit Sharing: attach to group root so participants see goals.
+            if let gid = groupId, !gid.isEmpty, let zoneID = route.zoneID {
+                let rootID = CKRecord.ID(recordName: gid, zoneID: zoneID)
+                record.parent = CKRecord.Reference(recordID: rootID, action: .none)
+            } else {
+                record.parent = nil
+            }
             return record
         }
 
@@ -144,6 +152,14 @@ final class CloudKitGoalStore {
             record[groupIdKey] = (groupId ?? "") as CKRecordValue
             record[payloadKey] = try JSONEncoder().encode(payload) as CKRecordValue
             record[updatedAtKey] = Date() as CKRecordValue
+
+            // CloudKit Sharing: attach to group root so participants see goals.
+            if let gid = groupId, !gid.isEmpty, let zoneID = route.zoneID {
+                let rootID = CKRecord.ID(recordName: gid, zoneID: zoneID)
+                record.parent = CKRecord.Reference(recordID: rootID, action: .none)
+            } else {
+                record.parent = nil
+            }
             return record
         }
 

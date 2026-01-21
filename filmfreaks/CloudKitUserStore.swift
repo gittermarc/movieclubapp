@@ -156,6 +156,15 @@ struct CloudKitUserStore {
                 record[memberIdKey] = m.id.uuidString.lowercased() as CKRecordValue
                 record[nameKey] = trimmed as CKRecordValue
                 record[updatedAtKey] = Date() as CKRecordValue
+
+                // CloudKit Sharing: attach member record to the group root record.
+                if let zoneID = route.zoneID {
+                    let rootID = CKRecord.ID(recordName: groupId, zoneID: zoneID)
+                    record.parent = CKRecord.Reference(recordID: rootID, action: .none)
+                } else {
+                    record.parent = nil
+                }
+
                 records.append(record)
             }
 
@@ -177,6 +186,15 @@ struct CloudKitUserStore {
             record[memberIdKey] = id.uuidString.lowercased() as CKRecordValue
             record[nameKey] = trimmed as CKRecordValue
             record[updatedAtKey] = Date() as CKRecordValue
+
+            // CloudKit Sharing: attach member record to the group root record.
+            if let zoneID = route.zoneID {
+                let rootID = CKRecord.ID(recordName: groupId, zoneID: zoneID)
+                record.parent = CKRecord.Reference(recordID: rootID, action: .none)
+            } else {
+                record.parent = nil
+            }
+
             return record
         }
 

@@ -26,6 +26,10 @@ final class CloudKitGroupStore: ObservableObject {
 
     private var lastICloudProblemToastAt: Date?
 
+    // MARK: - Share hierarchy repair (record sharing)
+
+    private let shareHierarchyRepairKeyPrefix = "ff.ck.shareHierarchyRepair.v1."
+
     init(container: CKContainer = .default()) {
         self.container = container
 
@@ -61,6 +65,15 @@ final class CloudKitGroupStore: ObservableObject {
             for g in owned + shared {
                 GroupContextStore.upsert(g)
             }
+
+            // One-time repair for older builds:
+            // We share the group's root record via CloudKit *record sharing*.
+            // Only the root record + its descendants are visible/writable for participants.
+            // Older builds stored Movies/Ratings/Goals/Members without a `parent` -> they never became
+            // part of the share, so other users couldn't see them (and writes could fail).
+            for g in owned {
+                Task { await self.repairShareHierarchyIfNeeded(for: g) }
+            }
         } catch {
             print("CloudKitGroupStore.refresh error: \(error)")
         }
@@ -88,9 +101,9 @@ final class CloudKitGroupStore: ObservableObject {
         let message: String
         switch status {
         case .noAccount:
-            message = "Du bist nicht bei iCloud angemeldet. Bitte iCloud in den iOS‑Einstellungen aktivieren – sonst funktionieren Cloud‑Gruppen & Einladungen nicht."
+            message = "Du bist nicht bei iCloud angemeldet. Bitte iCloud in den iOS-Einstellungen aktivieren – sonst funktionieren Cloud-Gruppen & Einladungen nicht."
         case .restricted:
-            message = "iCloud ist auf diesem Gerät eingeschränkt (z. B. MDM/Bildschirmzeit). Cloud‑Gruppen sind daher nicht verfügbar."
+            message = "iCloud ist auf diesem Gerät eingeschränkt (z. B. MDM/Bildschirmzeit). Cloud-Gruppen sind daher nicht verfügbar."
         default:
             message = "iCloud ist gerade nicht verfügbar."
         }
@@ -252,6 +265,74 @@ final class CloudKitGroupStore: ObservableObject {
             return CKRecordZone(zoneID: zoneID)
         }
     }
+
+    // MARK: - Share hierarchy repair (record sharing)
+
+    private func repairShareHierarchyIfNeeded(for group: GroupContext) async {
+        guard group.scope == .private else { return }
+
+        let key = shareHierarchyRepairKeyPrefix + group.id
+        if UserDefaults.standard.bool(forKey: key) {
+            return
+        }
+
+        do {
+            try await repairShareHierarchy(for: group)
+            UserDefaults.standard.set(true, forKey: key)
+        } catch {
+            // Don't mark as done; we'll retry next refresh.
+            print("CloudKitGroupStore: share hierarchy repair failed for \(group.id): \(error)")
+        }
+    }
+
+    /// Ensures that all group-related records are descendants of the group's root record.
+    /// This is required for CloudKit *record sharing* so participants can see/write these records.
+    private func repairShareHierarchy(for group: GroupContext) async throws {
+        let zoneID = CKRecordZone.ID(zoneName: group.zoneName, ownerName: group.ownerName)
+        let rootID = CKRecord.ID(recordName: group.id, zoneID: zoneID)
+        let rootRef = CKRecord.Reference(recordID: rootID, action: .none)
+
+        // Keep in sync with record types used by the CloudKit stores.
+        let recordTypes: [String] = [
+            "Movie",
+            "MovieRating",
+            "GroupMember",
+            "ViewingGoal",
+            "ViewingCustomGoals"
+        ]
+
+        for type in recordTypes {
+            let predicate = NSPredicate(format: "%K == %@", "groupId", group.id)
+            let records = try await queryAllRecords(
+                database: privateDB,
+                recordType: type,
+                predicate: predicate,
+                zoneID: zoneID
+            )
+
+            let toFix = records.filter { $0.parent?.recordID != rootID }
+            guard !toFix.isEmpty else { continue }
+
+            for record in toFix {
+                record.parent = rootRef
+                // Save individually to be resilient to partial failures/conflicts.
+                do {
+                    _ = try await privateDB.save(record)
+                } catch {
+                    if let ckError = error as? CKError,
+                       ckError.code == .serverRecordChanged,
+                       let serverRecord = ckError.userInfo[CKRecordChangedErrorServerRecordKey] as? CKRecord {
+
+                        serverRecord.parent = rootRef
+                        _ = try await privateDB.save(serverRecord)
+                    } else {
+                        // Best-effort: keep going so one bad record doesn't block the whole repair.
+                        print("CloudKitGroupStore: could not reparent \(type) record \(record.recordID.recordName): \(error)")
+                    }
+                }
+            }
+        }
+    }
 }
 
 // MARK: - CloudKit async helpers (completion -> async)
@@ -266,6 +347,57 @@ private func fetchAllZones(in db: CKDatabase) async throws -> [CKRecordZone] {
             }
         }
     }
+}
+
+private func queryAllRecords(
+    database: CKDatabase,
+    recordType: String,
+    predicate: NSPredicate,
+    zoneID: CKRecordZone.ID
+) async throws -> [CKRecord] {
+
+    var all: [CKRecord] = []
+    var cursor: CKQueryOperation.Cursor? = nil
+
+    while true {
+        let page: ([CKRecord], CKQueryOperation.Cursor?) = try await withCheckedThrowingContinuation { cont in
+            let op: CKQueryOperation
+            if let cursor {
+                op = CKQueryOperation(cursor: cursor)
+            } else {
+                let query = CKQuery(recordType: recordType, predicate: predicate)
+                op = CKQueryOperation(query: query)
+                op.zoneID = zoneID
+            }
+
+            var pageRecords: [CKRecord] = []
+            op.recordMatchedBlock = { _, result in
+                if case .success(let record) = result {
+                    pageRecords.append(record)
+                }
+            }
+
+            op.queryResultBlock = { result in
+                switch result {
+                case .success(let nextCursor):
+                    cont.resume(returning: (pageRecords, nextCursor))
+                case .failure(let error):
+                    cont.resume(throwing: error)
+                }
+            }
+
+            database.add(op)
+        }
+
+        all.append(contentsOf: page.0)
+        cursor = page.1
+
+        if cursor == nil {
+            break
+        }
+    }
+
+    return all
 }
 
 private func modifyRecords(database: CKDatabase, saving: [CKRecord], deleting: [CKRecord.ID]) async throws {

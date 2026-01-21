@@ -34,36 +34,39 @@ struct GroupContext: Identifiable, Codable, Equatable {
 final class GroupContextStore {
     private static let contextsKey = "GroupContextsById"
 
+    private static func loadDict() -> [String: Data] {
+        (UserDefaults.standard.object(forKey: contextsKey) as? [String: Data]) ?? [:]
+    }
+
+    private static func saveDict(_ dict: [String: Data]) {
+        UserDefaults.standard.set(dict, forKey: contextsKey)
+    }
+
     /// Load a single context for a groupId.
     static func context(forGroupId groupId: String) -> GroupContext? {
         guard !groupId.isEmpty else { return nil }
-        guard let dict = UserDefaults.standard.dictionary(forKey: contextsKey) as? [String: Data] else {
-            return nil
-        }
+        let dict = loadDict()
         guard let data = dict[groupId] else { return nil }
         return try? JSONDecoder().decode(GroupContext.self, from: data)
     }
 
     /// Save or update a context.
     static func upsert(_ context: GroupContext) {
-        var dict = (UserDefaults.standard.dictionary(forKey: contextsKey) as? [String: Data]) ?? [:]
+        var dict = loadDict()
         if let data = try? JSONEncoder().encode(context) {
             dict[context.id] = data
-            UserDefaults.standard.set(dict, forKey: contextsKey)
+            saveDict(dict)
         }
     }
 
     /// Remove a context (e.g. user left a shared group).
     static func remove(groupId: String) {
-        var dict = (UserDefaults.standard.dictionary(forKey: contextsKey) as? [String: Data]) ?? [:]
+        var dict = loadDict()
         dict.removeValue(forKey: groupId)
-        UserDefaults.standard.set(dict, forKey: contextsKey)
+        saveDict(dict)
     }
 
     static func all() -> [GroupContext] {
-        guard let dict = UserDefaults.standard.dictionary(forKey: contextsKey) as? [String: Data] else {
-            return []
-        }
-        return dict.values.compactMap { try? JSONDecoder().decode(GroupContext.self, from: $0) }
+        loadDict().values.compactMap { try? JSONDecoder().decode(GroupContext.self, from: $0) }
     }
 }

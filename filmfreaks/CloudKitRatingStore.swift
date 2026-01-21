@@ -239,6 +239,16 @@ struct CloudKitRatingStore {
             record[payloadKey] = data as CKRecordValue
             record[movieIdKey] = movieId.uuidString as CKRecordValue
             record[groupIdKey] = (groupId?.isEmpty == false) ? (groupId! as CKRecordValue) : nil
+
+            // CloudKit Sharing (record sharing):
+            // Ensure the rating record is a descendant of the shared group root record.
+            if let gid = groupId, !gid.isEmpty, let zoneID = route.zoneID {
+                let rootID = CKRecord.ID(recordName: gid, zoneID: zoneID)
+                record.parent = CKRecord.Reference(recordID: rootID, action: .none)
+            } else {
+                record.parent = nil
+            }
+
             record[reviewerIdKey] = reviewerId.uuidString.lowercased() as CKRecordValue
             record[reviewerNameKey] = ratingToEncode.reviewerName as CKRecordValue
             record[updatedAtKey] = Date() as CKRecordValue

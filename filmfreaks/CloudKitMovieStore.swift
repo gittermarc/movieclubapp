@@ -366,8 +366,17 @@ struct CloudKitMovieStore {
 
             if let gid = cleanMovie.groupId, !gid.isEmpty {
                 record[groupIdKey] = gid as CKRecordValue
+
+                // CloudKit Sharing (record sharing):
+                // Make all group data records children of the group's root record,
+                // so participants in a share can see and add them.
+                if let zoneID = route.zoneID {
+                    let rootID = CKRecord.ID(recordName: gid, zoneID: zoneID)
+                    record.parent = CKRecord.Reference(recordID: rootID, action: .none)
+                }
             } else {
                 record[groupIdKey] = nil
+                record.parent = nil
             }
 
             return record
@@ -508,8 +517,15 @@ struct CloudKitMovieStore {
 
             if let gid, !gid.isEmpty {
                 record[groupIdKey] = gid as CKRecordValue
+
+                // CloudKit Sharing: attach the record as child of the group's root record.
+                if let zoneID = route.zoneID {
+                    let rootID = CKRecord.ID(recordName: gid, zoneID: zoneID)
+                    record.parent = CKRecord.Reference(recordID: rootID, action: .none)
+                }
             } else {
                 record[groupIdKey] = nil
+                record.parent = nil
             }
 
             if groupedSaves[route.key] == nil {
