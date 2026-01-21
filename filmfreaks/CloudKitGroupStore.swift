@@ -24,6 +24,8 @@ final class CloudKitGroupStore: ObservableObject {
     private let nameKey = "name"
     private let createdAtKey = "createdAt"
 
+    private var lastICloudProblemToastAt: Date?
+
     init(container: CKContainer = .default()) {
         self.container = container
 
@@ -39,6 +41,16 @@ final class CloudKitGroupStore: ObservableObject {
 
     func refresh() async {
         do {
+            // If the user is not signed into iCloud, shared/owned zones are unavailable.
+            // Surface a clear message instead of silently showing an empty list.
+            let status = try await fetchAccountStatus()
+            if status == .noAccount || status == .restricted {
+                maybeShowICloudProblemToast(status: status)
+                self.ownedGroups = []
+                self.sharedGroups = []
+                return
+            }
+
             let owned = try await fetchGroupContexts(in: privateDB, scope: .private)
             let shared = try await fetchGroupContexts(in: sharedDB, scope: .shared)
 
@@ -52,6 +64,41 @@ final class CloudKitGroupStore: ObservableObject {
         } catch {
             print("CloudKitGroupStore.refresh error: \(error)")
         }
+    }
+
+    private func fetchAccountStatus() async throws -> CKAccountStatus {
+        try await withCheckedThrowingContinuation { cont in
+            container.accountStatus { status, error in
+                if let error {
+                    cont.resume(throwing: error)
+                } else {
+                    cont.resume(returning: status)
+                }
+            }
+        }
+    }
+
+    private func maybeShowICloudProblemToast(status: CKAccountStatus) {
+        let now = Date()
+        if let last = lastICloudProblemToastAt, now.timeIntervalSince(last) < 120 {
+            return
+        }
+        lastICloudProblemToastAt = now
+
+        let message: String
+        switch status {
+        case .noAccount:
+            message = "Du bist nicht bei iCloud angemeldet. Bitte iCloud in den iOS‑Einstellungen aktivieren – sonst funktionieren Cloud‑Gruppen & Einladungen nicht."
+        case .restricted:
+            message = "iCloud ist auf diesem Gerät eingeschränkt (z. B. MDM/Bildschirmzeit). Cloud‑Gruppen sind daher nicht verfügbar."
+        default:
+            message = "iCloud ist gerade nicht verfügbar."
+        }
+
+        ToastCenter.shared.show(
+            .error(title: "iCloud erforderlich", message: message),
+            autoHideAfter: 4.0
+        )
     }
 
     func createGroup(name: String) async throws -> GroupContext {

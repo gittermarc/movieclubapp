@@ -37,6 +37,10 @@ struct filmfreaksApp: App {
                     .environmentObject(groupStore)
                     .environmentObject(networkMonitor)
 
+                // Non-blocking banner/toast for things like CloudKit share acceptance.
+                ToastHost()
+                    .zIndex(4)
+
                 if showSplash {
                     SplashView {
                         withAnimation {
@@ -44,7 +48,7 @@ struct filmfreaksApp: App {
                         }
                     }
                     .transition(.opacity)
-                    .zIndex(1)
+                    .zIndex(3)
                 }
             }
             .onChange(of: scenePhase) { _, newPhase in
