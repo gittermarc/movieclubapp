@@ -315,6 +315,9 @@ class UserStore: ObservableObject {
         users = cloudUsers
         isApplyingCloudUpdate = false
 
+        // Persist cloud-applied state so members are still available offline / after app restart.
+        PersistenceManager.shared.saveUsers(cloudUsers, groupId: groupId)
+
         if let prevId = previousSelectedId,
            let match = users.first(where: { $0.id == prevId }) {
             selectedUser = match

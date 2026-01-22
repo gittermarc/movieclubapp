@@ -187,7 +187,10 @@ class MovieStore: ObservableObject {
         }
 
         do {
-            let gid = currentGroupId
+            // Capture the group id at the start so a mid-flight group switch can't
+            // accidentally apply results to the wrong group.
+            let requestedGroupId = currentGroupId
+            let gid = requestedGroupId
             let isZoneGroup: Bool = {
                 guard let gid, !gid.isEmpty else { return false }
                 return GroupContextStore.context(forGroupId: gid) != nil
@@ -330,6 +333,13 @@ class MovieStore: ObservableObject {
                 (watched + backlog).compactMap { $0.groupName }.first
             }()
 
+            // If the user switched groups while we were fetching, do NOT apply these results.
+            // (Otherwise we can temporarily show the wrong group's movies.)
+            guard groupKey(requestedGroupId) == groupKey(currentGroupId) else {
+                print("CloudKit: discard loadFromCloud result (group switched: requested=\(requestedGroupId ?? "nil"), active=\(currentGroupId ?? "nil"))")
+                return
+            }
+
             isApplyingCloudUpdate = true
             self.movies = watched
             self.backlogMovies = backlog
@@ -337,6 +347,13 @@ class MovieStore: ObservableObject {
                 self.currentGroupName = nameFromData
             }
             isApplyingCloudUpdate = false
+
+            // 🔑 IMPORTANT:
+            // For zone-based groups we sync incrementally via change tokens.
+            // That means on the *next* app start, we need a local baseline to apply deltas onto.
+            // Cloud-applied updates are therefore persisted explicitly (even though we suppress didSet).
+            PersistenceManager.shared.saveMovies(watched, groupId: requestedGroupId)
+            PersistenceManager.shared.saveBacklogMovies(backlog, groupId: requestedGroupId)
 
             print("CloudKit: applied group data → watched: \(watched.count), backlog: \(backlog.count)")
 
