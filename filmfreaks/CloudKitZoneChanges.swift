@@ -37,8 +37,10 @@ enum CloudKitZoneChanges {
 
             var finalZoneToken: CKServerChangeToken?
             var zoneSpecificError: Error?
+            var perRecordError: Error?
 
-            var config = CKFetchRecordZoneChangesOperation.ZoneConfiguration()
+            // ✅ war vorher `var`, wird aber nie neu zugewiesen → let (Warnung weg)
+            let config = CKFetchRecordZoneChangesOperation.ZoneConfiguration()
             config.previousServerChangeToken = previousToken
             config.desiredKeys = nil
 
@@ -48,8 +50,15 @@ enum CloudKitZoneChanges {
             )
             op.fetchAllChanges = true
 
-            op.recordChangedBlock = { record in
-                changed.append(record)
+            // ✅ recordChangedBlock ist deprecated → recordWasChangedBlock (Warnung weg)
+            // Liefert pro Record ein Result (inkl. Fehler).
+            op.recordWasChangedBlock = { _, result in
+                switch result {
+                case .success(let record):
+                    changed.append(record)
+                case .failure(let error):
+                    if perRecordError == nil { perRecordError = error }
+                }
             }
 
             op.recordWithIDWasDeletedBlock = { recordID, recordType in
@@ -81,6 +90,10 @@ enum CloudKitZoneChanges {
                 case .success:
                     if let zoneSpecificError {
                         cont.resume(throwing: zoneSpecificError)
+                        return
+                    }
+                    if let perRecordError {
+                        cont.resume(throwing: perRecordError)
                         return
                     }
                     cont.resume(returning: CloudKitZoneChangesResult(
