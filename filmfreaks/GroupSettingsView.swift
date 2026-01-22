@@ -96,9 +96,23 @@ struct GroupSettingsView: View {
         .task {
             await groupStore.refresh()
         }
-        .sheet(item: shareBinding) { wrapper in
-            CloudSharingControllerView(container: CKContainer.default(), share: wrapper.share)
-                .ignoresSafeArea()
+        .sheet(
+            isPresented: Binding(
+                get: { shareToPresent != nil },
+                set: { if !$0 { shareToPresent = nil } }
+            )
+        ) {
+            if shareToPresent != nil {
+                GroupShareSheetView(
+                    container: CKContainer.default(),
+                    share: Binding(
+                        get: { shareToPresent! },
+                        set: { shareToPresent = $0 }
+                    )
+                )
+            } else {
+                EmptyView()
+            }
         }
         .confirmationDialog(
             groupActionTitle,
@@ -456,16 +470,4 @@ struct GroupSettingsView: View {
         }
     }
 
-    // Sheet helper
-    private var shareBinding: Binding<ShareWrapper?> {
-        Binding(
-            get: { shareToPresent.map { ShareWrapper(share: $0) } },
-            set: { shareToPresent = $0?.share }
-        )
-    }
-}
-
-private struct ShareWrapper: Identifiable {
-    let id = UUID()
-    let share: CKShare
 }

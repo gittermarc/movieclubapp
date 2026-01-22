@@ -12,10 +12,11 @@ internal import UIKit
 struct CloudSharingControllerView: UIViewControllerRepresentable {
 
     let container: CKContainer
-    let share: CKShare
+    @Binding var share: CKShare
+    var onError: ((Error) -> Void)? = nil
 
     func makeCoordinator() -> Coordinator {
-        Coordinator()
+        Coordinator(share: $share, onError: onError)
     }
 
     func makeUIViewController(context: Context) -> UICloudSharingController {
@@ -29,8 +30,29 @@ struct CloudSharingControllerView: UIViewControllerRepresentable {
     }
 
     final class Coordinator: NSObject, UICloudSharingControllerDelegate {
+        private let share: Binding<CKShare>
+        private let onError: ((Error) -> Void)?
+
+        init(share: Binding<CKShare>, onError: ((Error) -> Void)?) {
+            self.share = share
+            self.onError = onError
+        }
+
         func cloudSharingController(_ csc: UICloudSharingController, failedToSaveShareWithError error: Error) {
+            onError?(error)
             print("Cloud sharing failed: \(error)")
+        }
+
+        func cloudSharingControllerDidSaveShare(_ csc: UICloudSharingController) {
+            if let updated = csc.share {
+                share.wrappedValue = updated
+            }
+        }
+
+        func cloudSharingControllerDidStopSharing(_ csc: UICloudSharingController) {
+            if let updated = csc.share {
+                share.wrappedValue = updated
+            }
         }
 
         func itemTitle(for csc: UICloudSharingController) -> String? {

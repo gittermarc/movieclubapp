@@ -146,6 +146,22 @@ final class CloudKitGroupStore: ObservableObject {
         let rootID = CKRecord.ID(recordName: group.id, zoneID: zoneID)
         let root = try await privateDB.record(for: rootID)
 
+        // If the root record is already shared, CloudKit stores a reference to the share record in
+        // the root's system field `share`. Fetch and reuse that share so we keep the participant list.
+        if let existingShareRef = root.share {
+            do {
+                let fetched = try await privateDB.record(for: existingShareRef.recordID)
+                if let existing = fetched as? CKShare {
+                    // Keep title in sync with the current group name.
+                    existing[CKShare.SystemFieldKey.title] = group.name as CKRecordValue
+                    try await modifyRecords(database: privateDB, saving: [existing], deleting: [])
+                    return existing
+                }
+            } catch {
+                // Fall through to creating a new share.
+            }
+        }
+
         let share = CKShare(rootRecord: root)
         share[CKShare.SystemFieldKey.title] = group.name as CKRecordValue
 
