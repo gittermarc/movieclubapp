@@ -25,6 +25,7 @@ struct TimelineView: View {
 
     @EnvironmentObject var movieStore: MovieStore
     @EnvironmentObject var userStore: UserStore
+    @EnvironmentObject var displaySettings: DisplaySettings
     @Environment(\.dismiss) private var dismiss
 
     @State private var filterMode: TimelineFilterMode = .year
@@ -393,7 +394,8 @@ struct TimelineView: View {
                             .font(.caption)
                             .foregroundStyle(.white.opacity(0.85))
 
-                        if let avg = movie.averageRating ?? movie.tmdbRating {
+                        if displaySettings.showRatings,
+                           let avg = movie.displayAverage(for: displaySettings.ratingDisplayMode) {
                             Label(String(format: "%.1f", avg), systemImage: "star.fill")
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(.white)
@@ -490,4 +492,5 @@ struct TimelineView: View {
     TimelineView()
         .environmentObject(MovieStore.preview())
         .environmentObject(UserStore())
+        .environmentObject(DisplaySettings())
 }

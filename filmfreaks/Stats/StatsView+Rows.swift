@@ -156,7 +156,7 @@ extension StatsView {
 
             let badgeText: String? = {
                 if let trailingText { return trailingText }
-                if let avg = movie.averageRating ?? movie.tmdbRating { return String(format: "%.1f", avg) }
+                if let avg = movie.displayAverage(for: displaySettings.ratingDisplayMode) { return String(format: "%.1f", avg) }
                 return nil
             }()
 
@@ -166,7 +166,7 @@ extension StatsView {
                     .monospacedDigit()
                     .padding(.horizontal, 8)
                     .padding(.vertical, 6)
-                    .background(trailingText == nil ? Color.blue.opacity(0.12) : trailingBackground)
+                    .background(trailingText == nil ? displaySettings.tintColor.opacity(0.12) : trailingBackground)
                     .clipShape(RoundedRectangle(cornerRadius: 8))
             }
         }

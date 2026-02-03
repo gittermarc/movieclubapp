@@ -81,7 +81,8 @@ struct AppearancePreviewCard: View {
             Spacer()
 
             if displaySettings.showRatings {
-                ratingPill(text: "8.6")
+                let text = displaySettings.ratingDisplayMode == .ratingAverage ? "8.6" : "8.0"
+                ratingPill(text: text)
             }
         }
         .padding(10)
@@ -104,7 +105,8 @@ struct AppearancePreviewCard: View {
             Spacer()
 
             if displaySettings.showRatings {
-                ratingPill(text: "9.1", compact: true)
+                let text = displaySettings.ratingDisplayMode == .ratingAverage ? "9.1" : "8.7"
+                ratingPill(text: text, compact: true)
             }
         }
         .padding(.vertical, 6)

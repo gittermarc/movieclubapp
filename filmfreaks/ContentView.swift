@@ -128,6 +128,14 @@ struct ContentView: View {
         MovieViewStyle(rawValue: viewStyleRaw) ?? .cards
     }
 
+    // MARK: - Rating display helper
+
+    /// Einheitliche Kennzahl für Anzeige/Sortierung (abhängig von Einstellungen).
+    /// Fällt auf TMDb zurück, wenn die Gruppe noch nichts bewertet hat.
+    private func displayScore(for movie: Movie) -> Double? {
+        movie.displayAverage(for: displaySettings.ratingDisplayMode)
+    }
+
 
 
 
@@ -974,12 +982,12 @@ struct ContentView: View {
             case .titleZA:
                 return lhsMovie.title.localizedCaseInsensitiveCompare(rhsMovie.title) == .orderedDescending
             case .ratingHigh:
-                let l = lhsMovie.averageRating ?? lhsMovie.tmdbRating ?? -Double.infinity
-                let r = rhsMovie.averageRating ?? rhsMovie.tmdbRating ?? -Double.infinity
+                let l = displayScore(for: lhsMovie) ?? -Double.infinity
+                let r = displayScore(for: rhsMovie) ?? -Double.infinity
                 return l > r
             case .ratingLow:
-                let l = lhsMovie.averageRating ?? lhsMovie.tmdbRating ?? Double.infinity
-                let r = rhsMovie.averageRating ?? rhsMovie.tmdbRating ?? Double.infinity
+                let l = displayScore(for: lhsMovie) ?? Double.infinity
+                let r = displayScore(for: rhsMovie) ?? Double.infinity
                 return l < r
             case .dateNewest:
                 let l = lhsMovie.watchedDate ?? .distantPast
@@ -1009,12 +1017,12 @@ struct ContentView: View {
             case .titleZA:
                 return lhsMovie.title.localizedCaseInsensitiveCompare(rhsMovie.title) == .orderedDescending
             case .ratingHigh:
-                let l = lhsMovie.averageRating ?? lhsMovie.tmdbRating ?? -Double.infinity
-                let r = rhsMovie.averageRating ?? rhsMovie.tmdbRating ?? -Double.infinity
+                let l = displayScore(for: lhsMovie) ?? -Double.infinity
+                let r = displayScore(for: rhsMovie) ?? -Double.infinity
                 return l > r
             case .ratingLow:
-                let l = lhsMovie.averageRating ?? lhsMovie.tmdbRating ?? Double.infinity
-                let r = rhsMovie.averageRating ?? rhsMovie.tmdbRating ?? Double.infinity
+                let l = displayScore(for: lhsMovie) ?? Double.infinity
+                let r = displayScore(for: rhsMovie) ?? Double.infinity
                 return l < r
             case .dateNewest:
                 // Im Backlog: neuestes Erscheinungsjahr zuerst
@@ -1203,12 +1211,12 @@ struct ContentView: View {
             case .titleZA:
                 return lhsMovie.title.localizedCaseInsensitiveCompare(rhsMovie.title) == .orderedDescending
             case .ratingHigh:
-                let l = lhsMovie.averageRating ?? lhsMovie.tmdbRating ?? -Double.infinity
-                let r = rhsMovie.averageRating ?? rhsMovie.tmdbRating ?? -Double.infinity
+                let l = displayScore(for: lhsMovie) ?? -Double.infinity
+                let r = displayScore(for: rhsMovie) ?? -Double.infinity
                 return l > r
             case .ratingLow:
-                let l = lhsMovie.averageRating ?? lhsMovie.tmdbRating ?? Double.infinity
-                let r = rhsMovie.averageRating ?? rhsMovie.tmdbRating ?? Double.infinity
+                let l = displayScore(for: lhsMovie) ?? Double.infinity
+                let r = displayScore(for: rhsMovie) ?? Double.infinity
                 return l < r
             case .dateNewest:
                 let l = lhsMovie.watchedDate ?? .distantPast
@@ -1232,10 +1240,11 @@ struct ContentView: View {
                 )
             } label: {
                 if selectedViewStyle == .compactList {
-                    let displayRating = movie.averageRating ?? movie.tmdbRating
+                    let displayRating = displayScore(for: movie)
                     compactMovieRow(movie: movie, average: displayRating)
                 } else {
-                    movieRow(movie: movie, average: movie.averageRating)
+                    let displayRating = displayScore(for: movie)
+                    movieRow(movie: movie, average: displayRating)
                 }
             }
         }
@@ -1264,12 +1273,12 @@ struct ContentView: View {
             case .titleZA:
                 return lhsMovie.title.localizedCaseInsensitiveCompare(rhsMovie.title) == .orderedDescending
             case .ratingHigh:
-                let l = lhsMovie.averageRating ?? lhsMovie.tmdbRating ?? -Double.infinity
-                let r = rhsMovie.averageRating ?? rhsMovie.tmdbRating ?? -Double.infinity
+                let l = displayScore(for: lhsMovie) ?? -Double.infinity
+                let r = displayScore(for: rhsMovie) ?? -Double.infinity
                 return l > r
             case .ratingLow:
-                let l = lhsMovie.averageRating ?? lhsMovie.tmdbRating ?? Double.infinity
-                let r = rhsMovie.averageRating ?? rhsMovie.tmdbRating ?? Double.infinity
+                let l = displayScore(for: lhsMovie) ?? Double.infinity
+                let r = displayScore(for: rhsMovie) ?? Double.infinity
                 return l < r
             case .dateNewest:
                 // Im Backlog: neuestes Erscheinungsjahr zuerst
@@ -1290,7 +1299,7 @@ struct ContentView: View {
                     isBacklog: true
                 )
             } label: {
-                let displayRating = movie.averageRating ?? movie.tmdbRating
+                let displayRating = displayScore(for: movie)
                 if selectedViewStyle == .compactList {
                     compactMovieRow(movie: movie, average: displayRating)
                 } else {

@@ -250,6 +250,31 @@ extension Movie {
         return total / Double(all.count)
     }
 
+    /// Ø Fazit (1–10) über alle User, die ein Fazit vergeben haben
+    var averageFazit: Double? {
+        let values = ratings.compactMap { $0.fazitScore }.map { Double($0) }
+        guard !values.isEmpty else { return nil }
+        let total = values.reduce(0, +)
+        return total / Double(values.count)
+    }
+
+    /// Gruppen-Ø je nach Anzeige-Modus.
+    /// - ratingAverage: Kriterien-Ø (wie bisher)
+    /// - fazitAverage: Fazit-Ø (mit Fallback auf Kriterien-Ø für Legacy)
+    func groupAverage(for mode: RatingDisplayMode) -> Double? {
+        switch mode {
+        case .ratingAverage:
+            return averageRating
+        case .fazitAverage:
+            return averageFazit ?? averageRating
+        }
+    }
+
+    /// Anzeige-Ø je nach Modus – fällt auf TMDb zurück, wenn die Gruppe noch nichts hat.
+    func displayAverage(for mode: RatingDisplayMode) -> Double? {
+        groupAverage(for: mode) ?? tmdbRating
+    }
+
     var watchedDateText: String? {
         guard let watchedDate else { return nil }
         return Movie.watchedDateFormatter.string(from: watchedDate)

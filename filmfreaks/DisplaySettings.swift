@@ -20,6 +20,7 @@ final class DisplaySettings: ObservableObject {
         static let accentColor = "DisplaySettings_AccentColor"
 
         static let showRatings = "DisplaySettings_ShowRatings"
+        static let ratingDisplayMode = "DisplaySettings_RatingDisplayMode"
         static let showWatchedDate = "DisplaySettings_ShowWatchedDate"
         static let showWatchedLocation = "DisplaySettings_ShowWatchedLocation"
         static let showSuggestedBy = "DisplaySettings_ShowSuggestedBy"
@@ -112,6 +113,11 @@ final class DisplaySettings: ObservableObject {
         didSet { defaults.set(showRatings, forKey: Keys.showRatings) }
     }
 
+    /// Welche Kennzahl wird als "Ø" angezeigt? (Bewertung vs Fazit)
+    @Published var ratingDisplayMode: RatingDisplayMode {
+        didSet { defaults.set(ratingDisplayMode.rawValue, forKey: Keys.ratingDisplayMode) }
+    }
+
     @Published var showWatchedDate: Bool {
         didSet { defaults.set(showWatchedDate, forKey: Keys.showWatchedDate) }
     }
@@ -146,6 +152,10 @@ final class DisplaySettings: ObservableObject {
 
         // Defaults: Verhalten wie heute (alles sichtbar)
         self.showRatings = defaults.object(forKey: Keys.showRatings) as? Bool ?? true
+
+        let modeRaw = defaults.string(forKey: Keys.ratingDisplayMode) ?? RatingDisplayMode.ratingAverage.rawValue
+        self.ratingDisplayMode = RatingDisplayMode(rawValue: modeRaw) ?? .ratingAverage
+
         self.showWatchedDate = defaults.object(forKey: Keys.showWatchedDate) as? Bool ?? true
         self.showWatchedLocation = defaults.object(forKey: Keys.showWatchedLocation) as? Bool ?? true
         self.showSuggestedBy = defaults.object(forKey: Keys.showSuggestedBy) as? Bool ?? true
@@ -159,6 +169,7 @@ final class DisplaySettings: ObservableObject {
         accentColor = .system
 
         showRatings = true
+        ratingDisplayMode = .ratingAverage
         showWatchedDate = true
         showWatchedLocation = true
         showSuggestedBy = true

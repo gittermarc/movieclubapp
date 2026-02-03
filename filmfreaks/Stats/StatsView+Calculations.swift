@@ -159,7 +159,7 @@ extension StatsView {
 
     var overallAverageRating: Double? {
         let allScores = filteredMovies.flatMap { movie in
-            movie.ratings.map { $0.averageScoreNormalizedTo10 }
+            movie.ratings.compactMap { displayedScore(for: $0) }
         }
         guard !allScores.isEmpty else { return nil }
         let total = allScores.reduce(0, +)
@@ -180,7 +180,7 @@ extension StatsView {
 
             var entry = buckets[monthStart] ?? (movies: 0, scores: [])
             entry.movies += 1
-            entry.scores.append(contentsOf: movie.ratings.map { $0.averageScoreNormalizedTo10 })
+            entry.scores.append(contentsOf: movie.ratings.compactMap { displayedScore(for: $0) })
             buckets[monthStart] = entry
         }
 
@@ -206,7 +206,7 @@ extension StatsView {
 
     var topRatedHighlights: [MovieHighlight] {
         let base = filteredMovies.compactMap { movie -> MovieHighlight? in
-            guard let avg = movie.averageRating else { return nil }
+            guard let avg = movie.groupAverage(for: displaySettings.ratingDisplayMode) else { return nil }
             return MovieHighlight(movie: movie, value: avg)
         }
 
@@ -218,7 +218,7 @@ extension StatsView {
 
     var controversialHighlights: [MovieHighlight] {
         let base = filteredMovies.compactMap { movie -> MovieHighlight? in
-            let values = movie.ratings.map { $0.averageScoreNormalizedTo10 }
+            let values = movie.ratings.compactMap { displayedScore(for: $0) }
             guard values.count >= 2 else { return nil }
             let sd = standardDeviation(values)
             return MovieHighlight(movie: movie, value: sd)
@@ -234,7 +234,7 @@ extension StatsView {
 
     var criticGapEntries: [CriticGapEntry] {
         filteredMovies.compactMap { movie -> CriticGapEntry? in
-            guard let groupAvg = movie.averageRating else { return nil }
+            guard let groupAvg = movie.groupAverage(for: displaySettings.ratingDisplayMode) else { return nil }
             guard let tmdb = movie.tmdbRating else { return nil }
 
             let delta = groupAvg - tmdb
@@ -382,7 +382,7 @@ extension StatsView {
             }
             if !userRatings.isEmpty {
                 movieIds.insert(movie.id)
-                scores.append(contentsOf: userRatings.map { $0.averageScoreNormalizedTo10 })
+                scores.append(contentsOf: userRatings.compactMap { displayedScore(for: $0) })
             }
         }
 
@@ -394,6 +394,23 @@ extension StatsView {
     }
 
     // MARK: - Intern
+
+    /// Einzelscore pro User-Bewertung, abhängig vom ausgewählten Modus.
+    /// - ratingAverage: Kriterien-Ø (wie bisher)
+    /// - fazitAverage: Fazit (1–10), mit Fallback auf Kriterien für Legacy
+    private func displayedScore(for rating: Rating) -> Double? {
+        switch displaySettings.ratingDisplayMode {
+        case .ratingAverage:
+            return rating.averageScoreNormalizedTo10
+        case .fazitAverage:
+            if let f = rating.fazitScore {
+                return Double(f)
+            }
+            // Fallback nur, wenn es wenigstens irgendeine sinnvolle Kriterien-Wertung gibt.
+            let v = rating.averageScoreNormalizedTo10
+            return v > 0 ? v : nil
+        }
+    }
 
     private func standardDeviation(_ values: [Double]) -> Double {
         guard values.count >= 2 else { return 0 }

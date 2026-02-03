@@ -26,6 +26,7 @@ struct GoalsView: View {
 
     @EnvironmentObject var movieStore: MovieStore
     @EnvironmentObject var userStore: UserStore
+    @EnvironmentObject var displaySettings: DisplaySettings
 
     @State private var selectedYear: Int = Calendar.current.component(.year, from: Date())
     @State private var goalsByYear: [Int: Int] = [:]
@@ -984,6 +985,7 @@ private struct GoalDetailView: View {
     let selectedYear: Int
 
     @EnvironmentObject var movieStore: MovieStore
+    @EnvironmentObject var displaySettings: DisplaySettings
 
     var body: some View {
         NavigationStack {
@@ -1070,12 +1072,13 @@ private struct GoalDetailView: View {
 
             Spacer()
 
-            if let avg = m.averageRating ?? m.tmdbRating {
+            if displaySettings.showRatings,
+               let avg = m.displayAverage(for: displaySettings.ratingDisplayMode) {
                 Text(String(format: "%.1f", avg))
                     .font(.caption.bold())
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
-                    .background(Color.blue.opacity(0.12))
+                    .background(displaySettings.tintColor.opacity(0.12))
                     .clipShape(Capsule())
             }
         }
@@ -1627,4 +1630,5 @@ private struct CustomGoalEditorView: View {
     GoalsView()
         .environmentObject(MovieStore.preview())
         .environmentObject(UserStore())
+        .environmentObject(DisplaySettings())
 }

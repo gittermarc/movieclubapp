@@ -39,6 +39,21 @@ struct AppearanceSettingsView: View {
             // List visibility
             Section("Listen & Inhalte") {
                 Toggle("Bewertung anzeigen", isOn: $displaySettings.showRatings)
+
+                if displaySettings.showRatings {
+                    Picker("Durchschnitt", selection: $displaySettings.ratingDisplayMode) {
+                        ForEach(RatingDisplayMode.allCases) { mode in
+                            Text(mode.label).tag(mode)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+
+                    Text(displaySettings.ratingDisplayMode.helpText)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, 2)
+                }
                 Toggle("Gesehen-Datum anzeigen", isOn: $displaySettings.showWatchedDate)
                 Toggle("Ort anzeigen", isOn: $displaySettings.showWatchedLocation)
                 Toggle("„Vorgeschlagen von“ anzeigen", isOn: $displaySettings.showSuggestedBy)

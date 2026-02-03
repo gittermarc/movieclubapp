@@ -12,6 +12,7 @@ struct StatsView: View {
 
     @EnvironmentObject var movieStore: MovieStore
     @EnvironmentObject var userStore: UserStore
+    @EnvironmentObject var displaySettings: DisplaySettings
 
     @State var selectedRange: StatsTimeRange = .all
     @State var selectedLocationFilter: String? = nil
@@ -133,5 +134,6 @@ struct StatsView: View {
         StatsView()
             .environmentObject(MovieStore.preview())
             .environmentObject(UserStore())
+            .environmentObject(DisplaySettings())
     }
 }
