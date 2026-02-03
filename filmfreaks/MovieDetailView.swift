@@ -62,6 +62,9 @@ struct MovieDetailView: View {
     // Save-UX
     @State private var hasPendingRatingChanges = false
 
+    // Ratings Sheet
+    @State private var showRatingsSheet = false
+
     // Trailer Fallback: In-App (SFSafariViewController)
     @State private var isTrailerSafariShown = false
 
@@ -351,26 +354,99 @@ struct MovieDetailView: View {
                         }
                     }
 
-                    // Bewertung Eingabe
-                    MovieDetailSectionCard(title: "Bewertung") {
-                        MovieDetailRatingInputSection(
-                            hasSelectedUser: userStore.selectedUser != nil,
-                            localScores: $localScores,
-                            localComment: $localComment,
-                            localFazitScore: $localFazitScore,
-                            hasPendingRatingChanges: $hasPendingRatingChanges
-                        ) {
-                            saveRating()
+                    // Bewertungen (Sheet)
+                    Button {
+                        showRatingsSheet = true
+                    } label: {
+                        MovieDetailSectionCard(title: "Bewertungen") {
+                            VStack(alignment: .leading, spacing: 10) {
+
+                                HStack(spacing: 8) {
+                                    if let avg = movie.averageRating {
+                                        Text(String(format: "Ø %.1f / 10", avg))
+                                            .font(.caption.weight(.semibold))
+                                            .padding(.horizontal, 10)
+                                            .padding(.vertical, 6)
+                                            .background(Color.blue.opacity(0.12))
+                                            .clipShape(Capsule())
+                                    } else {
+                                        Text("Noch keine Bewertungen")
+                                            .font(.subheadline)
+                                            .foregroundStyle(.secondary)
+                                    }
+
+                                    if let f = movie.averageFazit {
+                                        Text(String(format: "Fazit Ø %.1f", f))
+                                            .font(.caption.weight(.semibold))
+                                            .padding(.horizontal, 10)
+                                            .padding(.vertical, 6)
+                                            .background(Color.green.opacity(0.14))
+                                            .clipShape(Capsule())
+                                    }
+
+                                    Spacer(minLength: 0)
+
+                                    Image(systemName: "chevron.right")
+                                        .font(.subheadline.weight(.semibold))
+                                        .foregroundStyle(.secondary)
+                                }
+
+                                HStack(spacing: 8) {
+                                    Image(systemName: "person.2.fill")
+                                        .foregroundStyle(.secondary)
+
+                                    Text("\(movie.ratings.count) \(movie.ratings.count == 1 ? "Bewertung" : "Bewertungen")")
+                                        .font(.subheadline)
+                                        .foregroundStyle(.secondary)
+
+                                    Spacer(minLength: 0)
+
+                                    if let name = userStore.selectedUser?.name {
+                                        Text("Als: \(name)")
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                            .lineLimit(1)
+                                    }
+                                }
+
+                                if hasPendingRatingChanges {
+                                    HStack(spacing: 8) {
+                                        Image(systemName: "exclamationmark.circle.fill")
+                                            .foregroundStyle(.orange)
+                                        Text("Ungespeicherte Änderungen")
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+
+                                if !sortedRatings.isEmpty {
+                                    VStack(alignment: .leading, spacing: 8) {
+                                        ForEach(sortedRatings.prefix(2)) { r in
+                                            HStack(spacing: 10) {
+                                                Text(r.reviewerName)
+                                                    .font(.subheadline.weight(.semibold))
+                                                    .lineLimit(1)
+
+                                                Spacer(minLength: 0)
+
+                                                Text(String(format: "%.1f / 10", r.averageScoreNormalizedTo10))
+                                                    .font(.caption.weight(.semibold))
+                                                    .padding(.horizontal, 8)
+                                                    .padding(.vertical, 4)
+                                                    .background(Color.gray.opacity(0.10))
+                                                    .clipShape(Capsule())
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    Text("Tippe hier, um eine Bewertung abzugeben.")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
                         }
                     }
-
-                    // Einzelbewertungen
-                    MovieDetailSectionCard(title: "Einzelbewertungen") {
-                        MovieDetailRatingsListSection(
-                            ratings: sortedRatings,
-                            expandedRatingIds: $expandedRatingIds
-                        )
-                    }
+                    .buttonStyle(.plain)
 
                     Spacer()
                 }
@@ -415,6 +491,18 @@ struct MovieDetailView: View {
         .sheet(isPresented: $showWatchProvidersRegionPicker) {
             NavigationStack {
                 WatchProvidersRegionPickerView()
+            }
+        }
+        .sheet(isPresented: $showRatingsSheet) {
+            MovieRatingsSheetView(
+                movie: $movie,
+                localScores: $localScores,
+                localComment: $localComment,
+                localFazitScore: $localFazitScore,
+                expandedRatingIds: $expandedRatingIds,
+                hasPendingRatingChanges: $hasPendingRatingChanges
+            ) {
+                saveRating()
             }
         }
         .onAppear { handleOnAppear() }
