@@ -128,6 +128,19 @@ struct SettingsView: View {
                         }
                     }
 
+
+                    Section("Darstellung") {
+                        NavigationLink {
+                            AppearanceSettingsView()
+                        } label: {
+                            Label("Darstellung", systemImage: "paintbrush")
+                        }
+
+                        Text("Passe Farbschema, Akzentfarbe und die Sichtbarkeit einzelner Elemente in den Listen an.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+
                     Section("Streaming") {
                         NavigationLink {
                             WatchProvidersRegionPickerView()

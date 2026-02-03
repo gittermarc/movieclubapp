@@ -24,6 +24,8 @@ struct filmfreaksApp: App {
     @StateObject var groupStore = CloudKitGroupStore()
     @StateObject var networkMonitor = NetworkMonitor.shared
 
+    @StateObject var displaySettings = DisplaySettings()
+
     @Environment(\.scenePhase) private var scenePhase
 
     @State private var showSplash = true
@@ -51,6 +53,9 @@ struct filmfreaksApp: App {
                     .zIndex(3)
                 }
             }
+            .environmentObject(displaySettings)
+            .preferredColorScheme(displaySettings.preferredColorScheme)
+            .tint(displaySettings.tintColor)
             .onChange(of: scenePhase) { _, newPhase in
                 guard newPhase == .active else { return }
 

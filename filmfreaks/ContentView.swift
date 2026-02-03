@@ -48,6 +48,7 @@ struct ContentView: View {
     @EnvironmentObject var movieStore: MovieStore
     @EnvironmentObject var userStore: UserStore
     @EnvironmentObject var networkMonitor: NetworkMonitor
+    @EnvironmentObject var displaySettings: DisplaySettings
 
     @State private var showingSearchMovie = false
     @State private var showingUsers = false
@@ -1109,7 +1110,8 @@ struct ContentView: View {
     @ViewBuilder
     private func compactMovieRow(movie: Movie, average: Double?) -> some View {
         HStack(spacing: 12) {
-            if let url = movie.posterURL {
+            if displaySettings.showPosterInCompactList {
+                if let url = movie.posterURL {
                 CachedAsyncImage(url: url) { phase in
                     switch phase {
                     case .empty:
@@ -1139,6 +1141,7 @@ struct ContentView: View {
                         Image(systemName: "film")
                             .foregroundStyle(.secondary)
                     }
+                }
             }
 
             Text(movie.title)
@@ -1147,17 +1150,19 @@ struct ContentView: View {
 
             Spacer()
 
-            if let avg = average {
+            if displaySettings.showRatings {
+                if let avg = average {
                 Text(String(format: "%.1f", avg))
                     .font(.subheadline.weight(.semibold))
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
-                    .background(Color.blue.opacity(0.12))
+                    .background(Color.accentColor.opacity(0.12))
                     .clipShape(RoundedRectangle(cornerRadius: 8))
-            } else {
-                Text("-")
+                } else {
+                    Text("-")
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.secondary)
+            }
             }
         }
         .padding(.vertical, 6)
@@ -1333,20 +1338,20 @@ struct ContentView: View {
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
 
-                    if let dateText = movie.watchedDateText {
+                    if displaySettings.showWatchedDate, let dateText = movie.watchedDateText {
                         Text("• \(dateText)")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                     }
 
-                    if let location = movie.watchedLocation, !location.isEmpty {
+                    if displaySettings.showWatchedLocation, let location = movie.watchedLocation, !location.isEmpty {
                         Text("• \(location)")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                     }
                 }
 
-                if let sugg = movie.suggestedBy, !sugg.isEmpty {
+                if displaySettings.showSuggestedBy, let sugg = movie.suggestedBy, !sugg.isEmpty {
                     Text("Vorgeschlagen von: \(sugg)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -1355,17 +1360,19 @@ struct ContentView: View {
 
             Spacer()
 
-            if let avg = average {
+            if displaySettings.showRatings {
+                if let avg = average {
                 Text(String(format: "%.1f", avg))
                     .font(.headline)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
-                    .background(Color.blue.opacity(0.1))
+                    .background(Color.accentColor.opacity(0.10))
                     .clipShape(RoundedRectangle(cornerRadius: 8))
-            } else {
-                Text("-")
+                } else {
+                    Text("-")
                     .font(.headline)
                     .foregroundStyle(.secondary)
+            }
             }
         }
         .padding(10)
@@ -1510,4 +1517,6 @@ private struct QuickStartPage: View {
     ContentView()
         .environmentObject(MovieStore.preview())
         .environmentObject(UserStore())
+        .environmentObject(NetworkMonitor.shared)
+        .environmentObject(DisplaySettings())
 }
