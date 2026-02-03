@@ -543,6 +543,10 @@ struct ContentView: View {
             }
             .sheet(isPresented: $showingSettings) {
                 SettingsView()
+                    // Sheets laufen in einem eigenen Presentation-Context.
+                    // Damit Theme-Wechsel sofort auch im Sheet greifen, applyen wir hier ebenfalls die Display-Settings.
+                    .preferredColorScheme(displaySettings.preferredColorScheme)
+                    .tint(displaySettings.tintColor)
             }
             .sheet(isPresented: $showingQuickStart, onDismiss: {
                 // Wenn der User das Sheet wegwischt, nicht ewig wieder nerven.
@@ -567,6 +571,8 @@ struct ContentView: View {
                         showingQuickStart = false
                     }
                 )
+                .preferredColorScheme(displaySettings.preferredColorScheme)
+                .tint(displaySettings.tintColor)
             }
 
             .sheet(isPresented: $showingSearchMovie) {
@@ -612,26 +618,38 @@ struct ContentView: View {
                         }
                     }
                 )
+                .preferredColorScheme(displaySettings.preferredColorScheme)
+                .tint(displaySettings.tintColor)
             }
             .sheet(isPresented: $showingUsers) {
                 UsersView()
+                    .preferredColorScheme(displaySettings.preferredColorScheme)
+                    .tint(displaySettings.tintColor)
             }
             .sheet(isPresented: $showingStats) {
                 StatsView()
+                    .preferredColorScheme(displaySettings.preferredColorScheme)
+                    .tint(displaySettings.tintColor)
             }
             // 👇 NEU: Timeline-Sheet
             .sheet(isPresented: $showingTimeline) {
                 TimelineView()
                     .environmentObject(movieStore)
                     .environmentObject(userStore)
+                    .preferredColorScheme(displaySettings.preferredColorScheme)
+                    .tint(displaySettings.tintColor)
             }
             .sheet(isPresented: $showingGoals) {
                 GoalsView()
                     .environmentObject(movieStore)
                     .environmentObject(userStore)
+                    .preferredColorScheme(displaySettings.preferredColorScheme)
+                    .tint(displaySettings.tintColor)
             }
             .sheet(isPresented: $showingGroupSettings) {
                 GroupSettingsView()
+                    .preferredColorScheme(displaySettings.preferredColorScheme)
+                    .tint(displaySettings.tintColor)
             }
         }
     }

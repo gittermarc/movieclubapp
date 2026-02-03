@@ -60,6 +60,9 @@ struct AppearanceSettingsView: View {
         }
         .navigationTitle("Darstellung")
         .navigationBarTitleDisplayMode(.inline)
+        // Redundant zur Sicherheit: innerhalb des Settings-Flows soll die Darstellung sofort umschalten.
+        .preferredColorScheme(displaySettings.preferredColorScheme)
+        .tint(displaySettings.tintColor)
     }
 }
 

@@ -15,6 +15,7 @@ struct SettingsView: View {
     @EnvironmentObject private var movieStore: MovieStore
     @EnvironmentObject private var userStore: UserStore
     @EnvironmentObject private var networkMonitor: NetworkMonitor
+    @EnvironmentObject private var displaySettings: DisplaySettings
 
     // ✅ NEU: Land-Auswahl für Streaming-Anbieter (TMDb Watch Providers)
     @AppStorage(WatchProvidersRegionSettings.storageKey)
@@ -238,6 +239,10 @@ struct SettingsView: View {
                 Text("Der lokale Bild-Cache wird entfernt. Das kann nicht rückgängig gemacht werden.")
             }
         }
+        // Wichtig: Das Settings-Sheet läuft in einem eigenen Presentation-Context.
+        // Damit Farbschema-Wechsel *im Sheet* sofort greifen, erzwingen wir die gleichen Display-Settings hier.
+        .preferredColorScheme(displaySettings.preferredColorScheme)
+        .tint(displaySettings.tintColor)
     }
 
     // MARK: - Actions
