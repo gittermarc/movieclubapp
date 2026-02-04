@@ -67,6 +67,11 @@ struct ContentView: View {
     @State private var filterByUser: User? = nil
     @State private var selectedSort: MovieSortOption = .dateNewest
 
+    // MARK: - In-List Search (Watched/Backlog)
+    @State private var watchedSearchText: String = ""
+    @State private var backlogSearchText: String = ""
+    @FocusState private var listSearchIsFocused: Bool
+
     // MARK: - View Style
     @AppStorage("ContentView_ViewStyle") private var viewStyleRaw: String = MovieViewStyle.cards.rawValue
 
@@ -79,6 +84,108 @@ struct ContentView: View {
     /// Gibt an, ob es in der aktuellen Gruppe überhaupt schon Filme gibt
     private var hasAnyMoviesInCurrentGroup: Bool {
         !movieStore.movies.isEmpty || !movieStore.backlogMovies.isEmpty
+    }
+
+    private var shouldShowListSearchBar: Bool {
+        guard hasAnyMoviesInCurrentGroup else { return false }
+        switch selectedMode {
+        case .watched:
+            return !movieStore.movies.isEmpty
+        case .backlog:
+            return !movieStore.backlogMovies.isEmpty
+        }
+    }
+
+    private var currentListSearchTextTrimmed: String {
+        switch selectedMode {
+        case .watched:
+            return watchedSearchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        case .backlog:
+            return backlogSearchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+    }
+
+    private var isListSearchActive: Bool {
+        !currentListSearchTextTrimmed.isEmpty
+    }
+
+    private var listSearchPlaceholder: String {
+        "In \(selectedMode.rawValue) suchen"
+    }
+
+    private var activeListSearchText: Binding<String> {
+        Binding(
+            get: {
+                switch selectedMode {
+                case .watched: return watchedSearchText
+                case .backlog: return backlogSearchText
+                }
+            },
+            set: { newValue in
+                switch selectedMode {
+                case .watched: watchedSearchText = newValue
+                case .backlog: backlogSearchText = newValue
+                }
+            }
+        )
+    }
+
+    private func clearActiveListSearchText() {
+        switch selectedMode {
+        case .watched:
+            watchedSearchText = ""
+        case .backlog:
+            backlogSearchText = ""
+        }
+    }
+
+    private var bottomListSearchBar: some View {
+        // Apple-Music-ish: unten eine dezente, transparente Such-Pille.
+        HStack(spacing: 10) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(.secondary)
+
+            TextField(listSearchPlaceholder, text: activeListSearchText)
+                .focused($listSearchIsFocused)
+                .submitLabel(.search)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled(true)
+                .lineLimit(1)
+
+            if isListSearchActive {
+                Button {
+                    clearActiveListSearchText()
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.secondary)
+                        .font(.title3)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Suche löschen")
+            }
+
+            if listSearchIsFocused {
+                Button("Abbrechen") {
+                    listSearchIsFocused = false
+                }
+                .font(.subheadline)
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, max(CGFloat(8), m.chipVerticalPadding - 1))
+        .background(.ultraThinMaterial, in: Capsule(style: .continuous))
+        .overlay(
+            Capsule(style: .continuous)
+                .stroke(Color.black.opacity(0.08), lineWidth: 1)
+        )
+        .shadow(color: Color.black.opacity(0.08), radius: 10, x: 0, y: 4)
+        .padding(.horizontal)
+        .padding(.top, 6)
+        .padding(.bottom, 8)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            listSearchIsFocused = true
+        }
     }
 
     private var filterLabelText: String {
@@ -223,6 +330,11 @@ struct ContentView: View {
                     .pickerStyle(.segmented)
                     .padding([.horizontal, .top])
 
+                    // Wenn wir umschalten, Keyboard nicht "festkleben" lassen.
+                    .onChange(of: selectedMode) { _, _ in
+                        listSearchIsFocused = false
+                    }
+
                     // ✅ Kompakte, gebündelte Sortier-/Filter-Leiste
                     VStack(spacing: 8) {
                         HStack(spacing: 10) {
@@ -344,6 +456,11 @@ struct ContentView: View {
                                     posterGrid(items: backlogGridItems, isBacklog: true)
                                 }
                             }
+                            .safeAreaInset(edge: .bottom, spacing: 0) {
+                                if shouldShowListSearchBar {
+                                    bottomListSearchBar
+                                }
+                            }
                             .refreshable {
                                 await performPullToRefresh()
                             }
@@ -360,6 +477,11 @@ struct ContentView: View {
                             }
                             .scrollContentBackground(.hidden)
                             .listStyle(.plain)
+                            .safeAreaInset(edge: .bottom, spacing: 0) {
+                                if shouldShowListSearchBar {
+                                    bottomListSearchBar
+                                }
+                            }
                             .refreshable {
                                 await performPullToRefresh()
                             }
@@ -875,6 +997,59 @@ struct ContentView: View {
         return sugg.lowercased() == user.name.lowercased()
     }
 
+    // MARK: - In-List Search (Textfilter)
+
+    private func normalizedSearchString(_ value: String) -> String {
+        value
+            .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+            .lowercased()
+    }
+
+    /// Freitext-Suche innerhalb der Liste (Titel/Jahr/Location/SuggestedBy + optional Cast/Genres/Keywords).
+    /// Token-basiert: alle Wörter müssen vorkommen ("ring 2001" findet auch "Herr der Ringe (2001)").
+    private func passesListSearch(_ movie: Movie, isBacklog: Bool) -> Bool {
+        let raw = (isBacklog ? backlogSearchText : watchedSearchText)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !raw.isEmpty else { return true }
+
+        let tokens = normalizedSearchString(raw)
+            .split(whereSeparator: { $0.isWhitespace })
+            .map(String.init)
+            .filter { !$0.isEmpty }
+
+        guard !tokens.isEmpty else { return true }
+
+        var fields: [String] = [movie.title, movie.year]
+
+        if let location = movie.watchedLocation, !location.isEmpty {
+            fields.append(location)
+        }
+
+        if let suggestedBy = movie.suggestedBy, !suggestedBy.isEmpty {
+            fields.append(suggestedBy)
+        }
+
+        if let cast = movie.cast, !cast.isEmpty {
+            fields.append(cast.map { $0.name }.joined(separator: " "))
+        }
+
+        if let directors = movie.directors, !directors.isEmpty {
+            fields.append(directors.map { $0.name }.joined(separator: " "))
+        }
+
+        if let genres = movie.genres, !genres.isEmpty {
+            fields.append(genres.joined(separator: " "))
+        }
+
+        if let keywords = movie.keywords, !keywords.isEmpty {
+            fields.append(keywords.joined(separator: " "))
+        }
+
+        let haystack = normalizedSearchString(fields.joined(separator: " "))
+        return tokens.allSatisfy { haystack.contains($0) }
+    }
+
 
 
     // MARK: - Grid-Daten (gefiltert + sortiert)
@@ -887,7 +1062,9 @@ struct ContentView: View {
 
     private var watchedGridItems: [GridMovieItem] {
         let enumerated = Array(movieStore.movies.enumerated())
-            .filter { _, movie in passesUserFilterForWatched(movie) }
+            .filter { _, movie in
+                passesUserFilterForWatched(movie) && passesListSearch(movie, isBacklog: false)
+            }
 
         let sorted = enumerated.sorted { lhs, rhs in
             let lhsMovie = lhs.element
@@ -922,7 +1099,9 @@ struct ContentView: View {
 
     private var backlogGridItems: [GridMovieItem] {
         let enumerated = Array(movieStore.backlogMovies.enumerated())
-            .filter { _, movie in passesUserFilterForBacklog(movie) }
+            .filter { _, movie in
+                passesUserFilterForBacklog(movie) && passesListSearch(movie, isBacklog: true)
+            }
 
         let sorted = enumerated.sorted { lhs, rhs in
             let lhsMovie = lhs.element
@@ -957,14 +1136,39 @@ struct ContentView: View {
 
     @ViewBuilder
     private func posterGrid(items: [GridMovieItem], isBacklog: Bool) -> some View {
+        let query = (isBacklog ? backlogSearchText : watchedSearchText)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
         if items.isEmpty {
-            ContentUnavailableView(
-                "Keine Filme",
-                systemImage: "film",
-                description: Text("In dieser Ansicht gibt's gerade nichts anzuzeigen.")
-            )
-            .padding(.top, 32)
-            .padding(.horizontal)
+            if !query.isEmpty {
+                VStack(spacing: 12) {
+                    ContentUnavailableView(
+                        "Keine Treffer",
+                        systemImage: "magnifyingglass",
+                        description: Text("Passe den Suchbegriff an oder lösche ihn.")
+                    )
+
+                    Button("Suche zurücksetzen") {
+                        if isBacklog {
+                            backlogSearchText = ""
+                        } else {
+                            watchedSearchText = ""
+                        }
+                        listSearchIsFocused = false
+                    }
+                    .buttonStyle(.bordered)
+                }
+                .padding(.top, 32)
+                .padding(.horizontal)
+            } else {
+                ContentUnavailableView(
+                    "Keine Filme",
+                    systemImage: "film",
+                    description: Text("In dieser Ansicht gibt's gerade nichts anzuzeigen.")
+                )
+                .padding(.top, 32)
+                .padding(.horizontal)
+            }
         } else {
             let columns = [GridItem(.adaptive(minimum: g.minColumnWidth), spacing: g.spacing)]
 
@@ -1130,7 +1334,9 @@ struct ContentView: View {
     @ViewBuilder
     private var watchedList: some View {
         let enumerated = Array(movieStore.movies.enumerated())
-            .filter { _, movie in passesUserFilterForWatched(movie) }
+            .filter { _, movie in
+                passesUserFilterForWatched(movie) && passesListSearch(movie, isBacklog: false)
+            }
 
         let sorted = enumerated.sorted { lhs, rhs in
             let lhsMovie = lhs.element
@@ -1160,32 +1366,42 @@ struct ContentView: View {
             }
         }
 
-        ForEach(sorted, id: \.element.id) { pair in
-            let index = pair.offset
-            let movie = pair.element
-
-            NavigationLink {
-                MovieDetailView(
-                    movie: $movieStore.movies[index],
-                    isBacklog: false
-                )
-            } label: {
-                if selectedViewStyle == .compactList {
-                    let displayRating = displayScore(for: movie)
-                    compactMovieRow(movie: movie, average: displayRating)
-                } else {
-                    let displayRating = displayScore(for: movie)
-                    movieRow(movie: movie, average: displayRating)
-                }
-            }
-            .listRowBackground(Color.clear)
-            .listRowSeparator(displaySettings.cardStyle == .cards ? .hidden : .automatic)
-        }
-        .onDelete { indexSet in
-            let originalIndices = IndexSet(
-                indexSet.map { sorted[$0].offset }
+        if !watchedSearchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && sorted.isEmpty {
+            ContentUnavailableView(
+                "Keine Treffer",
+                systemImage: "magnifyingglass",
+                description: Text("Passe den Suchbegriff an oder lösche ihn.")
             )
-            movieStore.movies.remove(atOffsets: originalIndices)
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
+        } else {
+            ForEach(sorted, id: \.element.id) { pair in
+                let index = pair.offset
+                let movie = pair.element
+
+                NavigationLink {
+                    MovieDetailView(
+                        movie: $movieStore.movies[index],
+                        isBacklog: false
+                    )
+                } label: {
+                    if selectedViewStyle == .compactList {
+                        let displayRating = displayScore(for: movie)
+                        compactMovieRow(movie: movie, average: displayRating)
+                    } else {
+                        let displayRating = displayScore(for: movie)
+                        movieRow(movie: movie, average: displayRating)
+                    }
+                }
+                .listRowBackground(Color.clear)
+                .listRowSeparator(displaySettings.cardStyle == .cards ? .hidden : .automatic)
+            }
+            .onDelete { indexSet in
+                let originalIndices = IndexSet(
+                    indexSet.map { sorted[$0].offset }
+                )
+                movieStore.movies.remove(atOffsets: originalIndices)
+            }
         }
     }
 
@@ -1194,7 +1410,9 @@ struct ContentView: View {
     @ViewBuilder
     private var backlogList: some View {
         let enumerated = Array(movieStore.backlogMovies.enumerated())
-            .filter { _, movie in passesUserFilterForBacklog(movie) }
+            .filter { _, movie in
+                passesUserFilterForBacklog(movie) && passesListSearch(movie, isBacklog: true)
+            }
 
         let sorted = enumerated.sorted { lhs, rhs in
             let lhsMovie = lhs.element
@@ -1222,31 +1440,41 @@ struct ContentView: View {
             }
         }
 
-        ForEach(sorted, id: \.element.id) { pair in
-            let index = pair.offset
-            let movie = pair.element
-
-            NavigationLink {
-                MovieDetailView(
-                    movie: $movieStore.backlogMovies[index],
-                    isBacklog: true
-                )
-            } label: {
-                let displayRating = displayScore(for: movie)
-                if selectedViewStyle == .compactList {
-                    compactMovieRow(movie: movie, average: displayRating)
-                } else {
-                    movieRow(movie: movie, average: displayRating)
-                }
-            }
-            .listRowBackground(Color.clear)
-            .listRowSeparator(displaySettings.cardStyle == .cards ? .hidden : .automatic)
-        }
-        .onDelete { indexSet in
-            let originalIndices = IndexSet(
-                indexSet.map { sorted[$0].offset }
+        if !backlogSearchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && sorted.isEmpty {
+            ContentUnavailableView(
+                "Keine Treffer",
+                systemImage: "magnifyingglass",
+                description: Text("Passe den Suchbegriff an oder lösche ihn.")
             )
-            movieStore.backlogMovies.remove(atOffsets: originalIndices)
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
+        } else {
+            ForEach(sorted, id: \.element.id) { pair in
+                let index = pair.offset
+                let movie = pair.element
+
+                NavigationLink {
+                    MovieDetailView(
+                        movie: $movieStore.backlogMovies[index],
+                        isBacklog: true
+                    )
+                } label: {
+                    let displayRating = displayScore(for: movie)
+                    if selectedViewStyle == .compactList {
+                        compactMovieRow(movie: movie, average: displayRating)
+                    } else {
+                        movieRow(movie: movie, average: displayRating)
+                    }
+                }
+                .listRowBackground(Color.clear)
+                .listRowSeparator(displaySettings.cardStyle == .cards ? .hidden : .automatic)
+            }
+            .onDelete { indexSet in
+                let originalIndices = IndexSet(
+                    indexSet.map { sorted[$0].offset }
+                )
+                movieStore.backlogMovies.remove(atOffsets: originalIndices)
+            }
         }
     }
 
