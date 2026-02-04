@@ -56,6 +56,7 @@ struct filmfreaksApp: App {
             .environmentObject(displaySettings)
             .preferredColorScheme(displaySettings.preferredColorScheme)
             .tint(displaySettings.tintColor)
+            .fontDesign(displaySettings.preferredFontDesign)
             .onChange(of: scenePhase) { _, newPhase in
                 guard newPhase == .active else { return }
 

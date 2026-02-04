@@ -40,6 +40,18 @@ struct AppearanceSettingsView: View {
                 AccentColorGridPicker(selection: $displaySettings.accentColor)
             }
 
+            // Typography
+            Section("Typografie") {
+                Picker("Schriftstil", selection: $displaySettings.fontDesign) {
+                    ForEach(DisplaySettings.FontDesignPreference.allCases) { option in
+                        Text(option.label).tag(option)
+                    }
+                }
+                .pickerStyle(.segmented)
+
+                FontDesignPreviewCard(design: displaySettings.preferredFontDesign)
+            }
+
             // Layout
             Section("Layout") {
                 Picker("UI-Dichte", selection: $displaySettings.uiDensity) {
@@ -132,6 +144,7 @@ struct AppearanceSettingsView: View {
         // Redundant zur Sicherheit: innerhalb des Settings-Flows soll die Darstellung sofort umschalten.
         .preferredColorScheme(displaySettings.preferredColorScheme)
         .tint(displaySettings.tintColor)
+        .fontDesign(displaySettings.preferredFontDesign)
     }
 }
 
@@ -181,6 +194,37 @@ private struct AccentColorGridPicker: View {
             }
             .padding(.top, 2)
         }
+        .padding(.vertical, 4)
+    }
+}
+
+// MARK: - Typography Preview
+
+private struct FontDesignPreviewCard: View {
+
+    let design: Font.Design
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Vorschau")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("FilmFreaks – Watchlist")
+                    .font(.headline)
+
+                Text("Dune • 2021 · 155 min")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+
+                Text("„Sieht sofort anders aus – ohne dass Accessibility leidet.“")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.vertical, 6)
+        }
+        .fontDesign(design)
         .padding(.vertical, 4)
     }
 }

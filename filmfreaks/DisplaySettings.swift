@@ -20,6 +20,8 @@ final class DisplaySettings: ObservableObject {
         static let colorScheme = "DisplaySettings_ColorScheme"
         static let accentColor = "DisplaySettings_AccentColor"
 
+        static let fontDesign = "DisplaySettings_FontDesign"
+
         static let uiDensity = "DisplaySettings_UIDensity"
 
         static let cardStyle = "DisplaySettings_CardStyle"
@@ -66,13 +68,18 @@ final class DisplaySettings: ObservableObject {
     enum AccentColorPreference: String, CaseIterable, Identifiable {
         case system
         case blue
+        case indigo
         case purple
         case pink
         case red
         case orange
+        case yellow
         case green
+        case mint
         case teal
-        case indigo
+        case cyan
+        case gray
+        case brown
 
         var id: Self { self }
 
@@ -80,13 +87,18 @@ final class DisplaySettings: ObservableObject {
             switch self {
             case .system: return "Standard"
             case .blue:   return "Blau"
+            case .indigo: return "Indigo"
             case .purple: return "Lila"
             case .pink:   return "Pink"
             case .red:    return "Rot"
             case .orange: return "Orange"
+            case .yellow: return "Gelb"
             case .green:  return "Grün"
             case .teal:   return "Türkis"
-            case .indigo: return "Indigo"
+            case .mint:   return "Mint"
+            case .cyan:   return "Cyan"
+            case .gray:   return "Grau"
+            case .brown:  return "Braun"
             }
         }
 
@@ -94,13 +106,44 @@ final class DisplaySettings: ObservableObject {
             switch self {
             case .system: return .accentColor
             case .blue:   return .blue
+            case .indigo: return .indigo
             case .purple: return .purple
             case .pink:   return .pink
             case .red:    return .red
             case .orange: return .orange
+            case .yellow: return .yellow
             case .green:  return .green
             case .teal:   return .teal
-            case .indigo: return .indigo
+            case .mint:   return .mint
+            case .cyan:   return .cyan
+            case .gray:   return .gray
+            case .brown:  return .brown
+            }
+        }
+    }
+
+    /// App-weite Schrift-Variante (System / Rounded / Serif).
+    /// Hinweis: Wir bleiben bewusst bei System-Designs, damit Dynamic Type & Layout stabil bleiben.
+    enum FontDesignPreference: String, CaseIterable, Identifiable {
+        case system
+        case rounded
+        case serif
+
+        var id: Self { self }
+
+        var label: String {
+            switch self {
+            case .system:  return "System"
+            case .rounded: return "Rounded"
+            case .serif:   return "Serif"
+            }
+        }
+
+        var design: Font.Design {
+            switch self {
+            case .system:  return .default
+            case .rounded: return .rounded
+            case .serif:   return .serif
             }
         }
     }
@@ -343,6 +386,10 @@ final class DisplaySettings: ObservableObject {
         didSet { defaults.set(accentColor.rawValue, forKey: Keys.accentColor) }
     }
 
+    @Published var fontDesign: FontDesignPreference {
+        didSet { defaults.set(fontDesign.rawValue, forKey: Keys.fontDesign) }
+    }
+
     @Published var uiDensity: UIDensity {
         didSet { defaults.set(uiDensity.rawValue, forKey: Keys.uiDensity) }
     }
@@ -394,6 +441,8 @@ final class DisplaySettings: ObservableObject {
     var preferredColorScheme: ColorScheme? { colorScheme.resolved }
     var tintColor: Color { accentColor.color }
 
+    var preferredFontDesign: Font.Design { fontDesign.design }
+
     var metrics: LayoutMetrics { .init(density: uiDensity) }
 
     var posterGridMetrics: PosterGridMetrics { .init(density: posterGridDensity) }
@@ -408,6 +457,9 @@ final class DisplaySettings: ObservableObject {
 
         let accentRaw = defaults.string(forKey: Keys.accentColor) ?? AccentColorPreference.system.rawValue
         self.accentColor = AccentColorPreference(rawValue: accentRaw) ?? .system
+
+        let fontRaw = defaults.string(forKey: Keys.fontDesign) ?? FontDesignPreference.system.rawValue
+        self.fontDesign = FontDesignPreference(rawValue: fontRaw) ?? .system
 
         let densityRaw = defaults.string(forKey: Keys.uiDensity) ?? UIDensity.normal.rawValue
         self.uiDensity = UIDensity(rawValue: densityRaw) ?? .normal
@@ -438,6 +490,7 @@ final class DisplaySettings: ObservableObject {
     func resetToDefaults() {
         colorScheme = .system
         accentColor = .system
+        fontDesign = .system
         uiDensity = .normal
 
         cardStyle = .cards
