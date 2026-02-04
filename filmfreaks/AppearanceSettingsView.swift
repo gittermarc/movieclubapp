@@ -18,6 +18,20 @@ struct AppearanceSettingsView: View {
     var body: some View {
         List {
 
+            // Presets
+            Section {
+                AppearancePresetPickerRow()
+                    .environmentObject(displaySettings)
+                    .listRowInsets(EdgeInsets(top: 10, leading: 16, bottom: 10, trailing: 16))
+                    .listRowBackground(Color.clear)
+            } header: {
+                Text("Presets")
+            } footer: {
+                Text("Ein Tap setzt mehrere Optionen. Danach kannst du natürlich weiter feinjustieren – wie ein Director’s Cut, nur ohne 3 Stunden Laufzeit.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
             // Preview
             Section {
                 AppearancePreviewCard()
