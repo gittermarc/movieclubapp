@@ -193,6 +193,7 @@ struct ContentView: View {
                         )
                         .padding(.horizontal)
                         .padding(.top, 8)
+                        .fixedSize(horizontal: false, vertical: true)
                     }
 
 

@@ -31,8 +31,7 @@ struct ContentContextBar: View {
             .buttonStyle(.plain)
             .accessibilityLabel("Aktuelle Gruppe: \(groupName)")
 
-            Divider()
-                .opacity(0.65)
+            verticalDivider
 
             Button(action: onTapActiveMember) {
                 activeMemberLabel
@@ -40,14 +39,23 @@ struct ContentContextBar: View {
             .buttonStyle(.plain)
             .accessibilityLabel("Aktives Mitglied: \(activeMemberDisplayName)")
         }
+        .fixedSize(horizontal: false, vertical: true)
         .padding(.horizontal, 12)
-        .padding(.vertical, 10)
+        .padding(.vertical, 8)
         .background(.thinMaterial)
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .stroke(Color.primary.opacity(0.08), lineWidth: 1)
         )
+    }
+
+    private var verticalDivider: some View {
+        Rectangle()
+            .fill(Color.primary.opacity(0.12))
+            .frame(width: 1)
+            .padding(.vertical, 6)
+            .accessibilityHidden(true)
     }
 
     private var groupLabel: some View {
