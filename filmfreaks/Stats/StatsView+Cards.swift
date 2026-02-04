@@ -769,22 +769,74 @@ extension StatsView {
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 } else {
-                    ForEach(moviesByLocation, id: \.location) { entry in
-                        HStack {
-                            Text(entry.location)
-                            Spacer(minLength: 0)
-                            Button { selectedDrilldown = .location(entry.location) } label: {
-                                Text("\(entry.count)")
-                                    .font(.footnote)
-                                    .padding(.horizontal, 10)
-                                    .padding(.vertical, 6)
-                                    .background(Color.gray.opacity(0.12))
-                                    .clipShape(Capsule())
+                    let totalMovies = max(filteredMovies.count, 1)
+                    let top = Array(moviesByLocation.prefix(9))
+                    let rest = Array(moviesByLocation.dropFirst(9))
+                    let maxCount = max(top.map(\.count).max() ?? 1, 1)
+
+                    Text("Eure Top-Orte")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+
+                    VStack(spacing: 8) {
+                        ForEach(Array(top.enumerated()), id: \.element.location) { index, entry in
+                            Button {
+                                selectedDrilldown = .location(entry.location)
+                            } label: {
+                                // Re-use the same leaderboard design as Genres.
+                                genreLeaderboardRow(
+                                    rank: index + 1,
+                                    genre: entry.location,
+                                    count: entry.count,
+                                    totalMovies: totalMovies,
+                                    maxCount: maxCount
+                                )
                             }
                             .buttonStyle(.plain)
                         }
-                        .padding(.vertical, 2)
                     }
+                    .transaction { $0.animation = nil }
+
+                    if !rest.isEmpty {
+                        DisclosureGroup("Mehr anzeigen (\(rest.count))") {
+                            LazyVGrid(
+                                columns: [GridItem(.adaptive(minimum: 120), spacing: 8)],
+                                alignment: .leading,
+                                spacing: 8
+                            ) {
+                                ForEach(rest.prefix(24), id: \.location) { entry in
+                                    Button {
+                                        selectedDrilldown = .location(entry.location)
+                                    } label: {
+                                        HStack(spacing: 6) {
+                                            Text(entry.location)
+                                                .font(.caption)
+                                                .lineLimit(1)
+
+                                            Text("\(entry.count)")
+                                                .font(.caption2)
+                                                .foregroundStyle(.secondary)
+                                                .monospacedDigit()
+                                        }
+                                        .padding(.horizontal, 10)
+                                        .padding(.vertical, 7)
+                                        .background(Color(.tertiarySystemBackground))
+                                        .clipShape(Capsule())
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                            .transaction { $0.animation = nil }
+                            .padding(.top, 6)
+                        }
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .padding(.top, 2)
+                    }
+
+                    Text("Tippe einen Ort, um die passenden Filme im Zeitraum zu sehen.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             }
         }
@@ -798,22 +850,74 @@ extension StatsView {
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 } else {
-                    ForEach(suggestionsByUser, id: \.name) { entry in
-                        HStack {
-                            Text(entry.name)
-                            Spacer(minLength: 0)
-                            Button { selectedDrilldown = .suggestedBy(entry.name) } label: {
-                                Text("\(entry.count)")
-                                    .font(.footnote)
-                                    .padding(.horizontal, 10)
-                                    .padding(.vertical, 6)
-                                    .background(Color.orange.opacity(0.15))
-                                    .clipShape(Capsule())
+                    let totalMovies = max(filteredMovies.count, 1)
+                    let top = Array(suggestionsByUser.prefix(9))
+                    let rest = Array(suggestionsByUser.dropFirst(9))
+                    let maxCount = max(top.map(\.count).max() ?? 1, 1)
+
+                    Text("Eure Top-Empfehler")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+
+                    VStack(spacing: 8) {
+                        ForEach(Array(top.enumerated()), id: \.element.name) { index, entry in
+                            Button {
+                                selectedDrilldown = .suggestedBy(entry.name)
+                            } label: {
+                                // Same leaderboard look as Genres.
+                                genreLeaderboardRow(
+                                    rank: index + 1,
+                                    genre: entry.name,
+                                    count: entry.count,
+                                    totalMovies: totalMovies,
+                                    maxCount: maxCount
+                                )
                             }
                             .buttonStyle(.plain)
                         }
-                        .padding(.vertical, 2)
                     }
+                    .transaction { $0.animation = nil }
+
+                    if !rest.isEmpty {
+                        DisclosureGroup("Mehr anzeigen (\(rest.count))") {
+                            LazyVGrid(
+                                columns: [GridItem(.adaptive(minimum: 120), spacing: 8)],
+                                alignment: .leading,
+                                spacing: 8
+                            ) {
+                                ForEach(rest.prefix(24), id: \.name) { entry in
+                                    Button {
+                                        selectedDrilldown = .suggestedBy(entry.name)
+                                    } label: {
+                                        HStack(spacing: 6) {
+                                            Text(entry.name)
+                                                .font(.caption)
+                                                .lineLimit(1)
+
+                                            Text("\(entry.count)")
+                                                .font(.caption2)
+                                                .foregroundStyle(.secondary)
+                                                .monospacedDigit()
+                                        }
+                                        .padding(.horizontal, 10)
+                                        .padding(.vertical, 7)
+                                        .background(Color(.tertiarySystemBackground))
+                                        .clipShape(Capsule())
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                            .transaction { $0.animation = nil }
+                            .padding(.top, 6)
+                        }
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .padding(.top, 2)
+                    }
+
+                    Text("Tippe eine Person, um ihre vorgeschlagenen Filme zu sehen.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             }
         }

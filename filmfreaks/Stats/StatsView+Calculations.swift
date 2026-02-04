@@ -350,7 +350,10 @@ extension StatsView {
 
         return counts
             .map { (location: $0.key, count: $0.value) }
-            .sorted { $0.count > $1.count }
+            .sorted {
+                if $0.count != $1.count { return $0.count > $1.count }
+                return $0.location.localizedCaseInsensitiveCompare($1.location) == .orderedAscending
+            }
     }
 
     var suggestionsByUser: [(name: String, count: Int)] {
@@ -365,7 +368,10 @@ extension StatsView {
 
         return counts
             .map { (name: $0.key, count: $0.value) }
-            .sorted { $0.count > $1.count }
+            .sorted {
+                if $0.count != $1.count { return $0.count > $1.count }
+                return $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+            }
     }
 
     func statsForUser(_ user: User) -> (movieCount: Int, ratingsCount: Int, averageRating: Double?) {
