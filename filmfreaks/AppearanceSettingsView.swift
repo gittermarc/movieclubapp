@@ -11,6 +11,10 @@ struct AppearanceSettingsView: View {
 
     @EnvironmentObject private var displaySettings: DisplaySettings
 
+    private var densityHintText: String {
+        displaySettings.uiDensity.shortHint
+    }
+
     var body: some View {
         List {
 
@@ -34,6 +38,22 @@ struct AppearanceSettingsView: View {
                 .pickerStyle(.segmented)
 
                 AccentColorGridPicker(selection: $displaySettings.accentColor)
+            }
+
+            // Layout
+            Section("Layout") {
+                Picker("UI-Dichte", selection: $displaySettings.uiDensity) {
+                    ForEach(DisplaySettings.UIDensity.allCases) { density in
+                        Text(density.label).tag(density)
+                    }
+                }
+                .pickerStyle(.segmented)
+
+                Text(densityHintText)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 2)
             }
 
             // List visibility

@@ -11,6 +11,8 @@ internal import SwiftUI
 /// Ziel: dezenter, besser integriert (Material), weniger vertikaler Platz als die bisherigen Gradient-Buttons.
 struct ContentContextBar: View {
 
+    @EnvironmentObject private var displaySettings: DisplaySettings
+
     let groupName: String
     let totalMoviesInGroup: Int
 
@@ -23,8 +25,10 @@ struct ContentContextBar: View {
     let onTapGroup: () -> Void
     let onTapActiveMember: () -> Void
 
+    private var m: DisplaySettings.LayoutMetrics { displaySettings.metrics }
+
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: m.contextBarItemSpacing) {
             Button(action: onTapGroup) {
                 groupLabel
             }
@@ -40,8 +44,8 @@ struct ContentContextBar: View {
             .accessibilityLabel("Aktives Mitglied: \(activeMemberDisplayName)")
         }
         .fixedSize(horizontal: false, vertical: true)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(.horizontal, m.contextBarHorizontalPadding)
+        .padding(.vertical, m.contextBarVerticalPadding)
         .background(.thinMaterial)
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay(
@@ -54,7 +58,7 @@ struct ContentContextBar: View {
         Rectangle()
             .fill(Color.primary.opacity(0.12))
             .frame(width: 1)
-            .padding(.vertical, 6)
+            .padding(.vertical, m.contextBarDividerVerticalPadding)
             .accessibilityHidden(true)
     }
 

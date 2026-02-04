@@ -70,6 +70,10 @@ struct ContentView: View {
     // MARK: - View Style
     @AppStorage("ContentView_ViewStyle") private var viewStyleRaw: String = MovieViewStyle.cards.rawValue
 
+    
+    // MARK: - UI Density Metrics
+    private var m: DisplaySettings.LayoutMetrics { displaySettings.metrics }
+
 
     /// Gibt an, ob es in der aktuellen Gruppe überhaupt schon Filme gibt
     private var hasAnyMoviesInCurrentGroup: Bool {
@@ -299,7 +303,7 @@ struct ContentView: View {
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
                     }
-                    .padding(10)
+                    .padding(m.cardPadding)
                     .background(
                         RoundedRectangle(cornerRadius: 14, style: .continuous)
                             .fill(Color(.secondarySystemBackground))
@@ -769,7 +773,7 @@ struct ContentView: View {
 
     @ViewBuilder
     private func controlChip(icon: String, title: String) -> some View {
-        HStack(spacing: 8) {
+        HStack(spacing: m.chipContentSpacing) {
             Image(systemName: icon)
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -782,8 +786,8 @@ struct ContentView: View {
                 .font(.caption2)
                 .foregroundStyle(.secondary)
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
+        .padding(.horizontal, m.chipHorizontalPadding)
+        .padding(.vertical, m.chipVerticalPadding)
         .background(Color.black.opacity(0.05))
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
@@ -1047,7 +1051,7 @@ struct ContentView: View {
 
     @ViewBuilder
     private func compactMovieRow(movie: Movie, average: Double?) -> some View {
-        HStack(spacing: 12) {
+        HStack(spacing: m.compactRowHStackSpacing) {
             if displaySettings.showPosterInCompactList {
                 if let url = movie.posterURL {
                 CachedAsyncImage(url: url) { phase in
@@ -1103,7 +1107,7 @@ struct ContentView: View {
             }
             }
         }
-        .padding(.vertical, 6)
+        .padding(.vertical, m.compactRowVerticalPadding)
     }
 
     // MARK: - Watched-Liste
@@ -1231,7 +1235,7 @@ struct ContentView: View {
 
     @ViewBuilder
     private func movieRow(movie: Movie, average: Double?) -> some View {
-        HStack(spacing: 12) {
+        HStack(spacing: m.rowHStackSpacing) {
             // Poster
             if let url = movie.posterURL {
                 CachedAsyncImage(url: url) { phase in
@@ -1314,13 +1318,13 @@ struct ContentView: View {
             }
             }
         }
-        .padding(10)
+        .padding(m.rowPadding)
         .background(
             RoundedRectangle(cornerRadius: 12)
                 .fill(Color(.secondarySystemBackground))
         )
         .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
-        .padding(.vertical, 4)
+        .padding(.vertical, m.cardVerticalSpacing)
     }
 }
 

@@ -11,6 +11,7 @@ import Combine
 
 /// Zentrale Darstellungseinstellungen (lokal via UserDefaults gespeichert).
 /// P0: Farbschema + Akzentfarbe + Sichtbarkeit in Listen (Bewertung/Metadaten).
+/// P0.1: UI-Dichte (Kompakt / Normal / Cozy) als zentrale Layout-Metrik.
 final class DisplaySettings: ObservableObject {
 
     // MARK: - Storage Keys
@@ -18,6 +19,8 @@ final class DisplaySettings: ObservableObject {
     private enum Keys {
         static let colorScheme = "DisplaySettings_ColorScheme"
         static let accentColor = "DisplaySettings_AccentColor"
+
+        static let uiDensity = "DisplaySettings_UIDensity"
 
         static let showRatings = "DisplaySettings_ShowRatings"
         static let showTMDbRatingsInLists = "DisplaySettings_ShowTMDbRatingsInLists"
@@ -99,6 +102,158 @@ final class DisplaySettings: ObservableObject {
         }
     }
 
+    /// Globaler "Layout-Spacing" Schalter.
+    /// Idee: Views greifen nur noch auf `displaySettings.metrics.*` zu.
+    enum UIDensity: String, CaseIterable, Identifiable {
+        case compact
+        case normal
+        case cozy
+
+        var id: Self { self }
+
+        var label: String {
+            switch self {
+            case .compact: return "Kompakt"
+            case .normal:  return "Normal"
+            case .cozy:    return "Cozy"
+            }
+        }
+
+        var shortHint: String {
+            switch self {
+            case .compact: return "Weniger Luft – mehr Inhalt auf dem Screen."
+            case .normal:  return "Ausgewogen – entspricht dem aktuellen Standard."
+            case .cozy:    return "Mehr Luft – wirkt entspannter & "
+                + "premium." // split to avoid long line
+            }
+        }
+    }
+
+    // MARK: - Layout Metrics
+
+    /// Zentrale Spacing-Konstanten, abgeleitet aus `uiDensity`.
+    struct LayoutMetrics: Equatable {
+        let density: UIDensity
+
+        // Reihen
+        var rowPadding: CGFloat {
+            switch density {
+            case .compact: return 8
+            case .normal:  return 10
+            case .cozy:    return 12
+            }
+        }
+
+        var rowHStackSpacing: CGFloat {
+            switch density {
+            case .compact: return 10
+            case .normal:  return 12
+            case .cozy:    return 14
+            }
+        }
+
+        /// Abstand *zwischen* Karten (z.B. movieRow). (das ist der "Card-Spacing" Effekt)
+        var cardVerticalSpacing: CGFloat {
+            switch density {
+            case .compact: return 2
+            case .normal:  return 4
+            case .cozy:    return 6
+            }
+        }
+
+        // Kompakte Liste
+        var compactRowVerticalPadding: CGFloat {
+            switch density {
+            case .compact: return 4
+            case .normal:  return 6
+            case .cozy:    return 8
+            }
+        }
+
+        var compactRowHStackSpacing: CGFloat {
+            switch density {
+            case .compact: return 10
+            case .normal:  return 12
+            case .cozy:    return 14
+            }
+        }
+
+        // Chips
+        var chipHorizontalPadding: CGFloat {
+            switch density {
+            case .compact: return 8
+            case .normal:  return 10
+            case .cozy:    return 12
+            }
+        }
+
+        var chipVerticalPadding: CGFloat {
+            switch density {
+            case .compact: return 6
+            case .normal:  return 8
+            case .cozy:    return 10
+            }
+        }
+
+        var chipContentSpacing: CGFloat {
+            switch density {
+            case .compact: return 6
+            case .normal:  return 8
+            case .cozy:    return 10
+            }
+        }
+
+        // Cards / Container (Sort/Filter Bar, Preview Card)
+        var cardPadding: CGFloat {
+            switch density {
+            case .compact: return 8
+            case .normal:  return 10
+            case .cozy:    return 12
+            }
+        }
+
+        var cardInnerSpacing: CGFloat {
+            switch density {
+            case .compact: return 6
+            case .normal:  return 8
+            case .cozy:    return 10
+            }
+        }
+
+        // Context Bar
+        var contextBarHorizontalPadding: CGFloat {
+            switch density {
+            case .compact: return 10
+            case .normal:  return 12
+            case .cozy:    return 14
+            }
+        }
+
+        var contextBarVerticalPadding: CGFloat {
+            switch density {
+            case .compact: return 6
+            case .normal:  return 8
+            case .cozy:    return 10
+            }
+        }
+
+        var contextBarItemSpacing: CGFloat {
+            switch density {
+            case .compact: return 8
+            case .normal:  return 10
+            case .cozy:    return 12
+            }
+        }
+
+        var contextBarDividerVerticalPadding: CGFloat {
+            switch density {
+            case .compact: return 4
+            case .normal:  return 6
+            case .cozy:    return 8
+            }
+        }
+    }
+
     // MARK: - Persisted Properties
 
     @Published var colorScheme: ColorSchemePreference {
@@ -107,6 +262,10 @@ final class DisplaySettings: ObservableObject {
 
     @Published var accentColor: AccentColorPreference {
         didSet { defaults.set(accentColor.rawValue, forKey: Keys.accentColor) }
+    }
+
+    @Published var uiDensity: UIDensity {
+        didSet { defaults.set(uiDensity.rawValue, forKey: Keys.uiDensity) }
     }
 
     // Liste: Sichtbarkeit
@@ -146,6 +305,8 @@ final class DisplaySettings: ObservableObject {
     var preferredColorScheme: ColorScheme? { colorScheme.resolved }
     var tintColor: Color { accentColor.color }
 
+    var metrics: LayoutMetrics { .init(density: uiDensity) }
+
     // MARK: - Init
 
     init(defaults: UserDefaults = .standard) {
@@ -156,6 +317,9 @@ final class DisplaySettings: ObservableObject {
 
         let accentRaw = defaults.string(forKey: Keys.accentColor) ?? AccentColorPreference.system.rawValue
         self.accentColor = AccentColorPreference(rawValue: accentRaw) ?? .system
+
+        let densityRaw = defaults.string(forKey: Keys.uiDensity) ?? UIDensity.normal.rawValue
+        self.uiDensity = UIDensity(rawValue: densityRaw) ?? .normal
 
         // Defaults: Verhalten wie heute (alles sichtbar)
         self.showRatings = defaults.object(forKey: Keys.showRatings) as? Bool ?? true
@@ -177,6 +341,7 @@ final class DisplaySettings: ObservableObject {
     func resetToDefaults() {
         colorScheme = .system
         accentColor = .system
+        uiDensity = .normal
 
         showRatings = true
         showTMDbRatingsInLists = true

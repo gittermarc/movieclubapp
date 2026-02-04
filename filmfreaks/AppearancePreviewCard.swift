@@ -11,10 +11,12 @@ struct AppearancePreviewCard: View {
 
     @EnvironmentObject private var displaySettings: DisplaySettings
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+    private var m: DisplaySettings.LayoutMetrics { displaySettings.metrics }
 
-            HStack(spacing: 10) {
+    var body: some View {
+        VStack(alignment: .leading, spacing: m.cardInnerSpacing + 4) {
+
+            HStack(spacing: m.cardInnerSpacing + 2) {
                 Label("So sieht’s aus", systemImage: "paintbrush")
                     .font(.headline)
                 Spacer()
@@ -26,13 +28,13 @@ struct AppearancePreviewCard: View {
                     .clipShape(RoundedRectangle(cornerRadius: 8))
             }
 
-            VStack(spacing: 12) {
+            VStack(spacing: m.cardInnerSpacing + 4) {
                 previewDetailRow
                 Divider().opacity(0.4)
                 previewCompactRow
             }
         }
-        .padding(14)
+        .padding(m.cardPadding + 4)
         .background(
             RoundedRectangle(cornerRadius: 16)
                 .fill(Color(.secondarySystemBackground))
@@ -44,7 +46,7 @@ struct AppearancePreviewCard: View {
     }
 
     private var previewDetailRow: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: m.rowHStackSpacing) {
             posterPlaceholder(size: CGSize(width: 50, height: 75))
 
             VStack(alignment: .leading, spacing: 2) {
@@ -85,7 +87,7 @@ struct AppearancePreviewCard: View {
                 ratingPill(text: text)
             }
         }
-        .padding(10)
+        .padding(m.rowPadding)
         .background(
             RoundedRectangle(cornerRadius: 12)
                 .fill(Color(.systemBackground))
@@ -93,7 +95,7 @@ struct AppearancePreviewCard: View {
     }
 
     private var previewCompactRow: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: m.compactRowHStackSpacing) {
             if displaySettings.showPosterInCompactList {
                 posterPlaceholder(size: CGSize(width: 34, height: 50))
             }
@@ -117,8 +119,8 @@ struct AppearancePreviewCard: View {
                 }
             }
         }
-        .padding(.vertical, 6)
-        .padding(.horizontal, 10)
+        .padding(.vertical, m.compactRowVerticalPadding)
+        .padding(.horizontal, m.rowPadding)
         .background(
             RoundedRectangle(cornerRadius: 12)
                 .fill(Color(.systemBackground))
