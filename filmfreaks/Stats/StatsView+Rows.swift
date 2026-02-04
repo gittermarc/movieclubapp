@@ -156,7 +156,11 @@ extension StatsView {
 
             let badgeText: String? = {
                 if let trailingText { return trailingText }
-                if let avg = movie.displayAverage(for: displaySettings.ratingDisplayMode) { return String(format: "%.1f", avg) }
+                let avg = displaySettings.showTMDbRatingsInLists
+                ? movie.displayAverage(for: displaySettings.ratingDisplayMode)
+                : movie.groupAverage(for: displaySettings.ratingDisplayMode)
+
+                if let avg { return String(format: "%.1f", avg) }
                 return nil
             }()
 

@@ -20,6 +20,7 @@ final class DisplaySettings: ObservableObject {
         static let accentColor = "DisplaySettings_AccentColor"
 
         static let showRatings = "DisplaySettings_ShowRatings"
+        static let showTMDbRatingsInLists = "DisplaySettings_ShowTMDbRatingsInLists"
         static let ratingDisplayMode = "DisplaySettings_RatingDisplayMode"
         static let showWatchedDate = "DisplaySettings_ShowWatchedDate"
         static let showWatchedLocation = "DisplaySettings_ShowWatchedLocation"
@@ -113,6 +114,12 @@ final class DisplaySettings: ObservableObject {
         didSet { defaults.set(showRatings, forKey: Keys.showRatings) }
     }
 
+    /// Wenn aktiv, dürfen TMDb-Ratings als Fallback in Listen angezeigt werden
+    /// (z.B. wenn die Gruppe noch keine Bewertung vergeben hat).
+    @Published var showTMDbRatingsInLists: Bool {
+        didSet { defaults.set(showTMDbRatingsInLists, forKey: Keys.showTMDbRatingsInLists) }
+    }
+
     /// Welche Kennzahl wird als "Ø" angezeigt? (Bewertung vs Fazit)
     @Published var ratingDisplayMode: RatingDisplayMode {
         didSet { defaults.set(ratingDisplayMode.rawValue, forKey: Keys.ratingDisplayMode) }
@@ -153,6 +160,9 @@ final class DisplaySettings: ObservableObject {
         // Defaults: Verhalten wie heute (alles sichtbar)
         self.showRatings = defaults.object(forKey: Keys.showRatings) as? Bool ?? true
 
+        // Defaults: TMDb-Fallback in Listen ist an (wie bisher)
+        self.showTMDbRatingsInLists = defaults.object(forKey: Keys.showTMDbRatingsInLists) as? Bool ?? true
+
         let modeRaw = defaults.string(forKey: Keys.ratingDisplayMode) ?? RatingDisplayMode.ratingAverage.rawValue
         self.ratingDisplayMode = RatingDisplayMode(rawValue: modeRaw) ?? .ratingAverage
 
@@ -169,6 +179,7 @@ final class DisplaySettings: ObservableObject {
         accentColor = .system
 
         showRatings = true
+        showTMDbRatingsInLists = true
         ratingDisplayMode = .ratingAverage
         showWatchedDate = true
         showWatchedLocation = true

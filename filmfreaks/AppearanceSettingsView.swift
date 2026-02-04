@@ -48,6 +48,14 @@ struct AppearanceSettingsView: View {
                     }
                     .pickerStyle(.segmented)
 
+                    Toggle("TMDb-Rating in Listen anzeigen", isOn: $displaySettings.showTMDbRatingsInLists)
+
+                    Text("Wenn in der Gruppe noch keine Bewertung vorhanden ist, kann stattdessen das TMDb-Rating als Fallback angezeigt werden.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, 2)
+
                     Text(displaySettings.ratingDisplayMode.helpText)
                         .font(.footnote)
                         .foregroundStyle(.secondary)

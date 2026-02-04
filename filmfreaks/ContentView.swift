@@ -133,7 +133,12 @@ struct ContentView: View {
     /// Einheitliche Kennzahl für Anzeige/Sortierung (abhängig von Einstellungen).
     /// Fällt auf TMDb zurück, wenn die Gruppe noch nichts bewertet hat.
     private func displayScore(for movie: Movie) -> Double? {
-        movie.displayAverage(for: displaySettings.ratingDisplayMode)
+        if displaySettings.showTMDbRatingsInLists {
+            return movie.displayAverage(for: displaySettings.ratingDisplayMode)
+        } else {
+            // Kein TMDb-Fallback: in Listen nur echte Gruppenwerte anzeigen.
+            return movie.groupAverage(for: displaySettings.ratingDisplayMode)
+        }
     }
 
 

@@ -394,15 +394,20 @@ struct TimelineView: View {
                             .font(.caption)
                             .foregroundStyle(.white.opacity(0.85))
 
-                        if displaySettings.showRatings,
-                           let avg = movie.displayAverage(for: displaySettings.ratingDisplayMode) {
-                            Label(String(format: "%.1f", avg), systemImage: "star.fill")
+                        if displaySettings.showRatings {
+                            let avg = displaySettings.showTMDbRatingsInLists
+                            ? movie.displayAverage(for: displaySettings.ratingDisplayMode)
+                            : movie.groupAverage(for: displaySettings.ratingDisplayMode)
+
+                            if let avg {
+                                Label(String(format: "%.1f", avg), systemImage: "star.fill")
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(.white)
                                 .padding(.horizontal, 10)
                                 .padding(.vertical, 6)
                                 .background(Color.white.opacity(0.16))
                                 .clipShape(Capsule())
+                            }
                         }
                     }
                 }

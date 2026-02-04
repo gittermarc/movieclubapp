@@ -1072,14 +1072,19 @@ private struct GoalDetailView: View {
 
             Spacer()
 
-            if displaySettings.showRatings,
-               let avg = m.displayAverage(for: displaySettings.ratingDisplayMode) {
+            if displaySettings.showRatings {
+                let avg = displaySettings.showTMDbRatingsInLists
+                ? m.displayAverage(for: displaySettings.ratingDisplayMode)
+                : m.groupAverage(for: displaySettings.ratingDisplayMode)
+
+                if let avg {
                 Text(String(format: "%.1f", avg))
                     .font(.caption.bold())
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
                     .background(displaySettings.tintColor.opacity(0.12))
                     .clipShape(Capsule())
+                }
             }
         }
     }

@@ -105,8 +105,16 @@ struct AppearancePreviewCard: View {
             Spacer()
 
             if displaySettings.showRatings {
-                let text = displaySettings.ratingDisplayMode == .ratingAverage ? "9.1" : "8.7"
-                ratingPill(text: text, compact: true)
+                if displaySettings.showTMDbRatingsInLists {
+                    // Preview: als ob hier kein Gruppenwert vorhanden ist und TMDb als Fallback greift
+                    let text = displaySettings.ratingDisplayMode == .ratingAverage ? "9.1" : "8.7"
+                    ratingPill(text: text, compact: true)
+                } else {
+                    // Wenn TMDb in Listen deaktiviert ist, bleibt bei fehlendem Gruppenwert nur „-”
+                    Text("-")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
             }
         }
         .padding(.vertical, 6)
