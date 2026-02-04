@@ -2,7 +2,7 @@
 //  GroupSettingsView.swift
 //  filmfreaks
 //
-//  Gruppenverwaltung: Legacy (Invite-Code) + neue CloudKit-Sharing Gruppen.
+//  Gruppenverwaltung: CloudKit-Sharing Gruppen.
 //
 
 internal import SwiftUI
@@ -14,8 +14,6 @@ struct GroupSettingsView: View {
     @EnvironmentObject private var groupStore: CloudKitGroupStore
 
     @State private var newCloudGroupName: String = ""
-
-    @State private var isMigratingLegacy = false
     @State private var migrateError: String?
 
     @State private var shareToPresent: CKShare?
@@ -37,7 +35,9 @@ struct GroupSettingsView: View {
         if let ctx = activeContext {
             return ctx.isShared ? "Shared" : "Owned"
         }
-        return "Legacy"
+        // In der UI wollen wir keine "Legacy"-Welt mehr sehen.
+        // Wenn der Context (noch) nicht geladen ist, ist es trotzdem eine Cloud-Gruppe.
+        return "Cloud"
     }
 
     var body: some View {
@@ -88,8 +88,6 @@ struct GroupSettingsView: View {
             }
 
             cloudSection
-
-            legacySection
         }
         .navigationTitle("Gruppen")
         .navigationBarTitleDisplayMode(.inline)
@@ -297,119 +295,6 @@ struct GroupSettingsView: View {
             .buttonStyle(.bordered)
             .disabled(isPerformingGroupAction)
             .accessibilityLabel("Optionen")
-        }
-    }
-
-    // MARK: - Legacy UI
-
-    private var legacySection: some View {
-        Section {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Legacy-Gruppen (Altbestand)")
-                    .font(.headline)
-
-                Text("Beitritt ist deaktiviert. Hier siehst du nur Legacy-Gruppen, die diese App bereits kennt. Migration ist nur möglich, wenn die Legacy-Gruppe aktuell aktiv ist.")
-                    .foregroundStyle(.secondary)
-            }
-
-            let legacyKnown = movieStore.knownGroups.filter { GroupContextStore.context(forGroupId: $0.id) == nil }
-
-            if legacyKnown.isEmpty {
-                Text("Keine bekannten Legacy-Gruppen.")
-                    .foregroundStyle(.secondary)
-            } else {
-                DisclosureGroup("Bekannte Legacy-Gruppen") {
-                    ForEach(legacyKnown) { g in
-                        HStack(spacing: 12) {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(g.displayName)
-                                    .font(.body)
-                                    .lineLimit(1)
-                                Text("Legacy")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-
-                            Spacer()
-
-                            if movieStore.currentGroupId == g.id {
-                                Text("Aktiv")
-                                    .font(.caption.weight(.semibold))
-                                    .padding(.horizontal, 10)
-                                    .padding(.vertical, 6)
-                                    .background(.thinMaterial)
-                                    .clipShape(Capsule())
-                            }
-
-                            Button(role: .destructive) {
-                                movieStore.knownGroups.removeAll { $0.id == g.id }
-                            } label: {
-                                Image(systemName: "trash")
-                            }
-                            .buttonStyle(.bordered)
-                        }
-                    }
-                }
-            }
-
-            if canUpgradeCurrentLegacyGroup {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("Upgrade")
-                        .font(.headline)
-
-                    Text("Du bist gerade in einer Legacy-Gruppe. Upgrade migriert alle Daten in eine neue Cloud-Gruppe, die du anschließend per iCloud teilen kannst.")
-                        .foregroundStyle(.secondary)
-
-                    Button {
-                        Task { await migrateCurrentLegacyGroup() }
-                    } label: {
-                        HStack {
-                            if isMigratingLegacy {
-                                ProgressView()
-                            }
-                            Text(isMigratingLegacy ? "Migriere…" : "Upgrade zu Cloud-Gruppe")
-                        }
-                        .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(isMigratingLegacy)
-                }
-                .padding(.vertical, 6)
-            }
-
-        } header: {
-            Text("Legacy (Invite-Code / Public DB)")
-        } footer: {
-            Text("Legacy bleibt erstmal drin, aber sobald du upgraden kannst: mach’s. Public DB ist ein unnötiger Bauchladen.")
-        }
-    }
-
-    private var canUpgradeCurrentLegacyGroup: Bool {
-        guard let gid = movieStore.currentGroupId, !gid.isEmpty else { return false }
-        return GroupContextStore.context(forGroupId: gid) == nil
-    }
-
-    private func migrateCurrentLegacyGroup() async {
-        guard let legacyId = movieStore.currentGroupId, !legacyId.isEmpty else { return }
-        isMigratingLegacy = true
-        defer { isMigratingLegacy = false }
-
-        do {
-            let newGroup = try await LegacyGroupMigrationService().migrateLegacyGroup(
-                legacyGroupId: legacyId,
-                legacyGroupName: movieStore.currentGroupName,
-                groupStore: groupStore
-            )
-
-            // Remove the old legacy group from the quick list to avoid "which one is the real one?"
-            movieStore.knownGroups.removeAll { $0.id == legacyId }
-
-            movieStore.activateCloudGroup(newGroup)
-            await movieStore.refreshFromCloud(force: true)
-            await userStore.refreshFromCloud(force: true)
-            await groupStore.refresh()
-        } catch {
-            migrateError = error.localizedDescription
         }
     }
 
