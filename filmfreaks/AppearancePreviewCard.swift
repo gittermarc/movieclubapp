@@ -45,8 +45,9 @@ struct AppearancePreviewCard: View {
         )
     }
 
+    @ViewBuilder
     private var previewDetailRow: some View {
-        HStack(spacing: m.rowHStackSpacing) {
+        let row = HStack(spacing: m.rowHStackSpacing) {
             posterPlaceholder(size: CGSize(width: 50, height: 75))
 
             VStack(alignment: .leading, spacing: 2) {
@@ -87,15 +88,24 @@ struct AppearancePreviewCard: View {
                 ratingPill(text: text)
             }
         }
-        .padding(m.rowPadding)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color(.systemBackground))
-        )
+
+        if displaySettings.cardStyle == .cards {
+            row
+                .padding(m.rowPadding)
+                .background(
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(Color(.systemBackground))
+                )
+        } else {
+            row
+                .padding(.vertical, 6)
+                .padding(.horizontal, 4)
+        }
     }
 
+    @ViewBuilder
     private var previewCompactRow: some View {
-        HStack(spacing: m.compactRowHStackSpacing) {
+        let row = HStack(spacing: m.compactRowHStackSpacing) {
             if displaySettings.showPosterInCompactList {
                 posterPlaceholder(size: CGSize(width: 34, height: 50))
             }
@@ -119,12 +129,20 @@ struct AppearancePreviewCard: View {
                 }
             }
         }
-        .padding(.vertical, m.compactRowVerticalPadding)
-        .padding(.horizontal, m.rowPadding)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color(.systemBackground))
-        )
+
+        if displaySettings.cardStyle == .cards {
+            row
+                .padding(.vertical, m.compactRowVerticalPadding)
+                .padding(.horizontal, m.rowPadding)
+                .background(
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(Color(.systemBackground))
+                )
+        } else {
+            row
+                .padding(.vertical, m.compactRowVerticalPadding)
+                .padding(.horizontal, 4)
+        }
     }
 
     private func posterPlaceholder(size: CGSize) -> some View {

@@ -73,6 +73,7 @@ struct ContentView: View {
     
     // MARK: - UI Density Metrics
     private var m: DisplaySettings.LayoutMetrics { displaySettings.metrics }
+    private var g: DisplaySettings.PosterGridMetrics { displaySettings.posterGridMetrics }
 
 
     /// Gibt an, ob es in der aktuellen Gruppe überhaupt schon Filme gibt
@@ -965,9 +966,9 @@ struct ContentView: View {
             .padding(.top, 32)
             .padding(.horizontal)
         } else {
-            let columns = [GridItem(.adaptive(minimum: 110), spacing: 12)]
+            let columns = [GridItem(.adaptive(minimum: g.minColumnWidth), spacing: g.spacing)]
 
-            LazyVGrid(columns: columns, spacing: 12) {
+            LazyVGrid(columns: columns, spacing: g.spacing) {
                 ForEach(items) { item in
                     NavigationLink {
                         if isBacklog {
@@ -1042,7 +1043,7 @@ struct ContentView: View {
                     }
             }
         }
-        .frame(height: 170)
+        .frame(height: g.cellHeight)
         .clipped()
         .shadow(color: Color.black.opacity(0.06), radius: 4, x: 0, y: 2)
     }
@@ -1051,7 +1052,7 @@ struct ContentView: View {
 
     @ViewBuilder
     private func compactMovieRow(movie: Movie, average: Double?) -> some View {
-        HStack(spacing: m.compactRowHStackSpacing) {
+        let row = HStack(spacing: m.compactRowHStackSpacing) {
             if displaySettings.showPosterInCompactList {
                 if let url = movie.posterURL {
                 CachedAsyncImage(url: url) { phase in
@@ -1107,7 +1108,21 @@ struct ContentView: View {
             }
             }
         }
-        .padding(.vertical, m.compactRowVerticalPadding)
+
+        if displaySettings.cardStyle == .cards {
+            row
+                .padding(.vertical, m.compactRowVerticalPadding)
+                .padding(.horizontal, m.rowPadding)
+                .background(
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(Color(.secondarySystemBackground))
+                )
+                .shadow(color: Color.black.opacity(0.04), radius: 3, x: 0, y: 1)
+                .padding(.vertical, m.cardVerticalSpacing)
+        } else {
+            row
+                .padding(.vertical, m.compactRowVerticalPadding)
+        }
     }
 
     // MARK: - Watched-Liste
@@ -1163,6 +1178,8 @@ struct ContentView: View {
                     movieRow(movie: movie, average: displayRating)
                 }
             }
+            .listRowBackground(Color.clear)
+            .listRowSeparator(displaySettings.cardStyle == .cards ? .hidden : .automatic)
         }
         .onDelete { indexSet in
             let originalIndices = IndexSet(
@@ -1222,6 +1239,8 @@ struct ContentView: View {
                     movieRow(movie: movie, average: displayRating)
                 }
             }
+            .listRowBackground(Color.clear)
+            .listRowSeparator(displaySettings.cardStyle == .cards ? .hidden : .automatic)
         }
         .onDelete { indexSet in
             let originalIndices = IndexSet(
@@ -1235,7 +1254,7 @@ struct ContentView: View {
 
     @ViewBuilder
     private func movieRow(movie: Movie, average: Double?) -> some View {
-        HStack(spacing: m.rowHStackSpacing) {
+        let row = HStack(spacing: m.rowHStackSpacing) {
             // Poster
             if let url = movie.posterURL {
                 CachedAsyncImage(url: url) { phase in
@@ -1318,13 +1337,20 @@ struct ContentView: View {
             }
             }
         }
-        .padding(m.rowPadding)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color(.secondarySystemBackground))
-        )
-        .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
-        .padding(.vertical, m.cardVerticalSpacing)
+
+        if displaySettings.cardStyle == .cards {
+            row
+                .padding(m.rowPadding)
+                .background(
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(Color(.secondarySystemBackground))
+                )
+                .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
+                .padding(.vertical, m.cardVerticalSpacing)
+        } else {
+            row
+                .padding(.vertical, 8)
+        }
     }
 }
 

@@ -22,6 +22,9 @@ final class DisplaySettings: ObservableObject {
 
         static let uiDensity = "DisplaySettings_UIDensity"
 
+        static let cardStyle = "DisplaySettings_CardStyle"
+        static let posterGridDensity = "DisplaySettings_PosterGridDensity"
+
         static let showRatings = "DisplaySettings_ShowRatings"
         static let showTMDbRatingsInLists = "DisplaySettings_ShowTMDbRatingsInLists"
         static let ratingDisplayMode = "DisplaySettings_RatingDisplayMode"
@@ -125,6 +128,53 @@ final class DisplaySettings: ObservableObject {
             case .normal:  return "Ausgewogen – entspricht dem aktuellen Standard."
             case .cozy:    return "Mehr Luft – wirkt entspannter & "
                 + "premium." // split to avoid long line
+            }
+        }
+    }
+
+    /// Listen: „Karten“ (mit Background + Shadow) oder „Plain“ (System-List-Feeling).
+    enum CardStyle: String, CaseIterable, Identifiable {
+        case cards
+        case plain
+
+        var id: Self { self }
+
+        var label: String {
+            switch self {
+            case .cards: return "Cards"
+            case .plain: return "Plain"
+            }
+        }
+
+        var shortHint: String {
+            switch self {
+            case .cards: return "Mehr ‚Premium‘ – Karten mit leichtem Schatten."
+            case .plain: return "Weniger Chrome – klassisches Listen-Layout."
+            }
+        }
+    }
+
+    /// Dichte der Cover-Grid Ansicht (Poster-Grid).
+    enum PosterGridDensity: String, CaseIterable, Identifiable {
+        case small
+        case normal
+        case large
+
+        var id: Self { self }
+
+        var label: String {
+            switch self {
+            case .small:  return "Klein"
+            case .normal: return "Normal"
+            case .large:  return "Groß"
+            }
+        }
+
+        var shortHint: String {
+            switch self {
+            case .small:  return "Mehr Poster pro Zeile."
+            case .normal: return "Ausgewogen – entspricht dem aktuellen Standard."
+            case .large:  return "Weniger Poster, dafür schöner groß."
             }
         }
     }
@@ -254,6 +304,35 @@ final class DisplaySettings: ObservableObject {
         }
     }
 
+    /// Layout-Metriken speziell für das Poster-Grid.
+    struct PosterGridMetrics: Equatable {
+        let density: PosterGridDensity
+
+        var minColumnWidth: CGFloat {
+            switch density {
+            case .small:  return 90
+            case .normal: return 110
+            case .large:  return 140
+            }
+        }
+
+        var cellHeight: CGFloat {
+            switch density {
+            case .small:  return 140
+            case .normal: return 170
+            case .large:  return 220
+            }
+        }
+
+        var spacing: CGFloat {
+            switch density {
+            case .small:  return 10
+            case .normal: return 12
+            case .large:  return 14
+            }
+        }
+    }
+
     // MARK: - Persisted Properties
 
     @Published var colorScheme: ColorSchemePreference {
@@ -266,6 +345,16 @@ final class DisplaySettings: ObservableObject {
 
     @Published var uiDensity: UIDensity {
         didSet { defaults.set(uiDensity.rawValue, forKey: Keys.uiDensity) }
+    }
+
+    /// Card-Style für Listen (Karten vs. Plain).
+    @Published var cardStyle: CardStyle {
+        didSet { defaults.set(cardStyle.rawValue, forKey: Keys.cardStyle) }
+    }
+
+    /// Dichte für die Poster-Grid Ansicht.
+    @Published var posterGridDensity: PosterGridDensity {
+        didSet { defaults.set(posterGridDensity.rawValue, forKey: Keys.posterGridDensity) }
     }
 
     // Liste: Sichtbarkeit
@@ -307,6 +396,8 @@ final class DisplaySettings: ObservableObject {
 
     var metrics: LayoutMetrics { .init(density: uiDensity) }
 
+    var posterGridMetrics: PosterGridMetrics { .init(density: posterGridDensity) }
+
     // MARK: - Init
 
     init(defaults: UserDefaults = .standard) {
@@ -320,6 +411,12 @@ final class DisplaySettings: ObservableObject {
 
         let densityRaw = defaults.string(forKey: Keys.uiDensity) ?? UIDensity.normal.rawValue
         self.uiDensity = UIDensity(rawValue: densityRaw) ?? .normal
+
+        let cardRaw = defaults.string(forKey: Keys.cardStyle) ?? CardStyle.cards.rawValue
+        self.cardStyle = CardStyle(rawValue: cardRaw) ?? .cards
+
+        let gridRaw = defaults.string(forKey: Keys.posterGridDensity) ?? PosterGridDensity.normal.rawValue
+        self.posterGridDensity = PosterGridDensity(rawValue: gridRaw) ?? .normal
 
         // Defaults: Verhalten wie heute (alles sichtbar)
         self.showRatings = defaults.object(forKey: Keys.showRatings) as? Bool ?? true
@@ -342,6 +439,9 @@ final class DisplaySettings: ObservableObject {
         colorScheme = .system
         accentColor = .system
         uiDensity = .normal
+
+        cardStyle = .cards
+        posterGridDensity = .normal
 
         showRatings = true
         showTMDbRatingsInLists = true

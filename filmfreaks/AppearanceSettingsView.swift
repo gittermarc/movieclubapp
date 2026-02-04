@@ -54,6 +54,32 @@ struct AppearanceSettingsView: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.top, 2)
+
+                Picker("Card-Style", selection: $displaySettings.cardStyle) {
+                    ForEach(DisplaySettings.CardStyle.allCases) { style in
+                        Text(style.label).tag(style)
+                    }
+                }
+                .pickerStyle(.segmented)
+
+                Text(displaySettings.cardStyle.shortHint)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 2)
+
+                Picker("Grid-Dichte", selection: $displaySettings.posterGridDensity) {
+                    ForEach(DisplaySettings.PosterGridDensity.allCases) { density in
+                        Text(density.label).tag(density)
+                    }
+                }
+                .pickerStyle(.segmented)
+
+                Text(displaySettings.posterGridDensity.shortHint)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 2)
             }
 
             // List visibility
