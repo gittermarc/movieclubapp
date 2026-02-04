@@ -177,114 +177,20 @@ struct ContentView: View {
                     .ignoresSafeArea()
 
                 VStack {
-                                        // Aktuelle Gruppe anzeigen (falls vorhanden)
+                    // Aktuelle Gruppe anzeigen (falls vorhanden)
                     if let name = movieStore.currentGroupName {
                         let totalMoviesInGroup = movieStore.movies.count + movieStore.backlogMovies.count
 
-                        VStack(alignment: .leading, spacing: 6) {
-                            HStack(spacing: 12) {
-                                // Gruppe (links)
-                                Button {
-                                    // Beim Tippen: Gruppenverwaltung öffnen
-                                    showingGroupSettings = true
-                                } label: {
-                                    HStack(spacing: 10) {
-                                        Image(systemName: "person.3.sequence.fill")
-                                            .font(.caption)
-                                            .foregroundStyle(.white.opacity(0.9))
-
-                                        VStack(alignment: .leading, spacing: 2) {
-                                            Text("Aktuelle Gruppe")
-                                                .font(.caption2)
-                                                .textCase(.uppercase)
-                                                .foregroundStyle(.white.opacity(0.8))
-
-                                            Text(name)
-                                                .font(.subheadline.weight(.semibold))
-                                                .foregroundStyle(.white)
-                                                .lineLimit(1)
-                                                .truncationMode(.tail)
-                                        }
-                                    }
-                                    .padding(.horizontal, 14)
-                                    .padding(.vertical, 8)
-                                    .background(
-                                        LinearGradient(
-                                            colors: [Color.blue, Color.purple],
-                                            startPoint: .leading,
-                                            endPoint: .trailing
-                                        )
-                                    )
-                                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                                    .shadow(color: Color.black.opacity(0.12), radius: 6, x: 0, y: 3)
-                                }
-                                .buttonStyle(.plain)
-                                .layoutPriority(1)
-
-                                Spacer(minLength: 0)
-
-                                // Aktives Mitglied (rechts)
-                                Button {
-                                    // Direkt in die Mitgliederverwaltung – da ändert man typischerweise auch, wer "aktiv" ist.
-                                    showingUsers = true
-                                } label: {
-                                    let colors: [Color] = hasActiveMemberSelected
-                                        ? [Color.green, Color.teal]
-                                        : [Color.gray.opacity(0.65), Color.gray.opacity(0.45)]
-
-                                    ViewThatFits(in: .horizontal) {
-                                        HStack(spacing: 10) {
-                                            Image(systemName: "person.fill")
-                                                .font(.caption)
-                                                .foregroundStyle(.white.opacity(0.9))
-
-                                            VStack(alignment: .leading, spacing: 2) {
-                                                Text("Aktiv")
-                                                    .font(.caption2)
-                                                    .textCase(.uppercase)
-                                                    .foregroundStyle(.white.opacity(0.8))
-
-                                                Text(activeMemberDisplayName)
-                                                    .font(.subheadline.weight(.semibold))
-                                                    .foregroundStyle(.white)
-                                                    .lineLimit(1)
-                                                    .truncationMode(.tail)
-                                            }
-                                        }
-
-                                        // Fallback für Mini-Displays: nur Initialen
-                                        HStack(spacing: 8) {
-                                            Image(systemName: "person.fill")
-                                                .font(.caption)
-                                                .foregroundStyle(.white.opacity(0.9))
-
-                                            Text(activeMemberInitials)
-                                                .font(.subheadline.weight(.semibold))
-                                                .foregroundStyle(.white)
-                                                .lineLimit(1)
-                                        }
-                                    }
-                                    .padding(.horizontal, 14)
-                                    .padding(.vertical, 8)
-                                    .background(
-                                        LinearGradient(
-                                            colors: colors,
-                                            startPoint: .leading,
-                                            endPoint: .trailing
-                                        )
-                                    )
-                                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                                    .shadow(color: Color.black.opacity(0.10), radius: 6, x: 0, y: 3)
-                                }
-                                .buttonStyle(.plain)
-                            }
-
-                            if totalMoviesInGroup > 0 {
-                                Text("\(totalMoviesInGroup) Filme in dieser Gruppe")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
+                        ContentContextBar(
+                            groupName: name,
+                            totalMoviesInGroup: totalMoviesInGroup,
+                            tintColor: displaySettings.tintColor,
+                            activeMemberDisplayName: activeMemberDisplayName,
+                            activeMemberInitials: activeMemberInitials,
+                            hasActiveMemberSelected: hasActiveMemberSelected,
+                            onTapGroup: { showingGroupSettings = true },
+                            onTapActiveMember: { showingUsers = true }
+                        )
                         .padding(.horizontal)
                         .padding(.top, 8)
                     }
