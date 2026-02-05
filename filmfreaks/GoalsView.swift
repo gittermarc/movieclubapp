@@ -463,7 +463,7 @@ struct GoalsView: View {
                 .padding(.horizontal, 10)
                 .padding(.vertical, 8)
                 .frame(maxWidth: .infinity)
-                .background(Color.blue.opacity(0.14))
+                .background(displaySettings.tint(0.14))
                 .clipShape(RoundedRectangle(cornerRadius: 12))
             }
             .buttonStyle(.plain)
@@ -558,9 +558,9 @@ struct GoalsView: View {
             } else {
                 ZStack {
                     RoundedRectangle(cornerRadius: 10)
-                        .fill(Color.blue.opacity(0.12))
+                        .fill(displaySettings.tintSoftBackground)
                     Image(systemName: goal.type == .director ? ViewingCustomGoalType.director.systemImage : ViewingCustomGoalType.person.systemImage)
-                        .foregroundStyle(.blue)
+                        .foregroundStyle(.tint)
                 }
                 .frame(width: 44, height: 44)
             }

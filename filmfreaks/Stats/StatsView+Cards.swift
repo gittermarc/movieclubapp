@@ -282,7 +282,7 @@ extension StatsView {
                     } else {
                         let activity = Double(activeCount) / Double(max(1, membersCount))
                         ProgressView(value: activity)
-                            .tint(Color.accentColor)
+                            .tint(displaySettings.tintColor)
 
                         Text("\(activeCount) von \(membersCount) Mitgliedern haben im Zeitraum mindestens einmal bewertet (\(String(format: "%.0f", activity * 100))%).")
                             .font(.caption)
@@ -296,7 +296,7 @@ extension StatsView {
 
                     let cov = Double(ratedMoviesCount) / Double(max(1, filteredMovies.count))
                     ProgressView(value: cov)
-                        .tint(Color.accentColor)
+                        .tint(displaySettings.tintColor)
 
                     Text("\(ratedMoviesCount) von \(max(1, filteredMovies.count)) Filmen haben mindestens eine Bewertung (\(String(format: "%.0f", cov * 100))%).")
                         .font(.caption)
@@ -316,7 +316,7 @@ extension StatsView {
                         let pActive = Double(allActive) / Double(max(1, filteredMovies.count))
 
                         ProgressView(value: pActive)
-                            .tint(Color.accentColor)
+                            .tint(displaySettings.tintColor)
 
                         Text("\(allActive) von \(max(1, filteredMovies.count)) Filmen wurden von allen aktiven Mitgliedern bewertet (\(String(format: "%.0f", pActive * 100))%).")
                             .font(.caption)
@@ -438,7 +438,7 @@ extension StatsView {
                             .foregroundStyle(.secondary)
                     } else {
                         ForEach(topRatedHighlights) { entry in
-                            movieRow(entry.movie, trailingText: String(format: "%.1f", entry.value), trailingBackground: Color.blue.opacity(0.12))
+                            movieRow(entry.movie, trailingText: String(format: "%.1f", entry.value))
                         }
                     }
                 }
@@ -996,7 +996,7 @@ extension StatsView {
                                                 .monospacedDigit()
                                                 .padding(.horizontal, 10)
                                                 .padding(.vertical, 6)
-                                                .background(Color.blue.opacity(0.12))
+                                                .background(displaySettings.tintSoftBackground)
                                                 .clipShape(RoundedRectangle(cornerRadius: 10))
                                         } else {
                                             Text("–")
@@ -1006,7 +1006,7 @@ extension StatsView {
                                     }
 
                                     ProgressView(value: progress)
-                                        .tint(Color.accentColor)
+                                        .tint(displaySettings.tintColor)
 
                                     HStack {
                                         Text("Coverage: \(String(format: "%.0f", progress * 100))%")

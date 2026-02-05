@@ -778,7 +778,7 @@ struct ContentView: View {
             } label: {
                 HStack(spacing: 10) {
                     Image(systemName: "sparkles")
-                        .foregroundStyle(.blue)
+                        .foregroundStyle(.tint)
 
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Quick Start")
@@ -1686,7 +1686,7 @@ private struct QuickStartPage: View {
         VStack(spacing: 14) {
             Image(systemName: icon)
                 .font(.system(size: 44, weight: .semibold))
-                .foregroundStyle(.blue)
+                .foregroundStyle(.tint)
 
             Text(title)
                 .font(.title3.weight(.semibold))

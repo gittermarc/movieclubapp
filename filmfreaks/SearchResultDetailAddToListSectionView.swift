@@ -9,6 +9,8 @@ internal import SwiftUI
 
 struct SearchResultDetailAddToListSectionView: View {
 
+    @EnvironmentObject private var displaySettings: DisplaySettings
+
     @Binding var isInWatched: Bool
     @Binding var isInBacklog: Bool
     let makeMovie: () -> Movie
@@ -69,10 +71,12 @@ struct SearchResultDetailAddToListSectionView: View {
                     .frame(maxWidth: .infinity)
                     .background(
                         isInBacklog
-                        ? Color.blue.opacity(0.08)
-                        : Color.blue.opacity(0.15)
+                        ? displaySettings.tintUltraSoftBackground
+                        : displaySettings.tint(0.15)
                     )
-                    .foregroundStyle(isInBacklog ? Color.secondary : Color.blue)
+                    // Avoid ternary type mismatch: .secondary is HierarchicalShapeStyle,
+                    // .tint is TintShapeStyle. Wrap both in AnyShapeStyle.
+                    .foregroundStyle(isInBacklog ? AnyShapeStyle(.secondary) : AnyShapeStyle(.tint))
                     .clipShape(RoundedRectangle(cornerRadius: 12))
                 }
                 .disabled(isInBacklog)

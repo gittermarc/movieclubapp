@@ -11,6 +11,8 @@ internal import SwiftUI
 /// The actual saving logic stays in `MovieDetailView` (via `onSave`).
 struct MovieRatingsSheetView: View {
 
+    @EnvironmentObject private var displaySettings: DisplaySettings
+
     @Binding var movie: Movie
 
     @Binding var localScores: [RatingCriterion: Int]
@@ -205,7 +207,7 @@ struct MovieRatingsSheetView: View {
                 .font(.caption.weight(.semibold))
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
-                .background(Color.blue.opacity(0.12))
+                .background(displaySettings.tintSoftBackground)
                 .clipShape(Capsule())
         } else {
             Text("\(title) –")

@@ -79,7 +79,7 @@ extension StatsView {
                         .monospacedDigit()
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
-                        .background(Color.blue.opacity(0.12))
+                        .background(displaySettings.tintSoftBackground)
                         .clipShape(Capsule())
 
                     Text(String(format: "TMDB %.1f", entry.tmdbAverage))
@@ -99,7 +99,7 @@ extension StatsView {
     func movieRow(
         _ movie: Movie,
         trailingText: String? = nil,
-        trailingBackground: Color = Color.blue.opacity(0.12)
+        trailingBackground: Color? = nil
     ) -> some View {
         HStack(spacing: 12) {
             if let url = movie.posterURL {
@@ -170,7 +170,7 @@ extension StatsView {
                     .monospacedDigit()
                     .padding(.horizontal, 8)
                     .padding(.vertical, 6)
-                    .background(trailingText == nil ? displaySettings.tintColor.opacity(0.12) : trailingBackground)
+                    .background(trailingBackground ?? displaySettings.tintSoftBackground)
                     .clipShape(RoundedRectangle(cornerRadius: 8))
             }
         }

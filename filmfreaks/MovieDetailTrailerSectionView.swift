@@ -8,6 +8,8 @@
 internal import SwiftUI
 
 struct MovieDetailTrailerSectionView: View {
+
+    @EnvironmentObject private var displaySettings: DisplaySettings
     let movie: Movie
     let trailerKey: String
     let trailerWatchURL: URL?
@@ -102,7 +104,7 @@ struct MovieDetailTrailerSectionView: View {
                             .font(.subheadline.weight(.semibold))
                             .padding(.horizontal, 10)
                             .padding(.vertical, 8)
-                            .background(Color.blue.opacity(0.12))
+                            .background(displaySettings.tintSoftBackground)
                             .clipShape(RoundedRectangle(cornerRadius: 10))
                         }
                     }

@@ -183,6 +183,8 @@ struct MovieSearchView: View {
 
     @Environment(\.dismiss) private var dismiss
 
+    @EnvironmentObject private var displaySettings: DisplaySettings
+
     // Keyboard (gegen Content-Jump beim Fokus)
     @StateObject private var keyboard = KeyboardMonitor()
 
@@ -352,7 +354,7 @@ struct MovieSearchView: View {
                                         .font(.footnote.weight(.semibold))
                                         .frame(maxWidth: .infinity)
                                         .padding(.vertical, 10)
-                                        .background(Color.blue.opacity(0.12))
+                                        .background(displaySettings.tintSoftBackground)
                                         .clipShape(RoundedRectangle(cornerRadius: 12))
                                     }
                                     .buttonStyle(.plain)
@@ -713,7 +715,7 @@ struct MovieSearchView: View {
                     .font(.footnote.weight(.semibold))
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
-                    .background(Color.blue.opacity(0.12))
+                    .background(displaySettings.tintSoftBackground)
                     .clipShape(Capsule())
                 }
                 .buttonStyle(.plain)
@@ -843,7 +845,7 @@ struct MovieSearchView: View {
             HStack(alignment: .firstTextBaseline) {
                 HStack(spacing: 8) {
                     Image(systemName: "sparkles")
-                        .foregroundStyle(.blue)
+                        .foregroundStyle(.tint)
                     Text("Inspiration")
                         .font(.subheadline.weight(.semibold))
                 }
@@ -860,7 +862,7 @@ struct MovieSearchView: View {
                     .font(.caption.weight(.semibold))
                     .padding(.horizontal, 10)
                     .padding(.vertical, 7)
-                    .background(Color.blue.opacity(0.12))
+                    .background(displaySettings.tintSoftBackground)
                     .clipShape(Capsule())
                 }
                 .buttonStyle(.plain)
@@ -1030,7 +1032,7 @@ struct MovieSearchView: View {
             } label: {
                 Image(systemName: "plus.circle.fill")
                     .font(.title3)
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(.tint)
                     .padding(8)
                     .background(.ultraThinMaterial)
                     .clipShape(Circle())
@@ -1379,7 +1381,7 @@ struct MovieSearchView: View {
                                 .foregroundStyle(.secondary)
                                 .padding(.horizontal, 10)
                                 .padding(.vertical, 6)
-                                .background(Color.blue.opacity(0.08))
+                                .background(displaySettings.tintUltraSoftBackground)
                                 .clipShape(Capsule())
                             }
 
@@ -1455,17 +1457,17 @@ struct MovieSearchView: View {
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(.secondary)
         }
-        .foregroundStyle(.blue)
+        .foregroundStyle(.tint)
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
         .background(.ultraThinMaterial)
         .clipShape(Capsule())
         .overlay {
             Capsule()
-                .stroke(Color.blue.opacity(0.20), lineWidth: 1)
+                .stroke(displaySettings.tintStroke, lineWidth: 1)
         }
-        .shadow(color: Color.blue.opacity(0.14), radius: 10, x: 0, y: 2)
-        .shadow(color: Color.blue.opacity(0.08), radius: 18, x: 0, y: 8)
+        .shadow(color: displaySettings.tintShadowStrong, radius: 10, x: 0, y: 2)
+        .shadow(color: displaySettings.tintShadowSoft, radius: 18, x: 0, y: 8)
     }
 
     private func openDetail(_ result: TMDbMovieResult) {

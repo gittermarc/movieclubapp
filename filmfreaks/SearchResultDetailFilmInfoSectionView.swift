@@ -9,6 +9,8 @@ internal import SwiftUI
 
 struct SearchResultDetailFilmInfoSectionView: View {
 
+    @EnvironmentObject private var displaySettings: DisplaySettings
+
     let runtimeText: String?
     let genreNames: [String]
     let director: String?
@@ -45,7 +47,7 @@ struct SearchResultDetailFilmInfoSectionView: View {
                                     .font(.caption)
                                     .padding(.horizontal, 10)
                                     .padding(.vertical, 6)
-                                    .background(Color.blue.opacity(0.1))
+                                    .background(displaySettings.tintChipBackground)
                                     .foregroundStyle(.primary)
                                     .clipShape(Capsule())
                             }
@@ -118,7 +120,7 @@ struct SearchResultDetailFilmInfoSectionView: View {
                                 }
                                 .padding(.horizontal, 10)
                                 .padding(.vertical, 8)
-                                .background(Color.blue.opacity(0.12))
+                                .background(displaySettings.tintSoftBackground)
                                 .clipShape(RoundedRectangle(cornerRadius: 12))
                             }
                             .buttonStyle(.plain)

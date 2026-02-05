@@ -9,6 +9,8 @@ internal import SwiftUI
 
 struct SearchResultDetailTrailerInlineBlockView: View {
 
+    @EnvironmentObject private var displaySettings: DisplaySettings
+
     let posterURL: URL?
     let trailerWatchURL: URL?
     @Binding var isTrailerSafariShown: Bool
@@ -80,7 +82,7 @@ struct SearchResultDetailTrailerInlineBlockView: View {
                             .font(.subheadline.weight(.semibold))
                             .padding(.horizontal, 10)
                             .padding(.vertical, 8)
-                            .background(Color.blue.opacity(0.12))
+                            .background(displaySettings.tintSoftBackground)
                             .clipShape(RoundedRectangle(cornerRadius: 10))
                         }
                     }

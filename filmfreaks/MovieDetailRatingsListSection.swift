@@ -8,6 +8,8 @@
 internal import SwiftUI
 
 struct MovieDetailRatingsListSection: View {
+
+    @EnvironmentObject private var displaySettings: DisplaySettings
     let ratings: [Rating]
     @Binding var expandedRatingIds: Set<UUID>
 
@@ -111,7 +113,7 @@ struct MovieDetailRatingsListSection: View {
                             .font(.caption.weight(.semibold))
                             .padding(.horizontal, 8)
                             .padding(.vertical, 4)
-                            .background(Color.blue.opacity(0.12))
+                            .background(displaySettings.tintSoftBackground)
                             .clipShape(Capsule())
 
                         if let f = rating.fazitScore {

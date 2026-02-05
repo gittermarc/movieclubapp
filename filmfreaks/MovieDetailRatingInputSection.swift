@@ -8,6 +8,8 @@
 internal import SwiftUI
 
 struct MovieDetailRatingInputSection: View {
+
+    @EnvironmentObject private var displaySettings: DisplaySettings
     let hasSelectedUser: Bool
 
     @Binding var localScores: [RatingCriterion: Int]
@@ -61,7 +63,7 @@ struct MovieDetailRatingInputSection: View {
                     .padding(.horizontal, 12)
                     .padding(.vertical, 10)
                     .frame(maxWidth: .infinity)
-                    .background(Color.blue.opacity(0.16))
+                    .background(displaySettings.tintActionBackground)
                     .clipShape(RoundedRectangle(cornerRadius: 12))
                 }
                 .buttonStyle(.plain)
