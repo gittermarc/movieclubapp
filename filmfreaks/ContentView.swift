@@ -21,14 +21,14 @@ struct ContentView: View {
     @AppStorage("Onboarding_HasSeenQuickStart") private var hasSeenQuickStart: Bool = false
     @State private var onboardingChecklistExpanded: Bool = true
 
-    @State private var selectedMode: MovieListMode = .watched
-    @State private var filterByUser: User? = nil
-    @State private var selectedSort: MovieSortOption = .dateNewest
+    @State var selectedMode: MovieListMode = .watched
+    @State var filterByUser: User? = nil
+    @State var selectedSort: MovieSortOption = .dateNewest
 
     // MARK: - In-List Search (Watched/Backlog)
-    @State private var watchedSearchText: String = ""
-    @State private var backlogSearchText: String = ""
-    @FocusState private var listSearchIsFocused: Bool
+    @State var watchedSearchText: String = ""
+    @State var backlogSearchText: String = ""
+    @FocusState var listSearchIsFocused: Bool
 
     // MARK: - View Style
     @AppStorage("ContentView_ViewStyle") private var viewStyleRaw: String = MovieViewStyle.cards.rawValue
@@ -96,7 +96,7 @@ struct ContentView: View {
 
     /// Einheitliche Kennzahl für Anzeige/Sortierung (abhängig von Einstellungen).
     /// Fällt auf TMDb zurück, wenn die Gruppe noch nichts bewertet hat.
-    private func displayScore(for movie: Movie) -> Double? {
+    func displayScore(for movie: Movie) -> Double? {
         if displaySettings.showTMDbRatingsInLists {
             return movie.displayAverage(for: displaySettings.ratingDisplayMode)
         } else {
@@ -418,161 +418,6 @@ struct ContentView: View {
         }
     }
 
-    // MARK: - Filter-Helfer
-
-    /// Filter-Logik für watched-Liste: nach Bewertungen des Users
-    private func passesUserFilterForWatched(_ movie: Movie) -> Bool {
-        guard let user = filterByUser else {
-            return true
-        }
-        return movie.ratings.contains { rating in
-            if let rid = rating.reviewerId {
-                return rid == user.id
-            }
-            // Legacy/local fallback: compare by display name
-            return rating.reviewerName.trimmingCharacters(in: .whitespacesAndNewlines)
-                .caseInsensitiveCompare(user.name.trimmingCharacters(in: .whitespacesAndNewlines)) == .orderedSame
-        }
-    }
-
-    /// Filter-Logik für Backlog: nach „Vorgeschlagen von“
-    private func passesUserFilterForBacklog(_ movie: Movie) -> Bool {
-        guard let user = filterByUser else {
-            return true
-        }
-        guard let sugg = movie.suggestedBy else { return false }
-        return sugg.lowercased() == user.name.lowercased()
-    }
-
-    // MARK: - In-List Search (Textfilter)
-
-    private func normalizedSearchString(_ value: String) -> String {
-        value
-            .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
-            .lowercased()
-    }
-
-    /// Freitext-Suche innerhalb der Liste (Titel/Jahr/Location/SuggestedBy + optional Cast/Genres/Keywords).
-    /// Token-basiert: alle Wörter müssen vorkommen ("ring 2001" findet auch "Herr der Ringe (2001)").
-    private func passesListSearch(_ movie: Movie, isBacklog: Bool) -> Bool {
-        let raw = (isBacklog ? backlogSearchText : watchedSearchText)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-
-        guard !raw.isEmpty else { return true }
-
-        let tokens = normalizedSearchString(raw)
-            .split(whereSeparator: { $0.isWhitespace })
-            .map(String.init)
-            .filter { !$0.isEmpty }
-
-        guard !tokens.isEmpty else { return true }
-
-        var fields: [String] = [movie.title, movie.year]
-
-        if let location = movie.watchedLocation, !location.isEmpty {
-            fields.append(location)
-        }
-
-        if let suggestedBy = movie.suggestedBy, !suggestedBy.isEmpty {
-            fields.append(suggestedBy)
-        }
-
-        if let cast = movie.cast, !cast.isEmpty {
-            fields.append(cast.map { $0.name }.joined(separator: " "))
-        }
-
-        if let directors = movie.directors, !directors.isEmpty {
-            fields.append(directors.map { $0.name }.joined(separator: " "))
-        }
-
-        if let genres = movie.genres, !genres.isEmpty {
-            fields.append(genres.joined(separator: " "))
-        }
-
-        if let keywords = movie.keywords, !keywords.isEmpty {
-            fields.append(keywords.joined(separator: " "))
-        }
-
-        let haystack = normalizedSearchString(fields.joined(separator: " "))
-        return tokens.allSatisfy { haystack.contains($0) }
-    }
-
-
-
-    // MARK: - Grid-Daten (gefiltert + sortiert)
-
-    private var watchedGridItems: [IndexedMovie] {
-        let enumerated = Array(movieStore.movies.enumerated())
-            .filter { _, movie in
-                passesUserFilterForWatched(movie) && passesListSearch(movie, isBacklog: false)
-            }
-
-        let sorted = enumerated.sorted { lhs, rhs in
-            let lhsMovie = lhs.element
-            let rhsMovie = rhs.element
-
-            switch selectedSort {
-            case .titleAZ:
-                return lhsMovie.title.localizedCaseInsensitiveCompare(rhsMovie.title) == .orderedAscending
-            case .titleZA:
-                return lhsMovie.title.localizedCaseInsensitiveCompare(rhsMovie.title) == .orderedDescending
-            case .ratingHigh:
-                let l = displayScore(for: lhsMovie) ?? -Double.infinity
-                let r = displayScore(for: rhsMovie) ?? -Double.infinity
-                return l > r
-            case .ratingLow:
-                let l = displayScore(for: lhsMovie) ?? Double.infinity
-                let r = displayScore(for: rhsMovie) ?? Double.infinity
-                return l < r
-            case .dateNewest:
-                let l = lhsMovie.watchedDate ?? .distantPast
-                let r = rhsMovie.watchedDate ?? .distantPast
-                return l > r
-            case .dateOldest:
-                let l = lhsMovie.watchedDate ?? .distantFuture
-                let r = rhsMovie.watchedDate ?? .distantFuture
-                return l < r
-            }
-        }
-
-        return sorted.map { IndexedMovie(index: $0.offset, movie: $0.element) }
-    }
-
-    private var backlogGridItems: [IndexedMovie] {
-        let enumerated = Array(movieStore.backlogMovies.enumerated())
-            .filter { _, movie in
-                passesUserFilterForBacklog(movie) && passesListSearch(movie, isBacklog: true)
-            }
-
-        let sorted = enumerated.sorted { lhs, rhs in
-            let lhsMovie = lhs.element
-            let rhsMovie = rhs.element
-
-            switch selectedSort {
-            case .titleAZ:
-                return lhsMovie.title.localizedCaseInsensitiveCompare(rhsMovie.title) == .orderedAscending
-            case .titleZA:
-                return lhsMovie.title.localizedCaseInsensitiveCompare(rhsMovie.title) == .orderedDescending
-            case .ratingHigh:
-                let l = displayScore(for: lhsMovie) ?? -Double.infinity
-                let r = displayScore(for: rhsMovie) ?? -Double.infinity
-                return l > r
-            case .ratingLow:
-                let l = displayScore(for: lhsMovie) ?? Double.infinity
-                let r = displayScore(for: rhsMovie) ?? Double.infinity
-                return l < r
-            case .dateNewest:
-                // Im Backlog: neuestes Erscheinungsjahr zuerst
-                return lhsMovie.year > rhsMovie.year
-            case .dateOldest:
-                // Im Backlog: ältestes Erscheinungsjahr zuerst
-                return lhsMovie.year < rhsMovie.year
-            }
-        }
-
-        return sorted.map { IndexedMovie(index: $0.offset, movie: $0.element) }
-    }
-
     // MARK: - Grid-Ansicht (Cover-Only)
 
     @ViewBuilder
@@ -648,80 +493,6 @@ struct ContentView: View {
             .padding(.top, 10)
             .padding(.bottom, 18)
         }
-    }
-
-    // MARK: - Listen-Daten (gefiltert + sortiert)
-
-    private var watchedListItems: [IndexedMovie] {
-        let enumerated = Array(movieStore.movies.enumerated())
-            .filter { _, movie in
-                passesUserFilterForWatched(movie) && passesListSearch(movie, isBacklog: false)
-            }
-
-        let sorted = enumerated.sorted { lhs, rhs in
-            let lhsMovie = lhs.element
-            let rhsMovie = rhs.element
-
-            switch selectedSort {
-            case .titleAZ:
-                return lhsMovie.title.localizedCaseInsensitiveCompare(rhsMovie.title) == .orderedAscending
-            case .titleZA:
-                return lhsMovie.title.localizedCaseInsensitiveCompare(rhsMovie.title) == .orderedDescending
-            case .ratingHigh:
-                let l = displayScore(for: lhsMovie) ?? -Double.infinity
-                let r = displayScore(for: rhsMovie) ?? -Double.infinity
-                return l > r
-            case .ratingLow:
-                let l = displayScore(for: lhsMovie) ?? Double.infinity
-                let r = displayScore(for: rhsMovie) ?? Double.infinity
-                return l < r
-            case .dateNewest:
-                let l = lhsMovie.watchedDate ?? .distantPast
-                let r = rhsMovie.watchedDate ?? .distantPast
-                return l > r
-            case .dateOldest:
-                let l = lhsMovie.watchedDate ?? .distantFuture
-                let r = rhsMovie.watchedDate ?? .distantFuture
-                return l < r
-            }
-        }
-
-        return sorted.map { IndexedMovie(index: $0.offset, movie: $0.element) }
-    }
-
-    private var backlogListItems: [IndexedMovie] {
-        let enumerated = Array(movieStore.backlogMovies.enumerated())
-            .filter { _, movie in
-                passesUserFilterForBacklog(movie) && passesListSearch(movie, isBacklog: true)
-            }
-
-        let sorted = enumerated.sorted { lhs, rhs in
-            let lhsMovie = lhs.element
-            let rhsMovie = rhs.element
-
-            switch selectedSort {
-            case .titleAZ:
-                return lhsMovie.title.localizedCaseInsensitiveCompare(rhsMovie.title) == .orderedAscending
-            case .titleZA:
-                return lhsMovie.title.localizedCaseInsensitiveCompare(rhsMovie.title) == .orderedDescending
-            case .ratingHigh:
-                let l = displayScore(for: lhsMovie) ?? -Double.infinity
-                let r = displayScore(for: rhsMovie) ?? -Double.infinity
-                return l > r
-            case .ratingLow:
-                let l = displayScore(for: lhsMovie) ?? Double.infinity
-                let r = displayScore(for: rhsMovie) ?? Double.infinity
-                return l < r
-            case .dateNewest:
-                // Im Backlog: neuestes Erscheinungsjahr zuerst
-                return lhsMovie.year > rhsMovie.year
-            case .dateOldest:
-                // Im Backlog: ältestes Erscheinungsjahr zuerst
-                return lhsMovie.year < rhsMovie.year
-            }
-        }
-
-        return sorted.map { IndexedMovie(index: $0.offset, movie: $0.element) }
     }
 
 }
