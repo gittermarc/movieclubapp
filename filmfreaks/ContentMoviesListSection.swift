@@ -35,38 +35,40 @@ struct ContentMoviesListSection: View {
             .listRowSeparator(.hidden)
         } else {
             ForEach(items) { item in
-                NavigationLink {
-                    MovieDetailView(
-                        movie: movieBinding(forIndex: item.index),
-                        isBacklog: isBacklog
-                    )
-                } label: {
-                    let average = displayScore(item.movie)
-                    if selectedViewStyle == .compactList {
-                        ContentCompactMovieRowView(movie: item.movie, average: average)
-                    } else {
-                        ContentMovieRowView(movie: item.movie, average: average)
+                // When groups switch or a new empty group is created, SwiftUI can briefly render
+                // stale `items` while `movies` has already been cleared. Guard to prevent
+                // out-of-range crashes (movies[item.index]).
+                if movies.indices.contains(item.index) {
+                    let movie = movies[item.index]
+
+                    NavigationLink {
+                        MovieDetailView(
+                            movie: $movies[item.index],
+                            isBacklog: isBacklog
+                        )
+                    } label: {
+                        let average = displayScore(movie)
+                        if selectedViewStyle == .compactList {
+                            ContentCompactMovieRowView(movie: movie, average: average)
+                        } else {
+                            ContentMovieRowView(movie: movie, average: average)
+                        }
                     }
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(displaySettings.cardStyle == .cards ? .hidden : .automatic)
                 }
-                .listRowBackground(Color.clear)
-                .listRowSeparator(displaySettings.cardStyle == .cards ? .hidden : .automatic)
             }
             .onDelete(perform: delete)
         }
-    }
-
-    private func movieBinding(forIndex index: Int) -> Binding<Movie> {
-        Binding<Movie>(
-            get: { movies[index] },
-            set: { movies[index] = $0 }
-        )
     }
 
     private func delete(_ indexSet: IndexSet) {
         var originalIndices = IndexSet()
         for displayedIndex in indexSet {
             guard items.indices.contains(displayedIndex) else { continue }
-            originalIndices.insert(items[displayedIndex].index)
+            let originalIndex = items[displayedIndex].index
+            guard movies.indices.contains(originalIndex) else { continue }
+            originalIndices.insert(originalIndex)
         }
         movies.remove(atOffsets: originalIndices)
     }

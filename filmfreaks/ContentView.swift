@@ -38,10 +38,16 @@ struct ContentView: View {
     private var m: DisplaySettings.LayoutMetrics { displaySettings.metrics }
     private var g: DisplaySettings.PosterGridMetrics { displaySettings.posterGridMetrics }
 
+    // MARK: - Onboarding (derived state)
+
+    private var onboarding: ContentOnboarding.State {
+        ContentOnboarding.makeState(movieStore: movieStore, userStore: userStore)
+    }
+
 
     /// Gibt an, ob es in der aktuellen Gruppe überhaupt schon Filme gibt
     private var hasAnyMoviesInCurrentGroup: Bool {
-        !movieStore.movies.isEmpty || !movieStore.backlogMovies.isEmpty
+        onboarding.hasAnyMoviesInCurrentGroup
     }
 
     private var shouldShowListSearchBar: Bool {
@@ -155,13 +161,13 @@ struct ContentView: View {
                         hasActiveMemberSelected: hasActiveMemberSelected,
                         onTapGroup: { route = .groupSettings },
                         onTapActiveMember: { route = .users },
-                        shouldShowOnboardingChecklist: shouldShowOnboardingChecklist,
+                        shouldShowOnboardingChecklist: onboarding.shouldShowChecklist,
                         onboardingChecklistExpanded: $onboardingChecklistExpanded,
-                        onboardingStepsCompletedCount: onboardingStepsCompletedCount,
-                        isGroupStepComplete: isGroupStepComplete,
-                        isMembersStepComplete: isMembersStepComplete,
-                        isFirstMovieStepComplete: isFirstMovieStepComplete,
-                        isFirstRatingStepComplete: isFirstRatingStepComplete,
+                        onboardingStepsCompletedCount: onboarding.stepsCompletedCount,
+                        isGroupStepComplete: onboarding.isGroupStepComplete,
+                        isMembersStepComplete: onboarding.isMembersStepComplete,
+                        isFirstMovieStepComplete: onboarding.isFirstMovieStepComplete,
+                        isFirstRatingStepComplete: onboarding.isFirstRatingStepComplete,
                         hasAnyMoviesInCurrentGroup: hasAnyMoviesInCurrentGroup,
                         onTapOnboardingGroups: { route = .groupSettings },
                         onTapOnboardingMembers: { route = .users },
@@ -307,59 +313,14 @@ struct ContentView: View {
         }
     }
 
-    // MARK: - Onboarding State
-
-    private var onboardingGroupIdForProgress: String? {
-        // Für die Standard-Gruppe ist currentGroupId nil → wir speichern dann unter "Default"
-        movieStore.currentGroupId
-    }
-
-    private var isGroupStepComplete: Bool {
-        // Wenn es schon Filme gibt, ist "Gruppe" de-facto erfüllt (auch ohne Invite-Code).
-        if hasAnyMoviesInCurrentGroup { return true }
-        if let name = movieStore.currentGroupName, !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return true }
-        if movieStore.currentGroupId != nil { return true }
-        if !movieStore.knownGroups.isEmpty { return true }
-        return false
-    }
-
-    private var isMembersStepComplete: Bool {
-        !userStore.users.isEmpty
-    }
-
-    private var isFirstMovieStepComplete: Bool {
-        hasAnyMoviesInCurrentGroup
-    }
-
-    private var isFirstRatingStepComplete: Bool {
-        movieStore.movies.contains { !$0.ratings.isEmpty }
-    }
-
-    private var onboardingStepsCompletedCount: Int {
-        [isGroupStepComplete, isMembersStepComplete, isFirstMovieStepComplete, isFirstRatingStepComplete]
-            .filter { $0 }
-            .count
-    }
-
-    private var isOnboardingCompletedNow: Bool {
-        onboardingStepsCompletedCount == 4
-    }
-
-    private var shouldShowOnboardingChecklist: Bool {
-        if OnboardingProgress.isGroupOnboardingComplete(forGroupId: onboardingGroupIdForProgress) {
-            return false
-        }
-        return !isOnboardingCompletedNow
-    }
+    // MARK: - Onboarding Tracking
 
     private func updateOnboardingCompletionFlag() {
-        if isOnboardingCompletedNow {
-            OnboardingProgress.setGroupOnboardingComplete(true, forGroupId: onboardingGroupIdForProgress)
-        }
+        ContentOnboarding.updateCompletionFlagIfNeeded(for: onboarding)
     }
 
     private func trackSearchOpened() {
-        OnboardingProgress.incrementSearchOpenCount(forGroupId: onboardingGroupIdForProgress)
+        ContentOnboarding.trackSearchOpened(forGroupId: onboarding.groupIdForProgress)
     }
 
     // MARK: - Empty State View
@@ -460,31 +421,49 @@ struct ContentView: View {
 
             LazyVGrid(columns: columns, spacing: g.spacing) {
                 ForEach(items) { item in
-                    NavigationLink {
-                        if isBacklog {
-                            MovieDetailView(
-                                movie: $movieStore.backlogMovies[item.index],
-                                isBacklog: true
-                            )
-                        } else {
-                            MovieDetailView(
-                                movie: $movieStore.movies[item.index],
-                                isBacklog: false
-                            )
-                        }
-                    } label: {
-                        ContentPosterGridCellView(movie: item.movie)
-                    }
-                    .buttonStyle(.plain)
-                    .contextMenu {
-                        Button(role: .destructive) {
-                            if isBacklog {
-                                movieStore.backlogMovies.remove(at: item.index)
-                            } else {
-                                movieStore.movies.remove(at: item.index)
+                    // When switching groups, SwiftUI can briefly render stale `items`.
+                    // Guard indices to prevent out-of-range crashes.
+                    if isBacklog {
+                        if movieStore.backlogMovies.indices.contains(item.index) {
+                            let movie = movieStore.backlogMovies[item.index]
+                            NavigationLink {
+                                MovieDetailView(
+                                    movie: $movieStore.backlogMovies[item.index],
+                                    isBacklog: true
+                                )
+                            } label: {
+                                ContentPosterGridCellView(movie: movie)
                             }
-                        } label: {
-                            Label("Löschen", systemImage: "trash")
+                            .buttonStyle(.plain)
+                            .contextMenu {
+                                Button(role: .destructive) {
+                                    guard movieStore.backlogMovies.indices.contains(item.index) else { return }
+                                    movieStore.backlogMovies.remove(at: item.index)
+                                } label: {
+                                    Label("Löschen", systemImage: "trash")
+                                }
+                            }
+                        }
+                    } else {
+                        if movieStore.movies.indices.contains(item.index) {
+                            let movie = movieStore.movies[item.index]
+                            NavigationLink {
+                                MovieDetailView(
+                                    movie: $movieStore.movies[item.index],
+                                    isBacklog: false
+                                )
+                            } label: {
+                                ContentPosterGridCellView(movie: movie)
+                            }
+                            .buttonStyle(.plain)
+                            .contextMenu {
+                                Button(role: .destructive) {
+                                    guard movieStore.movies.indices.contains(item.index) else { return }
+                                    movieStore.movies.remove(at: item.index)
+                                } label: {
+                                    Label("Löschen", systemImage: "trash")
+                                }
+                            }
                         }
                     }
                 }
