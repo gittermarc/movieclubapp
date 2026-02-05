@@ -974,7 +974,7 @@ struct ContentView: View {
                             )
                         }
                     } label: {
-                        posterGridCell(movie: item.movie)
+                        ContentPosterGridCellView(movie: item.movie)
                     }
                     .buttonStyle(.plain)
                     .contextMenu {
@@ -993,126 +993,6 @@ struct ContentView: View {
             .padding(.horizontal)
             .padding(.top, 10)
             .padding(.bottom, 18)
-        }
-    }
-
-    @ViewBuilder
-    private func posterGridCell(movie: Movie) -> some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color(.secondarySystemBackground))
-
-            if let url = movie.posterURL {
-                CachedAsyncImage(url: url) { phase in
-                    switch phase {
-                    case .empty:
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .fill(Color.gray.opacity(0.15))
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .scaledToFill()
-                    case .failure:
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .fill(Color.gray.opacity(0.15))
-                            .overlay {
-                                Image(systemName: "film")
-                                    .foregroundStyle(.secondary)
-                            }
-                    @unknown default:
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .fill(Color.gray.opacity(0.15))
-                    }
-                }
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-            } else {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Color.gray.opacity(0.12))
-                    .overlay {
-                        Image(systemName: "film")
-                            .foregroundStyle(.secondary)
-                    }
-            }
-        }
-        .frame(height: g.cellHeight)
-        .clipped()
-        .shadow(color: Color.black.opacity(0.06), radius: 4, x: 0, y: 2)
-    }
-
-    // MARK: - Kompakte Listenzeile
-
-    @ViewBuilder
-    private func compactMovieRow(movie: Movie, average: Double?) -> some View {
-        let row = HStack(spacing: m.compactRowHStackSpacing) {
-            if displaySettings.showPosterInCompactList {
-                if let url = movie.posterURL {
-                CachedAsyncImage(url: url) { phase in
-                    switch phase {
-                    case .empty:
-                        Rectangle()
-                            .foregroundStyle(.gray.opacity(0.2))
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .scaledToFill()
-                    case .failure:
-                        Rectangle()
-                            .foregroundStyle(.gray.opacity(0.2))
-                            .overlay { Image(systemName: "film") }
-                    @unknown default:
-                        Rectangle()
-                            .foregroundStyle(.gray.opacity(0.2))
-                    }
-                }
-                .frame(width: 34, height: 50)
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-            } else {
-                Rectangle()
-                    .foregroundStyle(.gray.opacity(0.12))
-                    .frame(width: 34, height: 50)
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-                    .overlay {
-                        Image(systemName: "film")
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            }
-
-            Text(movie.title)
-                .font(.subheadline.weight(.semibold))
-                .lineLimit(1)
-
-            Spacer()
-
-            if displaySettings.showRatings {
-                if let avg = average {
-                Text(String(format: "%.1f", avg))
-                    .font(.subheadline.weight(.semibold))
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(Color.accentColor.opacity(0.12))
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-                } else {
-                    Text("-")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.secondary)
-            }
-            }
-        }
-
-        if displaySettings.cardStyle == .cards {
-            row
-                .padding(.vertical, m.compactRowVerticalPadding)
-                .padding(.horizontal, m.rowPadding)
-                .background(
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(Color(.secondarySystemBackground))
-                )
-                .shadow(color: Color.black.opacity(0.04), radius: 3, x: 0, y: 1)
-                .padding(.vertical, m.cardVerticalSpacing)
-        } else {
-            row
-                .padding(.vertical, m.compactRowVerticalPadding)
         }
     }
 
@@ -1174,10 +1054,10 @@ struct ContentView: View {
                 } label: {
                     if selectedViewStyle == .compactList {
                         let displayRating = displayScore(for: movie)
-                        compactMovieRow(movie: movie, average: displayRating)
+                        ContentCompactMovieRowView(movie: movie, average: displayRating)
                     } else {
                         let displayRating = displayScore(for: movie)
-                        movieRow(movie: movie, average: displayRating)
+                        ContentMovieRowView(movie: movie, average: displayRating)
                     }
                 }
                 .listRowBackground(Color.clear)
@@ -1248,9 +1128,9 @@ struct ContentView: View {
                 } label: {
                     let displayRating = displayScore(for: movie)
                     if selectedViewStyle == .compactList {
-                        compactMovieRow(movie: movie, average: displayRating)
+                        ContentCompactMovieRowView(movie: movie, average: displayRating)
                     } else {
-                        movieRow(movie: movie, average: displayRating)
+                        ContentMovieRowView(movie: movie, average: displayRating)
                     }
                 }
                 .listRowBackground(Color.clear)
@@ -1265,108 +1145,6 @@ struct ContentView: View {
         }
     }
 
-    // MARK: - Zeilen-Layout
-
-    @ViewBuilder
-    private func movieRow(movie: Movie, average: Double?) -> some View {
-        let row = HStack(spacing: m.rowHStackSpacing) {
-            // Poster
-            if let url = movie.posterURL {
-                CachedAsyncImage(url: url) { phase in
-                    switch phase {
-                    case .empty:
-                        Rectangle()
-                            .foregroundStyle(.gray.opacity(0.2))
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .scaledToFill()
-                    case .failure:
-                        Rectangle()
-                            .foregroundStyle(.gray.opacity(0.2))
-                            .overlay {
-                                Image(systemName: "film")
-                            }
-                    @unknown default:
-                        Rectangle()
-                            .foregroundStyle(.gray.opacity(0.2))
-                    }
-                }
-                .frame(width: 50, height: 75)
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-            } else {
-                Rectangle()
-                    .foregroundStyle(.gray.opacity(0.1))
-                    .frame(width: 50, height: 75)
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-                    .overlay {
-                        Image(systemName: "film")
-                            .foregroundStyle(.secondary)
-                    }
-            }
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(movie.title)
-                    .font(.headline)
-                    .lineLimit(2)
-
-                HStack(spacing: 8) {
-                    Text(movie.year)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-
-                    if displaySettings.showWatchedDate, let dateText = movie.watchedDateText {
-                        Text("• \(dateText)")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    if displaySettings.showWatchedLocation, let location = movie.watchedLocation, !location.isEmpty {
-                        Text("• \(location)")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
-                if displaySettings.showSuggestedBy, let sugg = movie.suggestedBy, !sugg.isEmpty {
-                    Text("Vorgeschlagen von: \(sugg)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            Spacer()
-
-            if displaySettings.showRatings {
-                if let avg = average {
-                Text(String(format: "%.1f", avg))
-                    .font(.headline)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(Color.accentColor.opacity(0.10))
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-                } else {
-                    Text("-")
-                    .font(.headline)
-                    .foregroundStyle(.secondary)
-            }
-            }
-        }
-
-        if displaySettings.cardStyle == .cards {
-            row
-                .padding(m.rowPadding)
-                .background(
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(Color(.secondarySystemBackground))
-                )
-                .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
-                .padding(.vertical, m.cardVerticalSpacing)
-        } else {
-            row
-                .padding(.vertical, 8)
-        }
-    }
 }
 
 #Preview {
