@@ -146,142 +146,41 @@ struct ContentView: View {
                     .ignoresSafeArea()
 
                 VStack {
-                    // Aktuelle Gruppe anzeigen (falls vorhanden)
-                    if let name = movieStore.currentGroupName {
-                        let totalMoviesInGroup = movieStore.movies.count + movieStore.backlogMovies.count
-
-                        ContentContextBar(
-                            groupName: name,
-                            totalMoviesInGroup: totalMoviesInGroup,
-                            tintColor: displaySettings.tintColor,
-                            activeMemberDisplayName: activeMemberDisplayName,
-                            activeMemberInitials: activeMemberInitials,
-                            hasActiveMemberSelected: hasActiveMemberSelected,
-                            onTapGroup: { route = .groupSettings },
-                            onTapActiveMember: { route = .users }
-                        )
-                        .padding(.horizontal)
-                        .padding(.top, 8)
-                        .fixedSize(horizontal: false, vertical: true)
-                    }
-
-
-                    // ✅ Onboarding: Quick Start / Setup-Checkliste
-                    if shouldShowOnboardingChecklist {
-                        onboardingChecklistCard
-                            .padding(.horizontal)
-                            .padding(.top, 8)
-                    }
-
-                    // Gesehen / Backlog
-                    Picker("Liste", selection: $selectedMode) {
-                        ForEach(MovieListMode.allCases) { mode in
-                            Text(mode.rawValue).tag(mode)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    .padding([.horizontal, .top])
-
-                    // Wenn wir umschalten, Keyboard nicht "festkleben" lassen.
-                    .onChange(of: selectedMode) { _, _ in
-                        listSearchIsFocused = false
-                    }
-
-                    // ✅ Kompakte, gebündelte Sortier-/Filter-Leiste
-                    VStack(spacing: 8) {
-                        HStack(spacing: 10) {
-                            // Sortieren
-                            Menu {
-                                ForEach(MovieSortOption.allCases) { option in
-                                    Button(option.rawValue) {
-                                        selectedSort = option
-                                    }
-                                }
-                            } label: {
-                                controlChip(
-                                    icon: "arrow.up.arrow.down",
-                                    title: selectedSort.rawValue
-                                )
-                            }
-
-                            // Filter
-                            Menu {
-                                Button("Alle") {
-                                    filterByUser = nil
-                                }
-
-                                if userStore.users.isEmpty {
-                                    Text("Keine Mitglieder")
-                                } else {
-                                    ForEach(userStore.users) { user in
-                                        Button(user.name) {
-                                            filterByUser = user
-                                        }
-                                    }
-                                }
-                            } label: {
-                                controlChip(
-                                    icon: "line.3.horizontal.decrease.circle",
-                                    title: filterLabelText
-                                )
-                            }
-
-                            // Ansicht
-                            Menu {
-                                ForEach(MovieViewStyle.allCases) { style in
-                                    Button {
-                                        viewStyleRaw = style.rawValue
-                                    } label: {
-                                        Label(style.rawValue, systemImage: style.icon)
-                                    }
-                                }
-                            } label: {
-                                controlChip(
-                                    icon: selectedViewStyle.icon,
-                                    title: selectedViewStyle.rawValue
-                                )
-                            }
-
-                            // Reset-Button nur wenn Filter aktiv
-                            if filterByUser != nil {
-                                Button {
-                                    filterByUser = nil
-                                } label: {
-                                    Image(systemName: "xmark.circle.fill")
-                                        .font(.title3)
-                                        .foregroundStyle(.secondary)
-                                        .accessibilityLabel("Filter zurücksetzen")
-                                }
-                                .buttonStyle(.plain)
-                            }
-
-                            Spacer(minLength: 0)
-                        }
-
-                        if let hint = filterHintText {
-                            Divider()
-                                .opacity(0.7)
-
-                            Text(hint)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                    }
-                    .padding(m.cardPadding)
-                    .background(
-                        RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .fill(Color(.secondarySystemBackground))
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .stroke(Color.black.opacity(0.06), lineWidth: 1)
-                    )
-                    .padding(.horizontal)
-                    .padding(.top, 6)
-                    .padding(.bottom, 4)
-
-                    ContentSyncStatusLineView(
+                    ContentHeaderView(
+                        groupName: movieStore.currentGroupName,
+                        totalMoviesInGroup: movieStore.movies.count + movieStore.backlogMovies.count,
+                        tintColor: displaySettings.tintColor,
+                        activeMemberDisplayName: activeMemberDisplayName,
+                        activeMemberInitials: activeMemberInitials,
+                        hasActiveMemberSelected: hasActiveMemberSelected,
+                        onTapGroup: { route = .groupSettings },
+                        onTapActiveMember: { route = .users },
+                        shouldShowOnboardingChecklist: shouldShowOnboardingChecklist,
+                        onboardingChecklistExpanded: $onboardingChecklistExpanded,
+                        onboardingStepsCompletedCount: onboardingStepsCompletedCount,
+                        isGroupStepComplete: isGroupStepComplete,
+                        isMembersStepComplete: isMembersStepComplete,
+                        isFirstMovieStepComplete: isFirstMovieStepComplete,
+                        isFirstRatingStepComplete: isFirstRatingStepComplete,
+                        hasAnyMoviesInCurrentGroup: hasAnyMoviesInCurrentGroup,
+                        onTapOnboardingGroups: { route = .groupSettings },
+                        onTapOnboardingMembers: { route = .users },
+                        onTapOnboardingSearch: {
+                            trackSearchOpened()
+                            route = .movieSearch
+                        },
+                        selectedMode: $selectedMode,
+                        onModeChanged: {
+                            listSearchIsFocused = false
+                        },
+                        metrics: m,
+                        selectedSort: $selectedSort,
+                        filterByUser: $filterByUser,
+                        users: userStore.users,
+                        filterLabelText: filterLabelText,
+                        filterHintText: filterHintText,
+                        viewStyleRaw: $viewStyleRaw,
+                        selectedViewStyle: selectedViewStyle,
                         isConnected: networkMonitor.isConnected,
                         isSyncing: movieStore.isSyncing || userStore.isSyncing,
                         pendingChangesCount: movieStore.pendingCloudChangesCount,
@@ -499,147 +398,6 @@ struct ContentView: View {
 
     private func trackSearchOpened() {
         OnboardingProgress.incrementSearchOpenCount(forGroupId: onboardingGroupIdForProgress)
-    }
-
-    private var onboardingChecklistCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Button {
-                withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
-                    onboardingChecklistExpanded.toggle()
-                }
-            } label: {
-                HStack(spacing: 10) {
-                    Image(systemName: "sparkles")
-                        .foregroundStyle(.tint)
-
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Quick Start")
-                            .font(.subheadline.weight(.semibold))
-                        Text("\(onboardingStepsCompletedCount) von 4 erledigt")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    Spacer()
-
-                    Image(systemName: onboardingChecklistExpanded ? "chevron.up" : "chevron.down")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-
-            if onboardingChecklistExpanded {
-                VStack(alignment: .leading, spacing: 10) {
-                    onboardingRow(
-                        isDone: isGroupStepComplete,
-                        title: "Gruppe einrichten",
-                        subtitle: "Erstellen oder per iCloud-Einladung beitreten",
-                        actionTitle: "Gruppen"
-                    ) {
-	                        route = .groupSettings
-                    }
-
-                    onboardingRow(
-                        isDone: isMembersStepComplete,
-                        title: "Mitglieder hinzufügen",
-                        subtitle: "Damit Bewertungen & Vorschläge Sinn ergeben",
-                        actionTitle: "Mitglieder"
-                    ) {
-	                        route = .users
-                    }
-
-                    onboardingRow(
-                        isDone: isFirstMovieStepComplete,
-                        title: "Ersten Film hinzufügen",
-                        subtitle: "Suche bei TMDb und pack ihn in „Gesehen“ oder Backlog",
-                        actionTitle: "Suche"
-                    ) {
-                        trackSearchOpened()
-	                        route = .movieSearch
-                    }
-
-                    onboardingRow(
-                        isDone: isFirstRatingStepComplete,
-                        title: "Erste Bewertung abgeben",
-                        subtitle: hasAnyMoviesInCurrentGroup
-                            ? "Tippe auf einen Film in der Liste und bewerte ihn"
-                            : "Sobald ein Film drin ist, kannst du ihn bewerten",
-                        actionTitle: nil,
-                        action: nil
-                    )
-                }
-                .padding(.top, 2)
-            }
-        }
-        .padding(12)
-        .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(.thinMaterial)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(Color.black.opacity(0.06), lineWidth: 1)
-        )
-        .shadow(color: Color.black.opacity(0.06), radius: 10, x: 0, y: 6)
-    }
-
-    @ViewBuilder
-    private func onboardingRow(
-        isDone: Bool,
-        title: String,
-        subtitle: String,
-        actionTitle: String?,
-        action: (() -> Void)?
-    ) -> some View {
-        HStack(alignment: .top, spacing: 12) {
-            Image(systemName: isDone ? "checkmark.circle.fill" : "circle")
-                .font(.title3)
-                .foregroundStyle(isDone ? Color.green : Color.secondary)
-                .padding(.top, 1)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.subheadline.weight(.semibold))
-                Text(subtitle)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            Spacer()
-
-            if let actionTitle, let action, !isDone {
-                Button(actionTitle) {
-                    action()
-                }
-                .font(.caption.weight(.semibold))
-                .buttonStyle(.bordered)
-            }
-        }
-    }
-
-    // MARK: - Compact Controls UI
-
-    @ViewBuilder
-    private func controlChip(icon: String, title: String) -> some View {
-        HStack(spacing: m.chipContentSpacing) {
-            Image(systemName: icon)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
-            Text(title)
-                .font(.subheadline)
-                .lineLimit(1)
-
-            Image(systemName: "chevron.down")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-        }
-        .padding(.horizontal, m.chipHorizontalPadding)
-        .padding(.vertical, m.chipVerticalPadding)
-        .background(Color.black.opacity(0.05))
-        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
     // MARK: - Empty State View
