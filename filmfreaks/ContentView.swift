@@ -14,17 +14,11 @@ struct ContentView: View {
     @EnvironmentObject var networkMonitor: NetworkMonitor
     @EnvironmentObject var displaySettings: DisplaySettings
 
-    @State private var showingSearchMovie = false
-    @State private var showingUsers = false
-    @State private var showingStats = false
-    @State private var showingTimeline = false       // 👈 NEU: Timeline
-    @State private var showingGoals = false
-    @State private var showingGroupSettings = false
-    @State private var showingSettings = false
+    // MARK: - Routing (Sheets / Navigation)
+    @State private var route: ContentRoute? = nil
 
     // MARK: - Onboarding / Quick Start
     @AppStorage("Onboarding_HasSeenQuickStart") private var hasSeenQuickStart: Bool = false
-    @State private var showingQuickStart: Bool = false
     @State private var onboardingChecklistExpanded: Bool = true
 
     @State private var selectedMode: MovieListMode = .watched
@@ -198,8 +192,8 @@ struct ContentView: View {
                             activeMemberDisplayName: activeMemberDisplayName,
                             activeMemberInitials: activeMemberInitials,
                             hasActiveMemberSelected: hasActiveMemberSelected,
-                            onTapGroup: { showingGroupSettings = true },
-                            onTapActiveMember: { showingUsers = true }
+                            onTapGroup: { route = .groupSettings },
+                            onTapActiveMember: { route = .users }
                         )
                         .padding(.horizontal)
                         .padding(.top, 8)
@@ -408,7 +402,7 @@ struct ContentView: View {
             .onAppear {
                 // Quick Start nur beim ersten Start – danach nicht mehr.
                 if !hasSeenQuickStart {
-                    showingQuickStart = true
+	                    route = .quickStart
                 }
                 updateOnboardingCompletionFlag()
             }
@@ -432,13 +426,13 @@ struct ContentView: View {
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
                         Button {
-                            showingUsers = true
+	                            route = .users
                         } label: {
                             Label("Mitglieder", systemImage: "person.3")
                         }
 
                         Button {
-                            showingGroupSettings = true
+	                            route = .groupSettings
                         } label: {
                             Label("Gruppen", systemImage: "person.3.sequence")
                         }
@@ -446,19 +440,19 @@ struct ContentView: View {
                         Divider()
 
                         Button {
-                            showingStats = true
+	                            route = .stats
                         } label: {
                             Label("Statistiken", systemImage: "chart.bar.fill")
                         }
 
                         Button {
-                            showingTimeline = true
+	                            route = .timeline
                         } label: {
                             Label("Timeline", systemImage: "rectangle.stack.fill")
                         }
 
                         Button {
-                            showingGoals = true
+	                            route = .goals
                         } label: {
                             Label("Ziele", systemImage: "target")
                         }
@@ -466,7 +460,7 @@ struct ContentView: View {
                         Divider()
 
                         Button {
-                            showingSettings = true
+	                            route = .settings
                         } label: {
                             Label("Einstellungen", systemImage: "gearshape")
                         }
@@ -479,123 +473,18 @@ struct ContentView: View {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         trackSearchOpened()
-                        showingSearchMovie = true
+	                        route = .movieSearch
                     } label: {
                         Image(systemName: "magnifyingglass")
                     }
                     .accessibilityLabel("Film suchen")
                 }
-            }
-            .sheet(isPresented: $showingSettings) {
-                SettingsView()
-                    // Sheets laufen in einem eigenen Presentation-Context.
-                    // Damit Theme-Wechsel sofort auch im Sheet greifen, applyen wir hier ebenfalls die Display-Settings.
-                    .preferredColorScheme(displaySettings.preferredColorScheme)
-                    .tint(displaySettings.tintColor)
-            }
-            .sheet(isPresented: $showingQuickStart, onDismiss: {
-                // Wenn der User das Sheet wegwischt, nicht ewig wieder nerven.
-                hasSeenQuickStart = true
-            }) {
-                QuickStartView(
-                    onOpenGroups: {
-                        showingQuickStart = false
-                        showingGroupSettings = true
-                    },
-                    onOpenUsers: {
-                        showingQuickStart = false
-                        showingUsers = true
-                    },
-                    onOpenSearch: {
-                        showingQuickStart = false
-                        trackSearchOpened()
-                        showingSearchMovie = true
-                    },
-                    onDone: {
-                        hasSeenQuickStart = true
-                        showingQuickStart = false
-                    }
-                )
-                .preferredColorScheme(displaySettings.preferredColorScheme)
-                .tint(displaySettings.tintColor)
-            }
-
-            .sheet(isPresented: $showingSearchMovie) {
-                MovieSearchView(
-                    existingWatched: movieStore.movies,
-                    existingBacklog: movieStore.backlogMovies,
-                    onAddToWatched: { newMovie in
-                        // Film mit Gruppen-Infos „anreichern“
-                        var movieWithGroup = newMovie
-                        movieWithGroup.groupId = movieStore.currentGroupId
-                        movieWithGroup.groupName = movieStore.currentGroupName
-
-                        // Eindeutigkeit weiterhin über Titel + Jahr
-                        let isSame: (Movie) -> Bool = { movie in
-                            movie.title == movieWithGroup.title && movie.year == movieWithGroup.year
-                        }
-
-                        // Wenn noch nicht in „Gesehen“, hinzufügen
-                        if !movieStore.movies.contains(where: isSame) {
-                            movieStore.movies.append(movieWithGroup)
-                        }
-
-                        // Falls im Backlog vorhanden, dort entfernen
-                        movieStore.backlogMovies.removeAll(where: isSame)
-                    },
-                    onAddToBacklog: { newMovie in
-                        var movieWithGroup = newMovie
-                        movieWithGroup.groupId = movieStore.currentGroupId
-                        movieWithGroup.groupName = movieStore.currentGroupName
-
-                        let isSame: (Movie) -> Bool = { movie in
-                            movie.title == movieWithGroup.title && movie.year == movieWithGroup.year
-                        }
-
-                        // Wenn der Film schon als gesehen markiert ist → nicht in den Backlog aufnehmen
-                        guard !movieStore.movies.contains(where: isSame) else {
-                            return
-                        }
-
-                        // Nur hinzufügen, wenn noch nicht im Backlog
-                        if !movieStore.backlogMovies.contains(where: isSame) {
-                            movieStore.backlogMovies.append(movieWithGroup)
-                        }
-                    }
-                )
-                .preferredColorScheme(displaySettings.preferredColorScheme)
-                .tint(displaySettings.tintColor)
-            }
-            .sheet(isPresented: $showingUsers) {
-                UsersView()
-                    .preferredColorScheme(displaySettings.preferredColorScheme)
-                    .tint(displaySettings.tintColor)
-            }
-            .sheet(isPresented: $showingStats) {
-                StatsView()
-                    .preferredColorScheme(displaySettings.preferredColorScheme)
-                    .tint(displaySettings.tintColor)
-            }
-            // 👇 NEU: Timeline-Sheet
-            .sheet(isPresented: $showingTimeline) {
-                TimelineView()
-                    .environmentObject(movieStore)
-                    .environmentObject(userStore)
-                    .preferredColorScheme(displaySettings.preferredColorScheme)
-                    .tint(displaySettings.tintColor)
-            }
-            .sheet(isPresented: $showingGoals) {
-                GoalsView()
-                    .environmentObject(movieStore)
-                    .environmentObject(userStore)
-                    .preferredColorScheme(displaySettings.preferredColorScheme)
-                    .tint(displaySettings.tintColor)
-            }
-            .sheet(isPresented: $showingGroupSettings) {
-                GroupSettingsView()
-                    .preferredColorScheme(displaySettings.preferredColorScheme)
-                    .tint(displaySettings.tintColor)
-            }
+	            }
+	            .contentRouting(
+	                route: $route,
+	                hasSeenQuickStart: $hasSeenQuickStart,
+	                trackSearchOpened: trackSearchOpened
+	            )
         }
     }
 
@@ -709,7 +598,7 @@ struct ContentView: View {
                         subtitle: "Erstellen oder per iCloud-Einladung beitreten",
                         actionTitle: "Gruppen"
                     ) {
-                        showingGroupSettings = true
+	                        route = .groupSettings
                     }
 
                     onboardingRow(
@@ -718,7 +607,7 @@ struct ContentView: View {
                         subtitle: "Damit Bewertungen & Vorschläge Sinn ergeben",
                         actionTitle: "Mitglieder"
                     ) {
-                        showingUsers = true
+	                        route = .users
                     }
 
                     onboardingRow(
@@ -728,7 +617,7 @@ struct ContentView: View {
                         actionTitle: "Suche"
                     ) {
                         trackSearchOpened()
-                        showingSearchMovie = true
+	                        route = .movieSearch
                     }
 
                     onboardingRow(
@@ -832,7 +721,7 @@ struct ContentView: View {
 
             Button {
                 trackSearchOpened()
-                showingSearchMovie = true
+	                route = .movieSearch
             } label: {
                 HStack {
                     Image(systemName: "magnifyingglass")
@@ -844,7 +733,7 @@ struct ContentView: View {
 
             HStack(spacing: 12) {
                 Button {
-                    showingUsers = true
+	                    route = .users
                 } label: {
                     HStack {
                         Image(systemName: "person.3")
@@ -855,7 +744,7 @@ struct ContentView: View {
                 .buttonStyle(.bordered)
 
                 Button {
-                    showingGroupSettings = true
+	                    route = .groupSettings
                 } label: {
                     HStack {
                         Image(systemName: "person.3.sequence")
@@ -1480,7 +1369,7 @@ struct ContentView: View {
     }
 }
 
-private struct QuickStartView: View {
+struct QuickStartView: View {
     var onOpenGroups: () -> Void
     var onOpenUsers: () -> Void
     var onOpenSearch: () -> Void
