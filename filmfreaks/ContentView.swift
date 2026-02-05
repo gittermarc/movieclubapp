@@ -501,13 +501,7 @@ struct ContentView: View {
 
     // MARK: - Grid-Daten (gefiltert + sortiert)
 
-    private struct GridMovieItem: Identifiable {
-        let index: Int
-        let movie: Movie
-        var id: String { String(describing: movie.id) }
-    }
-
-    private var watchedGridItems: [GridMovieItem] {
+    private var watchedGridItems: [IndexedMovie] {
         let enumerated = Array(movieStore.movies.enumerated())
             .filter { _, movie in
                 passesUserFilterForWatched(movie) && passesListSearch(movie, isBacklog: false)
@@ -541,10 +535,10 @@ struct ContentView: View {
             }
         }
 
-        return sorted.map { GridMovieItem(index: $0.offset, movie: $0.element) }
+        return sorted.map { IndexedMovie(index: $0.offset, movie: $0.element) }
     }
 
-    private var backlogGridItems: [GridMovieItem] {
+    private var backlogGridItems: [IndexedMovie] {
         let enumerated = Array(movieStore.backlogMovies.enumerated())
             .filter { _, movie in
                 passesUserFilterForBacklog(movie) && passesListSearch(movie, isBacklog: true)
@@ -576,13 +570,13 @@ struct ContentView: View {
             }
         }
 
-        return sorted.map { GridMovieItem(index: $0.offset, movie: $0.element) }
+        return sorted.map { IndexedMovie(index: $0.offset, movie: $0.element) }
     }
 
     // MARK: - Grid-Ansicht (Cover-Only)
 
     @ViewBuilder
-    private func posterGrid(items: [GridMovieItem], isBacklog: Bool) -> some View {
+    private func posterGrid(items: [IndexedMovie], isBacklog: Bool) -> some View {
         let query = (isBacklog ? backlogSearchText : watchedSearchText)
             .trimmingCharacters(in: .whitespacesAndNewlines)
 
@@ -658,7 +652,7 @@ struct ContentView: View {
 
     // MARK: - Listen-Daten (gefiltert + sortiert)
 
-    private var watchedListItems: [ContentMoviesListSection.Item] {
+    private var watchedListItems: [IndexedMovie] {
         let enumerated = Array(movieStore.movies.enumerated())
             .filter { _, movie in
                 passesUserFilterForWatched(movie) && passesListSearch(movie, isBacklog: false)
@@ -692,10 +686,10 @@ struct ContentView: View {
             }
         }
 
-        return sorted.map { ContentMoviesListSection.Item(index: $0.offset, movie: $0.element) }
+        return sorted.map { IndexedMovie(index: $0.offset, movie: $0.element) }
     }
 
-    private var backlogListItems: [ContentMoviesListSection.Item] {
+    private var backlogListItems: [IndexedMovie] {
         let enumerated = Array(movieStore.backlogMovies.enumerated())
             .filter { _, movie in
                 passesUserFilterForBacklog(movie) && passesListSearch(movie, isBacklog: true)
@@ -727,7 +721,7 @@ struct ContentView: View {
             }
         }
 
-        return sorted.map { ContentMoviesListSection.Item(index: $0.offset, movie: $0.element) }
+        return sorted.map { IndexedMovie(index: $0.offset, movie: $0.element) }
     }
 
 }

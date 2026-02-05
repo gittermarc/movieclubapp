@@ -13,15 +13,9 @@ internal import SwiftUI
 /// damit Delete korrekt in der Quelle landet.
 struct ContentMoviesListSection: View {
 
-    struct Item: Identifiable {
-        let index: Int
-        let movie: Movie
-        var id: String { String(describing: movie.id) }
-    }
-
     @EnvironmentObject private var displaySettings: DisplaySettings
 
-    let items: [Item]
+    let items: [IndexedMovie]
     @Binding var movies: [Movie]
     let isBacklog: Bool
     let selectedViewStyle: MovieViewStyle
