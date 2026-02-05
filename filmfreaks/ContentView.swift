@@ -7,42 +7,6 @@
 
 internal import SwiftUI
 
-
-enum MovieListMode: String, CaseIterable, Identifiable {
-    case watched = "Gesehen"
-    case backlog = "Backlog"
-
-    var id: Self { self }
-}
-
-enum MovieSortOption: String, CaseIterable, Identifiable {
-    case dateNewest = "Zuletzt gesehen"
-    case dateOldest = "Früheste zuerst"
-    case ratingHigh = "Bewertung (hoch)"
-    case ratingLow = "Bewertung (niedrig)"
-    case titleAZ = "Titel A–Z"
-    case titleZA = "Titel Z–A"
-
-    var id: Self { self }
-}
-
-
-enum MovieViewStyle: String, CaseIterable, Identifiable {
-    case posterGrid = "Cover-Grid"
-    case cards = "Details"
-    case compactList = "Liste (kompakt)"
-
-    var id: Self { self }
-
-    var icon: String {
-        switch self {
-        case .posterGrid: return "rectangle.grid.2x2"
-        case .cards: return "rectangle.grid.1x2"
-        case .compactList: return "list.bullet"
-        }
-    }
-}
-
 struct ContentView: View {
 
     @EnvironmentObject var movieStore: MovieStore
@@ -96,19 +60,6 @@ struct ContentView: View {
         }
     }
 
-    private var currentListSearchTextTrimmed: String {
-        switch selectedMode {
-        case .watched:
-            return watchedSearchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        case .backlog:
-            return backlogSearchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        }
-    }
-
-    private var isListSearchActive: Bool {
-        !currentListSearchTextTrimmed.isEmpty
-    }
-
     private var listSearchPlaceholder: String {
         "In \(selectedMode.rawValue) suchen"
     }
@@ -128,64 +79,6 @@ struct ContentView: View {
                 }
             }
         )
-    }
-
-    private func clearActiveListSearchText() {
-        switch selectedMode {
-        case .watched:
-            watchedSearchText = ""
-        case .backlog:
-            backlogSearchText = ""
-        }
-    }
-
-    private var bottomListSearchBar: some View {
-        // Apple-Music-ish: unten eine dezente, transparente Such-Pille.
-        HStack(spacing: 10) {
-            Image(systemName: "magnifyingglass")
-                .foregroundStyle(.secondary)
-
-            TextField(listSearchPlaceholder, text: activeListSearchText)
-                .focused($listSearchIsFocused)
-                .submitLabel(.search)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled(true)
-                .lineLimit(1)
-
-            if isListSearchActive {
-                Button {
-                    clearActiveListSearchText()
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(.secondary)
-                        .font(.title3)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Suche löschen")
-            }
-
-            if listSearchIsFocused {
-                Button("Abbrechen") {
-                    listSearchIsFocused = false
-                }
-                .font(.subheadline)
-            }
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, max(CGFloat(8), m.chipVerticalPadding - 1))
-        .background(.ultraThinMaterial, in: Capsule(style: .continuous))
-        .overlay(
-            Capsule(style: .continuous)
-                .stroke(Color.black.opacity(0.08), lineWidth: 1)
-        )
-        .shadow(color: Color.black.opacity(0.08), radius: 10, x: 0, y: 4)
-        .padding(.horizontal)
-        .padding(.top, 6)
-        .padding(.bottom, 8)
-        .contentShape(Rectangle())
-        .onTapGesture {
-            listSearchIsFocused = true
-        }
     }
 
     private var filterLabelText: String {
@@ -458,7 +351,12 @@ struct ContentView: View {
                             }
                             .safeAreaInset(edge: .bottom, spacing: 0) {
                                 if shouldShowListSearchBar {
-                                    bottomListSearchBar
+                                    InListSearchBar(
+                                        placeholder: listSearchPlaceholder,
+                                        text: activeListSearchText,
+                                        isFocused: $listSearchIsFocused,
+                                        metrics: m
+                                    )
                                 }
                             }
                             .refreshable {
@@ -479,7 +377,12 @@ struct ContentView: View {
                             .listStyle(.plain)
                             .safeAreaInset(edge: .bottom, spacing: 0) {
                                 if shouldShowListSearchBar {
-                                    bottomListSearchBar
+                                    InListSearchBar(
+                                        placeholder: listSearchPlaceholder,
+                                        text: activeListSearchText,
+                                        isFocused: $listSearchIsFocused,
+                                        metrics: m
+                                    )
                                 }
                             }
                             .refreshable {
