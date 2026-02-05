@@ -219,9 +219,23 @@ struct ContentView: View {
                             List {
                                 switch selectedMode {
                                 case .watched:
-                                    watchedList
+                                    ContentMoviesListSection(
+                                        items: watchedListItems,
+                                        movies: $movieStore.movies,
+                                        isBacklog: false,
+                                        selectedViewStyle: selectedViewStyle,
+                                        query: watchedSearchText,
+                                        displayScore: displayScore
+                                    )
                                 case .backlog:
-                                    backlogList
+                                    ContentMoviesListSection(
+                                        items: backlogListItems,
+                                        movies: $movieStore.backlogMovies,
+                                        isBacklog: true,
+                                        selectedViewStyle: selectedViewStyle,
+                                        query: backlogSearchText,
+                                        displayScore: displayScore
+                                    )
                                 }
                             }
                             .scrollContentBackground(.hidden)
@@ -642,10 +656,9 @@ struct ContentView: View {
         }
     }
 
-    // MARK: - Watched-Liste
+    // MARK: - Listen-Daten (gefiltert + sortiert)
 
-    @ViewBuilder
-    private var watchedList: some View {
+    private var watchedListItems: [ContentMoviesListSection.Item] {
         let enumerated = Array(movieStore.movies.enumerated())
             .filter { _, movie in
                 passesUserFilterForWatched(movie) && passesListSearch(movie, isBacklog: false)
@@ -679,49 +692,10 @@ struct ContentView: View {
             }
         }
 
-        if !watchedSearchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && sorted.isEmpty {
-            ContentUnavailableView(
-                "Keine Treffer",
-                systemImage: "magnifyingglass",
-                description: Text("Passe den Suchbegriff an oder lösche ihn.")
-            )
-            .listRowBackground(Color.clear)
-            .listRowSeparator(.hidden)
-        } else {
-            ForEach(sorted, id: \.element.id) { pair in
-                let index = pair.offset
-                let movie = pair.element
-
-                NavigationLink {
-                    MovieDetailView(
-                        movie: $movieStore.movies[index],
-                        isBacklog: false
-                    )
-                } label: {
-                    if selectedViewStyle == .compactList {
-                        let displayRating = displayScore(for: movie)
-                        ContentCompactMovieRowView(movie: movie, average: displayRating)
-                    } else {
-                        let displayRating = displayScore(for: movie)
-                        ContentMovieRowView(movie: movie, average: displayRating)
-                    }
-                }
-                .listRowBackground(Color.clear)
-                .listRowSeparator(displaySettings.cardStyle == .cards ? .hidden : .automatic)
-            }
-            .onDelete { indexSet in
-                let originalIndices = IndexSet(
-                    indexSet.map { sorted[$0].offset }
-                )
-                movieStore.movies.remove(atOffsets: originalIndices)
-            }
-        }
+        return sorted.map { ContentMoviesListSection.Item(index: $0.offset, movie: $0.element) }
     }
 
-    // MARK: - Backlog-Liste
-
-    @ViewBuilder
-    private var backlogList: some View {
+    private var backlogListItems: [ContentMoviesListSection.Item] {
         let enumerated = Array(movieStore.backlogMovies.enumerated())
             .filter { _, movie in
                 passesUserFilterForBacklog(movie) && passesListSearch(movie, isBacklog: true)
@@ -753,42 +727,7 @@ struct ContentView: View {
             }
         }
 
-        if !backlogSearchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && sorted.isEmpty {
-            ContentUnavailableView(
-                "Keine Treffer",
-                systemImage: "magnifyingglass",
-                description: Text("Passe den Suchbegriff an oder lösche ihn.")
-            )
-            .listRowBackground(Color.clear)
-            .listRowSeparator(.hidden)
-        } else {
-            ForEach(sorted, id: \.element.id) { pair in
-                let index = pair.offset
-                let movie = pair.element
-
-                NavigationLink {
-                    MovieDetailView(
-                        movie: $movieStore.backlogMovies[index],
-                        isBacklog: true
-                    )
-                } label: {
-                    let displayRating = displayScore(for: movie)
-                    if selectedViewStyle == .compactList {
-                        ContentCompactMovieRowView(movie: movie, average: displayRating)
-                    } else {
-                        ContentMovieRowView(movie: movie, average: displayRating)
-                    }
-                }
-                .listRowBackground(Color.clear)
-                .listRowSeparator(displaySettings.cardStyle == .cards ? .hidden : .automatic)
-            }
-            .onDelete { indexSet in
-                let originalIndices = IndexSet(
-                    indexSet.map { sorted[$0].offset }
-                )
-                movieStore.backlogMovies.remove(atOffsets: originalIndices)
-            }
-        }
+        return sorted.map { ContentMoviesListSection.Item(index: $0.offset, movie: $0.element) }
     }
 
 }
