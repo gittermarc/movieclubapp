@@ -509,11 +509,6 @@ struct ContentView: View {
                 }
                 updateOnboardingCompletionFlag()
             }
-            .onChange(of: networkMonitor.isConnected) { _, isConnected in
-                if isConnected {
-                    movieStore.flushPendingCloudChanges()
-                }
-            }
             .onChange(of: movieStore.currentGroupId) { _, _ in
                 updateOnboardingCompletionFlag()
             }

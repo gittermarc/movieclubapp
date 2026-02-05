@@ -101,6 +101,14 @@ class MovieStore: ObservableObject {
     private var lastRefreshAt: Date?
     private let minRefreshInterval: TimeInterval = 8
 
+    // MARK: - Network reconnect handling
+
+    /// Combine subscription that detects offline → online transitions.
+    /// We use this to flush debounced/batched CloudKit writes as soon as the device
+    /// reconnects, even if the user isn't currently on the main ContentView.
+    private var networkCancellable: AnyCancellable?
+    private var lastNetworkConnected: Bool = true
+
     private static let knownGroupsKey = "KnownGroups"
 
     // UserDefaults base key (per group)
@@ -168,6 +176,29 @@ class MovieStore: ObservableObject {
 
             Task { await self.loadFromCloud() }
         }
+
+        // Always listen for reconnects; flush is a no-op if Cloud sync isn't enabled.
+        setupNetworkReconnectHandling()
+    }
+
+    private func setupNetworkReconnectHandling() {
+        // Seed with current state so we only react to *transitions*.
+        lastNetworkConnected = NetworkMonitor.shared.isConnected
+
+        networkCancellable = NetworkMonitor.shared.$isConnected
+            .removeDuplicates()
+            .sink { [weak self] connected in
+                guard let self else { return }
+
+                Task { @MainActor in
+                    let wasConnected = self.lastNetworkConnected
+                    self.lastNetworkConnected = connected
+
+                    // Only flush on offline → online.
+                    guard connected, !wasConnected else { return }
+                    self.flushPendingCloudChanges()
+                }
+            }
     }
 
     // MARK: - Cloud Laden
