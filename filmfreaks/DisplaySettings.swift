@@ -39,6 +39,8 @@ final class DisplaySettings: ObservableObject {
         static let showSuggestedBy = "DisplaySettings_ShowSuggestedBy"
 
         static let showPosterInCompactList = "DisplaySettings_ShowPosterInCompactList"
+
+        static let showGroupActivityCard = "DisplaySettings_ShowGroupActivityCard"
     }
 
     private let defaults: UserDefaults
@@ -480,6 +482,11 @@ final class DisplaySettings: ObservableObject {
         didSet { defaults.set(showPosterInCompactList, forKey: Keys.showPosterInCompactList) }
     }
 
+    /// Wenn deaktiviert, wird die Gruppenaktivitäts-Karte im Header nicht angezeigt.
+    @Published var showGroupActivityCard: Bool {
+        didSet { defaults.set(showGroupActivityCard, forKey: Keys.showGroupActivityCard) }
+    }
+
     // MARK: - Derived
 
     var preferredColorScheme: ColorScheme? { colorScheme.resolved }
@@ -559,6 +566,8 @@ final class DisplaySettings: ObservableObject {
         self.showWatchedLocation = defaults.object(forKey: Keys.showWatchedLocation) as? Bool ?? true
         self.showSuggestedBy = defaults.object(forKey: Keys.showSuggestedBy) as? Bool ?? true
         self.showPosterInCompactList = defaults.object(forKey: Keys.showPosterInCompactList) as? Bool ?? true
+
+        self.showGroupActivityCard = defaults.object(forKey: Keys.showGroupActivityCard) as? Bool ?? true
     }
 
     // MARK: - Reset
@@ -583,5 +592,7 @@ final class DisplaySettings: ObservableObject {
         showWatchedLocation = true
         showSuggestedBy = true
         showPosterInCompactList = true
+
+        showGroupActivityCard = true
     }
 }

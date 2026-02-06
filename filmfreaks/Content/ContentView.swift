@@ -164,6 +164,7 @@ struct ContentView: View {
                         hasActiveMemberSelected: hasActiveMemberSelected,
                         onTapGroup: { route = .groupSettings },
                         onTapActiveMember: { route = .users },
+                        showGroupActivityCard: displaySettings.showGroupActivityCard,
                         activityPreviewEvents: activityPreviewEvents,
                         onTapActivity: { route = .activity },
                         shouldShowOnboardingChecklist: onboarding.shouldShowChecklist,

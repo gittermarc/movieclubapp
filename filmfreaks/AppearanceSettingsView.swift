@@ -166,6 +166,10 @@ struct AppearanceSettingsView: View {
                 Toggle("Poster in kompakter Liste", isOn: $displaySettings.showPosterInCompactList)
             }
 
+            Section("Gruppenaktivität") {
+                Toggle("Gruppenaktivität anzeigen", isOn: $displaySettings.showGroupActivityCard)
+            }
+
             Section {
                 Button(role: .destructive) {
                     displaySettings.resetToDefaults()
