@@ -56,33 +56,11 @@ struct GoalDetailView: View {
     @ViewBuilder
     private func goalDetailMovieRow(_ m: Movie) -> some View {
         HStack(spacing: 12) {
-            if let url = m.posterURL {
-                CachedAsyncImage(url: url) { phase in
-                    switch phase {
-                    case .empty:
-                        Rectangle().foregroundStyle(.gray.opacity(0.2))
-                    case .success(let image):
-                        image.resizable().scaledToFill()
-                    case .failure:
-                        Rectangle().foregroundStyle(.gray.opacity(0.15))
-                            .overlay { Image(systemName: "film").foregroundStyle(.secondary) }
-                    @unknown default:
-                        Rectangle().foregroundStyle(.gray.opacity(0.2))
-                    }
-                }
-                .frame(width: 40, height: 60)
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-            } else {
-                Rectangle()
-                    .foregroundStyle(.gray.opacity(0.15))
-                    .frame(width: 40, height: 60)
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
-                    .overlay { Image(systemName: "film").foregroundStyle(.secondary) }
-            }
+            GoalPosterTileView(movie: m, size: .init(width: 40, height: 60), cornerRadius: 8)
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(m.title)
-                        .font(.subheadline.weight(.semibold))
+                    .font(.subheadline.weight(.semibold))
                     .lineLimit(2)
 
                 HStack(spacing: 6) {
