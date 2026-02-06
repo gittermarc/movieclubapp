@@ -320,77 +320,27 @@ struct MovieSearchView: View {
 
             // Kandidaten-Picker nach Scan
             .sheet(isPresented: $showCandidatePicker) {
-                NavigationStack {
-                    List {
-                        if let tapped = lastTappedScanText?.trimmingCharacters(in: .whitespacesAndNewlines),
-                           !tapped.isEmpty {
-                            Section {
-                                VStack(alignment: .leading, spacing: 6) {
-                                    Text("Du hast angetippt:")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                    Text(tapped)
-                                        .font(.subheadline.weight(.semibold))
-                                        .lineLimit(3)
-                                }
-                                .padding(.vertical, 4)
-                            }
+                MovieSearchCandidatePickerSheetView(
+                    tappedText: lastTappedScanText,
+                    candidates: candidatePickerItems,
+                    onSelectCandidate: { candidate in
+                        showCandidatePicker = false
+                        query = candidate
+                        Task { await performSearch(reset: true) }
+                    },
+                    onManualEdit: { rawFallback in
+                        query = cleanupCandidate(rawFallback)
+                        showCandidatePicker = false
+
+                        // Fokus ins Suchfeld
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                            isSearchFieldFocused = true
                         }
-
-                        Section("Erkannten Titel auswählen") {
-                            if candidatePickerItems.isEmpty {
-                                Text("Keine brauchbaren Vorschläge erkannt. Tippe auf „Manuell bearbeiten“.")
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
-                            } else {
-                                ForEach(candidatePickerItems, id: \.self) { candidate in
-                                    Button {
-                                        showCandidatePicker = false
-                                        query = candidate
-                                        Task { await performSearch(reset: true) }
-                                    } label: {
-                                        VStack(alignment: .leading, spacing: 4) {
-                                            Text(candidate)
-                                                .font(.body)
-                                                .foregroundStyle(.primary)
-                                            Text("Suche starten")
-                                                .font(.caption)
-                                                .foregroundStyle(.secondary)
-                                        }
-                                        .padding(.vertical, 4)
-                                    }
-                                }
-                            }
-                        }
-
-                        Section {
-                            Button {
-                                // Best effort: nimm Top-Kandidat (oder tapped) rein, aber starte NICHT automatisch
-                                let fallback = candidatePickerItems.first
-                                    ?? lastTappedScanText
-                                    ?? ""
-
-                                query = cleanupCandidate(fallback)
-                                showCandidatePicker = false
-
-                                // Fokus ins Suchfeld
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                                    isSearchFieldFocused = true
-                                }
-                            } label: {
-                                Label("Manuell bearbeiten", systemImage: "pencil")
-                            }
-                        }
+                    },
+                    onCancel: {
+                        showCandidatePicker = false
                     }
-                    .navigationTitle("Scan-Vorschläge")
-                    .toolbar {
-                        ToolbarItem(placement: .cancellationAction) {
-                            Button("Abbrechen") {
-                                showCandidatePicker = false
-                            }
-                        }
-                    }
-                }
+                )
             }
 
             // Scanner-Fehler
