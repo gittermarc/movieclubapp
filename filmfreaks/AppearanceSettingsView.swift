@@ -11,8 +11,16 @@ struct AppearanceSettingsView: View {
 
     @EnvironmentObject private var displaySettings: DisplaySettings
 
-    private var densityHintText: String {
-        displaySettings.uiDensity.shortHint
+    private var uiDensityHelpText: String {
+        "\(displaySettings.uiDensity.shortHint) Ändert Abstände und Zeilenhöhe in Listen, Karten und Details."
+    }
+
+    private var cardStyleHelpText: String {
+        "\(displaySettings.cardStyle.shortHint) Legt fest, ob Listen als Karten oder als schlichte Systemliste erscheinen."
+    }
+
+    private var posterGridDensityHelpText: String {
+        "\(displaySettings.posterGridDensity.shortHint) Ändert die Postergröße im Cover-Grid."
     }
 
     var body: some View {
@@ -75,7 +83,7 @@ struct AppearanceSettingsView: View {
                 }
                 .pickerStyle(.segmented)
 
-                Text(densityHintText)
+                Text(uiDensityHelpText)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -88,7 +96,7 @@ struct AppearanceSettingsView: View {
                 }
                 .pickerStyle(.segmented)
 
-                Text(displaySettings.cardStyle.shortHint)
+                Text(cardStyleHelpText)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -104,7 +112,7 @@ struct AppearanceSettingsView: View {
                 }
                 .pickerStyle(.segmented)
 
-                Text(displaySettings.posterGridDensity.shortHint)
+                Text(posterGridDensityHelpText)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)

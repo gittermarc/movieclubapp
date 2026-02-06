@@ -25,7 +25,7 @@ struct CornerStylePickerRow: View {
     }
 
     private var showingHintText: some View {
-        Text(displaySettings.cornerStyle.shortHint)
+        Text("\(displaySettings.cornerStyle.shortHint) Betrifft Poster, Karten und Chips – rein optisch.")
             .font(.footnote)
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
