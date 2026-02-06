@@ -13,7 +13,6 @@ internal import SwiftUI
 struct GoalsView: View {
 
     @EnvironmentObject var movieStore: MovieStore
-    @EnvironmentObject var displaySettings: DisplaySettings
 
     @State var selectedYear: Int = Calendar.current.component(.year, from: Date())
     @State var goalsByYear: [Int: Int] = [:]
@@ -49,9 +48,32 @@ struct GoalsView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
 
-                    yearlyGoalCard
+                    GoalsYearlyGoalCardView(
+                        selectedYear: $selectedYear,
+                        yearOptions: yearOptions(),
+                        moviesInSelectedYear: moviesInSelectedYear,
+                        yearlyTarget: yearlyTarget,
+                        onSetYearlyTarget: setYearlyTarget,
+                        yearlyProgress: yearlyProgress
+                    )
 
-                    customGoalsSection
+                    GoalsCustomGoalsSectionView(
+                        visibleGoals: sortedCustomGoals(),
+                        allGoalsCount: customGoals.count,
+                        selectedYear: selectedYear,
+                        matchesProvider: { goal in
+                            matchingMovies(for: goal)
+                        },
+                        onEdit: { goal in
+                            goalBeingEdited = goal
+                        },
+                        onDelete: { goal in
+                            deleteCustomGoal(goal)
+                        },
+                        onShowDetail: { goal in
+                            selectedGoalForDetail = goal
+                        }
+                    )
 
                     Spacer(minLength: 12)
                 }
@@ -174,211 +196,6 @@ struct GoalsView: View {
             }
         }
     }
-
-    // MARK: - UI Sections
-
-    private var yearlyGoalCard: some View {
-        GoalCardContainer {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(alignment: .firstTextBaseline) {
-                    Text(verbatim: "Jahresziel \(selectedYear)")
-                        .font(.headline)
-
-                    Spacer()
-
-                    Menu {
-                        Button("Dieses Jahr") {
-                            selectedYear = Calendar.current.component(.year, from: Date())
-                        }
-                        Divider()
-                        ForEach(yearOptions(), id: \.self) { y in
-                            Button { selectedYear = y } label: { Text(verbatim: "\(y)") }
-                        }
-                    } label: {
-                        HStack(spacing: 6) {
-                            Text(verbatim: "\(selectedYear)")
-                                .font(.subheadline.weight(.semibold))
-                            Image(systemName: "chevron.up.chevron.down")
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                        }
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(Color.gray.opacity(0.12))
-                        .clipShape(Capsule())
-                    }
-                }
-
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        Text("\(moviesInSelectedYear.count) / \(yearlyTarget) Filme")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-
-                        Spacer()
-
-                        Stepper(
-                            value: Binding(
-                                get: { yearlyTarget },
-                                set: { newValue in
-                                    setYearlyTarget(newValue)
-                                }
-                            ),
-                            in: 1...500,
-                            step: 1
-                        ) {
-                            EmptyView()
-                        }
-                        .labelsHidden()
-                    }
-
-                    ProgressView(value: yearlyProgress)
-                }
-
-                if !moviesInSelectedYear.isEmpty {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 12) {
-                            ForEach(moviesInSelectedYear.prefix(30)) { m in
-                                GoalMoviePosterNavTile(movie: m)
-                            }
-                        }
-                        .padding(.vertical, 2)
-                    }
-                } else {
-                    Text(verbatim: "Noch keine Filme in \(selectedYear) markiert.")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-            }
-        }
-    }
-
-
-    private var customGoalsSection: some View {
-        let visibleGoals = sortedCustomGoals()
-        let otherYearsCount = max(0, customGoals.count - visibleGoals.count)
-
-        return VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text("Custom Goals")
-                    .font(.headline)
-                Spacer()
-                Text("\(visibleGoals.count)")
-                    .font(.caption.weight(.semibold))
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(Color.gray.opacity(0.12))
-                    .clipShape(Capsule())
-            }
-
-            if visibleGoals.isEmpty {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(verbatim: "In \(selectedYear) sind noch keine Custom Goals angelegt.")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-
-                    if otherYearsCount > 0 {
-                        Text("Du hast \(otherYearsCount) Ziel(e) in anderen Jahren – die siehst du, wenn du oben das Jahr wechselst.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    Text("Beispiele: „10 Filme aus den 50ern“, „15 Filme von Nolan“, „8 Filme mit time travel“.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            } else {
-                VStack(spacing: 12) {
-                    ForEach(visibleGoals) { goal in
-                        customGoalCard(goal)
-                    }
-                }
-            }
-        }
-    }
-
-    private func customGoalCard(_ goal: ViewingCustomGoal) -> some View {
-        let matches = matchingMovies(for: goal)
-        let progress = goal.target > 0 ? min(1.0, Double(matches.count) / Double(goal.target)) : 0
-
-        return GoalCardContainer {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(alignment: .top, spacing: 10) {
-                    GoalLeadingBadgeView(goal: goal)
-
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(goal.title)
-                            .font(.subheadline.weight(.semibold))
-                            .lineLimit(2)
-
-                        Text(goal.validityLabel)
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-
-                        Text("\(matches.count) / \(goal.target)")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    Spacer()
-
-                    Menu {
-                        Button {
-                            goalBeingEdited = goal
-                        } label: {
-                            Label("Bearbeiten", systemImage: "pencil")
-                        }
-
-                        Button(role: .destructive) {
-                            deleteCustomGoal(goal)
-                        } label: {
-                            Label("Löschen", systemImage: "trash")
-                        }
-                    } label: {
-                        Image(systemName: "ellipsis")
-                            .foregroundStyle(.secondary)
-                            .padding(6)
-                    }
-                }
-
-                ProgressView(value: progress)
-
-                if !matches.isEmpty {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 10) {
-                            ForEach(matches.prefix(18)) { m in
-                                GoalMoviePosterNavTile(movie: m)
-                            }
-                        }
-                        .padding(.vertical, 2)
-                    }
-                } else {
-                    Text(verbatim: "Noch keine passenden Filme in \(selectedYear).")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-
-                Button {
-                    selectedGoalForDetail = goal
-                } label: {
-                    HStack {
-                        Image(systemName: "list.bullet")
-                        Text("Passende Filme anzeigen")
-                    }
-                    .font(.caption.weight(.semibold))
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 8)
-                    .frame(maxWidth: .infinity)
-                    .background(displaySettings.tint(0.14))
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                }
-                .buttonStyle(.plain)
-
-            }
-        }
-    }
-
-
 }
 
 // MARK: - Preview
