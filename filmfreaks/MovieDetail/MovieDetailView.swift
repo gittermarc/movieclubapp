@@ -97,111 +97,33 @@ struct MovieDetailView: View {
                     MovieDetailHeroHeaderView(movie: movie)
 
                     // Titel & Basisinfos
-                    MovieDetailSectionCard {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text(movie.title)
-                                .font(.title2.bold())
-                                .fixedSize(horizontal: false, vertical: true)
-
-                            if let taglineText {
-                                Text("„\(taglineText)“")
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
-                                    .italic()
-                                    .fixedSize(horizontal: false, vertical: true)
-                            }
-
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Jahr: \(movie.year)")
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
-
-                                if let releaseDateText {
-                                    Text("Release: \(releaseDateText)")
-                                        .font(.subheadline)
-                                        .foregroundStyle(.secondary)
-                                }
-
-                                if let originalTitleText {
-                                    Text("Originaltitel: \(originalTitleText)")
-                                        .font(.subheadline)
-                                        .foregroundStyle(.secondary)
-                                        .fixedSize(horizontal: false, vertical: true)
-                                }
-
-                                if let originalLanguageText {
-                                    Text("Originalsprache: \(originalLanguageText)")
-                                        .font(.subheadline)
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-
-                            if let tmdb = movie.tmdbRating {
-                                HStack(spacing: 6) {
-                                    Image(systemName: "star.circle")
-                                    Text(String(format: "TMDb: %.1f / 10", tmdb))
-                                }
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                            }
-                        }
-                    }
+                    MovieDetailTitleSectionView(
+                        title: movie.title,
+                        year: movie.year,
+                        taglineText: taglineText,
+                        releaseDateText: releaseDateText,
+                        originalTitleText: originalTitleText,
+                        originalLanguageText: originalLanguageText,
+                        tmdbRating: movie.tmdbRating
+                    )
 
                     // Watch Providers
-                    if isLoadingWatchProviders {
-                        MovieDetailSectionCard(title: "Film ist verfügbar bei:") {
-                            HStack(spacing: 10) {
-                                ProgressView()
-                                Text("Suche Streaming-Anbieter …")
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                    } else if didLoadWatchProviders {
-                        MovieDetailSectionCard(title: "Film ist verfügbar bei:") {
-                            if let country = watchProvidersCountry,
-                               !country.bestEffortProviders.isEmpty {
-                                WatchProvidersAvailabilityView(country: country, link: watchProvidersLink)
-                            } else {
-                                WatchProvidersNoDataHintView(
-                                    regionCode: effectiveWatchProvidersRegionCode,
-                                    isAutomatic: isWatchProvidersRegionAutomatic
-                                ) {
-                                    showWatchProvidersRegionPicker = true
-                                }
-                            }
-                        }
+                    MovieDetailWatchProvidersSectionView(
+                        isLoading: isLoadingWatchProviders,
+                        didLoad: didLoadWatchProviders,
+                        country: watchProvidersCountry,
+                        link: watchProvidersLink,
+                        regionCode: effectiveWatchProvidersRegionCode,
+                        isAutomatic: isWatchProvidersRegionAutomatic
+                    ) {
+                        showWatchProvidersRegionPicker = true
                     }
 
                     // Handlung
-                    if let overviewText {
-                        MovieDetailSectionCard(title: "Handlung") {
-                            VStack(alignment: .leading, spacing: 10) {
-                                Text(overviewText)
-                                    .font(.subheadline)
-                                    .foregroundStyle(.primary)
-                                    .lineLimit(isOverviewExpanded ? nil : 4)
-                                    .fixedSize(horizontal: false, vertical: true)
-
-                                Button {
-                                    withAnimation(.easeInOut(duration: 0.2)) {
-                                        isOverviewExpanded.toggle()
-                                    }
-                                } label: {
-                                    HStack(spacing: 6) {
-                                        Text(isOverviewExpanded ? "Weniger anzeigen" : "Mehr anzeigen")
-                                        Image(systemName: isOverviewExpanded ? "chevron.up" : "chevron.down")
-                                    }
-                                    .font(.subheadline.weight(.semibold))
-                                    .padding(.horizontal, 10)
-                                    .padding(.vertical, 8)
-                                    .background(Color.gray.opacity(0.12))
-                                    .clipShape(RoundedRectangle(cornerRadius: 10))
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        }
-                    }
+                    MovieDetailOverviewSectionView(
+                        overviewText: overviewText,
+                        isExpanded: $isOverviewExpanded
+                    )
 
                     // Gesehen / Ort / Vorgeschlagen von
                     MovieDetailSectionCard(title: isBacklog ? "Backlog" : "Gesehen") {
@@ -261,98 +183,17 @@ struct MovieDetailView: View {
                     }
 
                     // Bewertungen (Sheet)
-                    Button {
+                    MovieDetailRatingsTeaserCardView(
+                        averageRating: movie.averageRating,
+                        averageFazit: movie.averageFazit,
+                        ratingsCount: movie.ratings.count,
+                        selectedUserName: userStore.selectedUser?.name,
+                        hasPendingChanges: hasPendingRatingChanges,
+                        ratingsPreview: Array(sortedRatings.prefix(2)),
+                        tintSoftBackground: displaySettings.tintSoftBackground
+                    ) {
                         showRatingsSheet = true
-                    } label: {
-                        MovieDetailSectionCard(title: "Bewertungen") {
-                            VStack(alignment: .leading, spacing: 10) {
-
-                                HStack(spacing: 8) {
-                                    if let avg = movie.averageRating {
-                                        Text(String(format: "Ø %.1f / 10", avg))
-                                            .font(.caption.weight(.semibold))
-                                            .padding(.horizontal, 10)
-                                            .padding(.vertical, 6)
-                                            .background(displaySettings.tintSoftBackground)
-                                            .clipShape(Capsule())
-                                    } else {
-                                        Text("Noch keine Bewertungen")
-                                            .font(.subheadline)
-                                            .foregroundStyle(.secondary)
-                                    }
-
-                                    if let f = movie.averageFazit {
-                                        Text(String(format: "Fazit Ø %.1f", f))
-                                            .font(.caption.weight(.semibold))
-                                            .padding(.horizontal, 10)
-                                            .padding(.vertical, 6)
-                                            .background(Color.green.opacity(0.14))
-                                            .clipShape(Capsule())
-                                    }
-
-                                    Spacer(minLength: 0)
-
-                                    Image(systemName: "chevron.right")
-                                        .font(.subheadline.weight(.semibold))
-                                        .foregroundStyle(.secondary)
-                                }
-
-                                HStack(spacing: 8) {
-                                    Image(systemName: "person.2.fill")
-                                        .foregroundStyle(.secondary)
-
-                                    Text("\(movie.ratings.count) \(movie.ratings.count == 1 ? "Bewertung" : "Bewertungen")")
-                                        .font(.subheadline)
-                                        .foregroundStyle(.secondary)
-
-                                    Spacer(minLength: 0)
-
-                                    if let name = userStore.selectedUser?.name {
-                                        Text("Als: \(name)")
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                            .lineLimit(1)
-                                    }
-                                }
-
-                                if hasPendingRatingChanges {
-                                    HStack(spacing: 8) {
-                                        Image(systemName: "exclamationmark.circle.fill")
-                                            .foregroundStyle(.orange)
-                                        Text("Ungespeicherte Änderungen")
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                }
-
-                                if !sortedRatings.isEmpty {
-                                    VStack(alignment: .leading, spacing: 8) {
-                                        ForEach(sortedRatings.prefix(2)) { r in
-                                            HStack(spacing: 10) {
-                                                Text(r.reviewerName)
-                                                    .font(.subheadline.weight(.semibold))
-                                                    .lineLimit(1)
-
-                                                Spacer(minLength: 0)
-
-                                                Text(String(format: "%.1f / 10", r.averageScoreNormalizedTo10))
-                                                    .font(.caption.weight(.semibold))
-                                                    .padding(.horizontal, 8)
-                                                    .padding(.vertical, 4)
-                                                    .background(Color.gray.opacity(0.10))
-                                                    .clipShape(Capsule())
-                                            }
-                                        }
-                                    }
-                                } else {
-                                    Text("Tippe hier, um eine Bewertung abzugeben.")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-                        }
                     }
-                    .buttonStyle(.plain)
 
                     Spacer()
                 }
@@ -362,7 +203,7 @@ struct MovieDetailView: View {
         .overlay(alignment: .bottom) {
             GeometryReader { proxy in
                 if showSaveToast {
-                    saveToastView
+                    MovieDetailSaveToastView(text: saveToastText)
                         .padding(.bottom, max(12, proxy.safeAreaInsets.bottom + 12))
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
                         .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -429,25 +270,7 @@ struct MovieDetailView: View {
         }
     }
 
-    // MARK: - Toast UI
-
-    private var saveToastView: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "checkmark.circle.fill")
-                .font(.subheadline.weight(.semibold))
-            Text(saveToastText)
-                .font(.subheadline.weight(.semibold))
-                .lineLimit(2)
-                .multilineTextAlignment(.leading)
-        }
-        .foregroundStyle(.primary)
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
-        .background(.ultraThinMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 14))
-        .shadow(color: Color.black.opacity(0.14), radius: 12, x: 0, y: 6)
-        .padding(.horizontal, 16)
-    }
+    // MARK: - Toast
 
     func presentSaveToast(_ text: String = "Bewertung gespeichert") {
         saveToastText = text
