@@ -32,6 +32,7 @@ final class DisplaySettings: ObservableObject {
         static let showRatings = "DisplaySettings_ShowRatings"
         static let showTMDbRatingsInLists = "DisplaySettings_ShowTMDbRatingsInLists"
         static let ratingDisplayMode = "DisplaySettings_RatingDisplayMode"
+        static let ratingBadgeStyle = "DisplaySettings_RatingBadgeStyle"
         static let showMovieYearInLists = "DisplaySettings_ShowMovieYearInLists"
         static let showWatchedDate = "DisplaySettings_ShowWatchedDate"
         static let showWatchedLocation = "DisplaySettings_ShowWatchedLocation"
@@ -453,6 +454,11 @@ final class DisplaySettings: ObservableObject {
         didSet { defaults.set(ratingDisplayMode.rawValue, forKey: Keys.ratingDisplayMode) }
     }
 
+    /// Wie wird die Bewertungs-Kennzahl in Listen gerendert? (Pill / Compact / Star+Zahl / Ø)
+    @Published var ratingBadgeStyle: RatingBadgeStyle {
+        didSet { defaults.set(ratingBadgeStyle.rawValue, forKey: Keys.ratingBadgeStyle) }
+    }
+
     /// Wenn deaktiviert, wird in Listen das Erscheinungsjahr nicht angezeigt.
     @Published var showMovieYearInLists: Bool {
         didSet { defaults.set(showMovieYearInLists, forKey: Keys.showMovieYearInLists) }
@@ -544,6 +550,9 @@ final class DisplaySettings: ObservableObject {
         let modeRaw = defaults.string(forKey: Keys.ratingDisplayMode) ?? RatingDisplayMode.ratingAverage.rawValue
         self.ratingDisplayMode = RatingDisplayMode(rawValue: modeRaw) ?? .ratingAverage
 
+        let badgeRaw = defaults.string(forKey: Keys.ratingBadgeStyle) ?? RatingBadgeStyle.pill.rawValue
+        self.ratingBadgeStyle = RatingBadgeStyle(rawValue: badgeRaw) ?? .pill
+
         self.showMovieYearInLists = defaults.object(forKey: Keys.showMovieYearInLists) as? Bool ?? true
 
         self.showWatchedDate = defaults.object(forKey: Keys.showWatchedDate) as? Bool ?? true
@@ -568,6 +577,7 @@ final class DisplaySettings: ObservableObject {
         showRatings = true
         showTMDbRatingsInLists = true
         ratingDisplayMode = .ratingAverage
+        ratingBadgeStyle = .pill
         showMovieYearInLists = true
         showWatchedDate = true
         showWatchedLocation = true

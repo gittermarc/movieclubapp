@@ -92,18 +92,7 @@ struct ContentMovieRowView: View {
             Spacer()
 
             if displaySettings.showRatings {
-                if let avg = average {
-                    Text(String(format: "%.1f", avg))
-                        .font(.headline)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(Color.accentColor.opacity(0.10))
-                        .clipShape(RoundedRectangle(cornerRadius: displaySettings.pillCornerRadius))
-                } else {
-                    Text("-")
-                        .font(.headline)
-                        .foregroundStyle(.secondary)
-                }
+                RatingBadgeView(value: average, font: .headline, isCompactContext: false, placeholder: "-")
             }
         }
 

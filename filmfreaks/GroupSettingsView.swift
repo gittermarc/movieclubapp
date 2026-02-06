@@ -215,7 +215,7 @@ struct GroupSettingsView: View {
                 }
             }
         } header: {
-            Text("Cloud-Gruppen (neu)")
+            Text("Cloud-Gruppen")
         } footer: {
             Text("Owned-Gruppen kannst du löschen. Shared-Gruppen kannst du verlassen. Teilen läuft über iCloud-Einladung.")
         }

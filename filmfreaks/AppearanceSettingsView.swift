@@ -137,6 +137,18 @@ struct AppearanceSettingsView: View {
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.top, 2)
 
+                    Picker("Rating-Badge", selection: $displaySettings.ratingBadgeStyle) {
+                        ForEach(RatingBadgeStyle.allCases) { style in
+                            Text(style.label).tag(style)
+                        }
+                    }
+
+                    Text(displaySettings.ratingBadgeStyle.helpText)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, 2)
+
                     Toggle("TMDb-Rating in Listen anzeigen", isOn: $displaySettings.showTMDbRatingsInLists)
 
                     Text("Wenn in der Gruppe noch keine Bewertung vorhanden ist, kann stattdessen das TMDb-Rating als Fallback angezeigt werden.")

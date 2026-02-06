@@ -62,6 +62,7 @@ extension DisplaySettings {
                     showRatings: true,
                     showTMDbRatingsInLists: true,
                     ratingDisplayMode: .ratingAverage,
+                    ratingBadgeStyle: .pill,
                     showMovieYearInLists: true,
                     showWatchedDate: true,
                     showWatchedLocation: true,
@@ -81,6 +82,7 @@ extension DisplaySettings {
                     showRatings: true,
                     showTMDbRatingsInLists: false,
                     ratingDisplayMode: .fazitAverage,
+                    ratingBadgeStyle: .pill,
                     showMovieYearInLists: true,
                     showWatchedDate: true,
                     showWatchedLocation: false,
@@ -100,6 +102,7 @@ extension DisplaySettings {
                     showRatings: true,
                     showTMDbRatingsInLists: true,
                     ratingDisplayMode: .fazitAverage,
+                    ratingBadgeStyle: .pill,
                     showMovieYearInLists: true,
                     showWatchedDate: true,
                     showWatchedLocation: true,
@@ -119,6 +122,7 @@ extension DisplaySettings {
                     showRatings: true,
                     showTMDbRatingsInLists: true,
                     ratingDisplayMode: .ratingAverage,
+                    ratingBadgeStyle: .pill,
                     showMovieYearInLists: true,
                     showWatchedDate: true,
                     showWatchedLocation: true,
@@ -146,6 +150,7 @@ extension DisplaySettings {
         let showRatings: Bool
         let showTMDbRatingsInLists: Bool
         let ratingDisplayMode: RatingDisplayMode
+        let ratingBadgeStyle: RatingBadgeStyle
         let showMovieYearInLists: Bool
         let showWatchedDate: Bool
         let showWatchedLocation: Bool
@@ -175,6 +180,7 @@ extension DisplaySettings {
         showRatings = c.showRatings
         showTMDbRatingsInLists = c.showTMDbRatingsInLists
         ratingDisplayMode = c.ratingDisplayMode
+        ratingBadgeStyle = c.ratingBadgeStyle
         showMovieYearInLists = c.showMovieYearInLists
         showWatchedDate = c.showWatchedDate
         showWatchedLocation = c.showWatchedLocation
@@ -194,6 +200,7 @@ extension DisplaySettings {
             showRatings: showRatings,
             showTMDbRatingsInLists: showTMDbRatingsInLists,
             ratingDisplayMode: ratingDisplayMode,
+            ratingBadgeStyle: ratingBadgeStyle,
             showMovieYearInLists: showMovieYearInLists,
             showWatchedDate: showWatchedDate,
             showWatchedLocation: showWatchedLocation,

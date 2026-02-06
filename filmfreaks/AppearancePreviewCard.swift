@@ -80,8 +80,8 @@ struct AppearancePreviewCard: View {
             Spacer()
 
             if displaySettings.showRatings {
-                let text = displaySettings.ratingDisplayMode == .ratingAverage ? "8.6" : "8.0"
-                ratingPill(text: text)
+                let value: Double = displaySettings.ratingDisplayMode == .ratingAverage ? 8.6 : 8.0
+                RatingBadgeView(value: value, font: .headline, isCompactContext: false, placeholder: "-")
             }
         }
 
@@ -115,13 +115,21 @@ struct AppearancePreviewCard: View {
             if displaySettings.showRatings {
                 if displaySettings.showTMDbRatingsInLists {
                     // Preview: als ob hier kein Gruppenwert vorhanden ist und TMDb als Fallback greift
-                    let text = displaySettings.ratingDisplayMode == .ratingAverage ? "9.1" : "8.7"
-                    ratingPill(text: text, compact: true)
+                    let value: Double = displaySettings.ratingDisplayMode == .ratingAverage ? 9.1 : 8.7
+                    RatingBadgeView(
+                        value: value,
+                        font: .subheadline.weight(.semibold),
+                        isCompactContext: true,
+                        placeholder: "-"
+                    )
                 } else {
                     // Wenn TMDb in Listen deaktiviert ist, bleibt bei fehlendem Gruppenwert nur „-”
-                    Text("-")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.secondary)
+                    RatingBadgeView(
+                        value: nil,
+                        font: .subheadline.weight(.semibold),
+                        isCompactContext: true,
+                        placeholder: "-"
+                    )
                 }
             }
         }
@@ -151,12 +159,5 @@ struct AppearancePreviewCard: View {
             }
     }
 
-    private func ratingPill(text: String, compact: Bool = false) -> some View {
-        Text(text)
-            .font(compact ? .subheadline.weight(.semibold) : .headline)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(displaySettings.tintColor.opacity(compact ? 0.12 : 0.10))
-            .clipShape(RoundedRectangle(cornerRadius: displaySettings.pillCornerRadius))
-    }
+    // Rating-Badge wird über `RatingBadgeView` gerendert (Style kommt aus `DisplaySettings`).
 }
