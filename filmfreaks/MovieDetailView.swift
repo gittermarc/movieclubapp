@@ -18,28 +18,28 @@ struct MovieDetailView: View {
 
     // Watch Providers Region (Land)
     @AppStorage(WatchProvidersRegionSettings.storageKey)
-    private var watchProvidersRegionCode: String = WatchProvidersRegionSettings.deviceRegionCode()
+    var watchProvidersRegionCode: String = WatchProvidersRegionSettings.deviceRegionCode()
 
     var isBacklog: Bool
 
-    @State private var localWatchedDate: Date = Date()
-    @State private var localWatchedLocation: String = ""
-    @State private var localScores: [RatingCriterion: Int] = [:]
-    @State private var localSuggestedBy: String = ""
-    @State private var localComment: String = ""
-    @State private var localFazitScore: Int? = nil
+    @State var localWatchedDate: Date = Date()
+    @State var localWatchedLocation: String = ""
+    @State var localScores: [RatingCriterion: Int] = [:]
+    @State var localSuggestedBy: String = ""
+    @State var localComment: String = ""
+    @State var localFazitScore: Int? = nil
 
     // TMDb Details
-    @State private var details: TMDbMovieDetails?
-    @State private var isLoadingDetails = false
-    @State private var detailsError: String?
+    @State var details: TMDbMovieDetails?
+    @State var isLoadingDetails = false
+    @State var detailsError: String?
 
     // Streaming-Anbieter (Watch Providers)
-    @State private var watchProvidersCountry: TMDbWatchProvidersCountry? = nil
-    @State private var watchProvidersLink: URL? = nil
-    @State private var isLoadingWatchProviders: Bool = false
-    @State private var didLoadWatchProviders: Bool = false
-    @State private var showWatchProvidersRegionPicker: Bool = false
+    @State var watchProvidersCountry: TMDbWatchProvidersCountry? = nil
+    @State var watchProvidersLink: URL? = nil
+    @State var isLoadingWatchProviders: Bool = false
+    @State var didLoadWatchProviders: Bool = false
+    @State var showWatchProvidersRegionPicker: Bool = false
 
     /// Effektives Land für Watch Providers (leer == automatisch/Device)
     private var effectiveWatchProvidersRegionCode: String {
@@ -52,125 +52,30 @@ struct MovieDetailView: View {
     }
 
     // Aufklapp-Status der Einzelbewertungen
-    @State private var expandedRatingIds: Set<UUID> = []
+    @State var expandedRatingIds: Set<UUID> = []
 
     // Overview expand
-    @State private var isOverviewExpanded = false
+    @State var isOverviewExpanded = false
 
     // Cast klickbar
-    @State private var selectedPerson: SelectedPerson?
+    @State var selectedPerson: SelectedPerson?
 
     // Save-UX
-    @State private var hasPendingRatingChanges = false
+    @State var hasPendingRatingChanges = false
 
     // Ratings Sheet
-    @State private var showRatingsSheet = false
+    @State var showRatingsSheet = false
 
     // Trailer Fallback: In-App (SFSafariViewController)
-    @State private var isTrailerSafariShown = false
+    @State var isTrailerSafariShown = false
 
     // Save-Toast
-    @State private var showSaveToast = false
-    @State private var saveToastText = "Bewertung gespeichert"
-    @State private var toastDismissWorkItem: DispatchWorkItem?
+    @State var showSaveToast = false
+    @State var saveToastText = "Bewertung gespeichert"
+    @State var toastDismissWorkItem: DispatchWorkItem?
 
     // MARK: - Metadaten aus TMDb
-
-    private var director: String? {
-        details?.credits?.crew.first(where: { ($0.job ?? "").lowercased() == "director" })?.name
-    }
-
-    private var castList: [TMDbCast] {
-        Array(details?.credits?.cast.prefix(12) ?? [])
-    }
-
-    private var keywordsText: String? {
-        guard let all = details?.keywords?.allKeywords, !all.isEmpty else { return nil }
-        let names = all.map { $0.name }
-        return names.joined(separator: ", ")
-    }
-
-    private var genreNames: [String] {
-        details?.genres?
-            .map { $0.name }
-            .filter { !$0.isEmpty }
-        ?? []
-    }
-
-    private var trailerVideo: TMDbVideo? {
-        guard let videos = details?.videos?.results else { return nil }
-        let youtube = videos.filter { $0.site.lowercased() == "youtube" }
-
-        if let trailer = youtube.first(where: { $0.type.lowercased() == "trailer" }) { return trailer }
-        if let teaser = youtube.first(where: { $0.type.lowercased() == "teaser" }) { return teaser }
-        return youtube.first
-    }
-
-    private var trailerKey: String? {
-        trailerVideo?.key
-    }
-
-    private var trailerWatchURL: URL? {
-        guard let key = trailerKey else { return nil }
-        return URL(string: "https://www.youtube.com/watch?v=\(key)")
-    }
-
-    private var runtimeText: String? {
-        if let runtime = details?.runtime {
-            return "\(runtime) Minuten"
-        }
-        return nil
-    }
-
-    private var taglineText: String? {
-        let t = (details?.tagline ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        return t.isEmpty ? nil : t
-    }
-
-    private var overviewText: String? {
-        let t = (details?.overview ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        return t.isEmpty ? nil : t
-    }
-
-    private var releaseDateText: String? {
-        guard let raw = details?.release_date, !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
-        let inFmt = DateFormatter()
-        inFmt.locale = Locale(identifier: "en_US_POSIX")
-        inFmt.dateFormat = "yyyy-MM-dd"
-
-        let outFmt = DateFormatter()
-        outFmt.locale = Locale(identifier: "de_DE")
-        outFmt.dateFormat = "dd.MM.yyyy"
-
-        if let date = inFmt.date(from: raw) {
-            return outFmt.string(from: date)
-        } else {
-            return raw
-        }
-    }
-
-    private var originalTitleText: String? {
-        let o = (details?.original_title ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !o.isEmpty else { return nil }
-        if o.caseInsensitiveCompare(details?.title ?? "") == .orderedSame { return nil }
-        if o.caseInsensitiveCompare(movie.title) == .orderedSame { return nil }
-        return o
-    }
-
-    private var originalLanguageText: String? {
-        let code = (details?.original_language ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !code.isEmpty else { return nil }
-        let locale = Locale(identifier: "de_DE")
-        return locale.localizedString(forLanguageCode: code)?.capitalized ?? code.uppercased()
-    }
-
-    // MARK: - Bewertungen (Übersicht)
-
-    private var sortedRatings: [Rating] {
-        movie.ratings.sorted {
-            $0.reviewerName.localizedCaseInsensitiveCompare($1.reviewerName) == .orderedAscending
-        }
-    }
+    // (ausgelagert in MovieDetailView+Derived.swift)
 
     // MARK: - Body
 
@@ -508,54 +413,19 @@ struct MovieDetailView: View {
         }
         .onAppear { handleOnAppear() }
         .onChange(of: localWatchedDate) { _, newDate in
-            guard !isBacklog else { return }
-            if movie.watchedDate != newDate {
-                movie.watchedDate = newDate
-            }
+            handleWatchedDateChange(newDate)
         }
         .onChange(of: localWatchedLocation) { _, newLocation in
-            guard !isBacklog else { return }
-            let trimmed = newLocation.trimmingCharacters(in: .whitespacesAndNewlines)
-            let newValue: String? = trimmed.isEmpty ? nil : trimmed
-            if movie.watchedLocation != newValue {
-                movie.watchedLocation = newValue
-            }
+            handleWatchedLocationChange(newLocation)
         }
         .onChange(of: localSuggestedBy) { _, newSuggested in
-            let trimmed = newSuggested.trimmingCharacters(in: .whitespacesAndNewlines)
-            let newValue: String? = trimmed.isEmpty ? nil : trimmed
-            if movie.suggestedBy != newValue {
-                movie.suggestedBy = newValue
-            }
+            handleSuggestedByChange(newSuggested)
         }
         .onChange(of: userStore.selectedUser?.id) { _, _ in
-            loadExistingRatingForSelectedUser()
+            handleSelectedUserChange()
         }
         .onChange(of: watchProvidersRegionCode) { _, _ in
-            guard movie.tmdbId != nil else { return }
-            Task { await reloadWatchProvidersOnly() }
-        }
-    }
-
-    private func handleOnAppear() {
-        // Onboarding: zählt, wie oft die Detailansicht geöffnet wurde (pro Gruppe)
-        OnboardingProgress.incrementDetailOpenCount(forGroupId: movie.groupId ?? movieStore.currentGroupId)
-
-        if let existing = movie.watchedDate {
-            localWatchedDate = existing
-        } else {
-            localWatchedDate = Date()
-            if !isBacklog {
-                movie.watchedDate = localWatchedDate
-            }
-        }
-
-        localWatchedLocation = movie.watchedLocation ?? ""
-        localSuggestedBy = movie.suggestedBy ?? ""
-        loadExistingRatingForSelectedUser()
-
-        if movie.tmdbId != nil {
-            Task { await loadDetails() }
+            handleWatchProvidersRegionChange()
         }
     }
 
@@ -579,7 +449,7 @@ struct MovieDetailView: View {
         .padding(.horizontal, 16)
     }
 
-    private func presentSaveToast(_ text: String = "Bewertung gespeichert") {
+    func presentSaveToast(_ text: String = "Bewertung gespeichert") {
         saveToastText = text
         toastDismissWorkItem?.cancel()
 
@@ -598,161 +468,16 @@ struct MovieDetailView: View {
 
     // MARK: - Haptics
 
-    private func hapticSuccess() {
+    func hapticSuccess() {
         let gen = UINotificationFeedbackGenerator()
         gen.prepare()
         gen.notificationOccurred(.success)
     }
 
-    private func hapticWarning() {
+    func hapticWarning() {
         let gen = UINotificationFeedbackGenerator()
         gen.prepare()
         gen.notificationOccurred(.warning)
-    }
-
-    // MARK: - Options
-
-    private var locationOptions: [String] {
-        var options: [String] = []
-
-        func appendUnique(_ value: String) {
-            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty else { return }
-            if !options.contains(trimmed) {
-                options.append(trimmed)
-            }
-        }
-
-        appendUnique("Heimkino")
-        appendUnique("Kino")
-
-        for name in userStore.users.map({ $0.name }) {
-            appendUnique(name)
-        }
-
-        return options
-    }
-
-    private var suggestedByOptions: [String] {
-        userStore.users.map { $0.name }
-    }
-
-    // MARK: - Rating Helpers
-
-    private func normalizedScoresFromLocal() -> [RatingCriterion: Int] {
-        var scores: [RatingCriterion: Int] = [:]
-        for criterion in RatingCriterion.allCases {
-            scores[criterion] = localScores[criterion] ?? 0
-        }
-        return scores
-    }
-
-    private func normalizedCommentFromLocal() -> String? {
-        let trimmedComment = localComment.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmedComment.isEmpty ? nil : trimmedComment
-    }
-
-    private func isAllDefault(scores: [RatingCriterion: Int], comment: String?, fazit: Int?) -> Bool {
-        let allZero = RatingCriterion.allCases.allSatisfy { (scores[$0] ?? 0) == 0 }
-        return allZero && comment == nil && fazit == nil
-    }
-
-    private func saveRating() {
-        guard let selectedUser = userStore.selectedUser else { return }
-
-        let scores = normalizedScoresFromLocal()
-        let finalComment = normalizedCommentFromLocal()
-        let fazit = localFazitScore
-        let name = selectedUser.name
-
-        let existingIndex = movie.ratings.firstIndex(where: { r in
-            if let rid = r.reviewerId { return rid == selectedUser.id }
-            return r.reviewerName.trimmingCharacters(in: .whitespacesAndNewlines)
-                .caseInsensitiveCompare(name.trimmingCharacters(in: .whitespacesAndNewlines)) == .orderedSame
-        })
-        let existingRating: Rating? = existingIndex.map { movie.ratings[$0] }
-
-        if existingRating == nil, isAllDefault(scores: scores, comment: finalComment, fazit: fazit) {
-            hasPendingRatingChanges = false
-            hapticWarning()
-            presentSaveToast("Keine Änderungen zum Speichern festgestellt")
-            return
-        }
-
-        var newRating = Rating(
-            reviewerId: selectedUser.id,
-            reviewerName: name,
-            scores: scores,
-            comment: finalComment,
-            fazitScore: fazit
-        )
-
-        if let index = existingIndex {
-            let old = movie.ratings[index]
-            newRating.id = old.id
-
-            let oldComment = (old.comment ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-            let newComment = (newRating.comment ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-
-            let noScoreChanges = old.scores == newRating.scores
-            let noCommentChanges = oldComment == newComment
-            let noFazitChanges = old.fazitScore == newRating.fazitScore
-
-            if noScoreChanges && noCommentChanges && noFazitChanges {
-                hasPendingRatingChanges = false
-                hapticWarning()
-                presentSaveToast("Keine Änderungen zum Speichern festgestellt")
-                return
-            }
-        }
-
-        Task {
-            let ok = await movieStore.upsertRating(for: movie.id, rating: newRating)
-
-            hasPendingRatingChanges = false
-
-            if ok {
-                hapticSuccess()
-                presentSaveToast("Bewertung gespeichert")
-            } else {
-                hapticWarning()
-                presentSaveToast("Bewertung gespeichert – iCloud Sync fehlgeschlagen")
-            }
-        }
-    }
-
-    private func loadExistingRatingForSelectedUser() {
-        guard let selectedUser = userStore.selectedUser else {
-            localScores = [:]
-            localComment = ""
-            localFazitScore = nil
-            hasPendingRatingChanges = false
-            return
-        }
-
-        if let rating = movie.ratings.first(where: { r in
-            if let rid = r.reviewerId { return rid == selectedUser.id }
-            return r.reviewerName.trimmingCharacters(in: .whitespacesAndNewlines)
-                .caseInsensitiveCompare(selectedUser.name.trimmingCharacters(in: .whitespacesAndNewlines)) == .orderedSame
-        }) {
-            var scores: [RatingCriterion: Int] = [:]
-            for criterion in RatingCriterion.allCases {
-                scores[criterion] = rating.scores[criterion] ?? 0
-            }
-            localScores = scores
-            localComment = rating.comment ?? ""
-            localFazitScore = rating.fazitScore
-        } else {
-            var scores: [RatingCriterion: Int] = [:]
-            for criterion in RatingCriterion.allCases {
-                scores[criterion] = 0
-            }
-            localScores = scores
-            localComment = ""
-            localFazitScore = nil
-        }
-
-        hasPendingRatingChanges = false
     }
 
     // MARK: - Backlog
@@ -771,157 +496,7 @@ struct MovieDetailView: View {
     }
 
     // MARK: - TMDb Load
-
-    private func loadDetails() async {
-        guard let id = movie.tmdbId else { return }
-
-        await MainActor.run {
-            isLoadingDetails = true
-            detailsError = nil
-
-            isLoadingWatchProviders = true
-            didLoadWatchProviders = false
-            watchProvidersCountry = nil
-            watchProvidersLink = nil
-        }
-
-        do {
-            async let detailsTask = TMDbAPI.shared.fetchMovieDetails(id: id)
-            let region = WatchProvidersRegionSettings.effectiveRegionCode(from: watchProvidersRegionCode)
-            async let providersTask = TMDbAPI.shared.fetchMovieWatchProviders(id: id, region: region)
-
-            let fetched = try await detailsTask
-            let providersCountry = try? await providersTask
-
-            await MainActor.run {
-                self.details = fetched
-
-                let genreNames = fetched.genres?
-                    .map { $0.name.trimmingCharacters(in: .whitespacesAndNewlines) }
-                    .filter { !$0.isEmpty }
-
-                let genreIds = fetched.genres?.map { $0.id }
-
-                let keywordNames = fetched.keywords?.allKeywords
-                    .map { $0.name.trimmingCharacters(in: .whitespacesAndNewlines) }
-                    .filter { !$0.isEmpty }
-
-                let keywordIds = fetched.keywords?.allKeywords.map { $0.id }
-
-                // Cast als {personId, name} persistieren
-                let castMembers = fetched.credits?.cast
-                    .prefix(30)
-                    .map {
-                        CastMember(
-                            personId: $0.id,
-                            name: $0.name.trimmingCharacters(in: .whitespacesAndNewlines)
-                        )
-                    }
-                    .filter { !$0.name.isEmpty }
-
-                // Directors als {personId, name} persistieren (für Director-Goals)
-                let directorMembers = fetched.credits?.crew
-                    .filter { ($0.job ?? "").lowercased() == "director" }
-                    .map {
-                        CastMember(
-                            personId: $0.id,
-                            name: $0.name.trimmingCharacters(in: .whitespacesAndNewlines)
-                        )
-                    }
-                    .filter { !$0.name.isEmpty }
-
-                if let genreNames, !genreNames.isEmpty {
-                    self.movie.genres = genreNames
-                }
-
-                if let genreIds, !genreIds.isEmpty {
-                    self.movie.genreIds = genreIds
-                }
-
-                if let keywordNames, !keywordNames.isEmpty {
-                    self.movie.keywords = keywordNames
-                }
-
-                if let keywordIds, !keywordIds.isEmpty {
-                    self.movie.keywordIds = keywordIds
-                }
-
-                if let castMembers, !castMembers.isEmpty {
-                    self.movie.cast = castMembers
-                }
-
-                if let directorMembers, !directorMembers.isEmpty {
-                    self.movie.directors = directorMembers
-                }
-
-                self.movie.tmdbRating = fetched.vote_average
-                if let posterPath = fetched.poster_path {
-                    self.movie.posterPath = posterPath
-                }
-
-                // Watch Providers
-                self.watchProvidersCountry = providersCountry
-                if let linkString = providersCountry?.link {
-                    self.watchProvidersLink = URL(string: linkString)
-                } else {
-                    self.watchProvidersLink = nil
-                }
-                self.isLoadingWatchProviders = false
-                self.didLoadWatchProviders = true
-
-                self.isLoadingDetails = false
-            }
-        } catch TMDbError.missingAPIKey {
-            await MainActor.run {
-                self.detailsError = "TMDb API-Key fehlt. Bitte TMDB_API_KEY in der Info.plist setzen."
-                self.isLoadingDetails = false
-
-                self.isLoadingWatchProviders = false
-                self.didLoadWatchProviders = true
-            }
-        } catch {
-            await MainActor.run {
-                self.detailsError = "Fehler beim Laden der Filmdetails."
-                self.isLoadingDetails = false
-
-                self.isLoadingWatchProviders = false
-                self.didLoadWatchProviders = true
-            }
-        }
-    }
-
-    private func reloadWatchProvidersOnly() async {
-        guard let id = movie.tmdbId else { return }
-
-        await MainActor.run {
-            isLoadingWatchProviders = true
-            didLoadWatchProviders = false
-            watchProvidersCountry = nil
-            watchProvidersLink = nil
-        }
-
-        do {
-            let region = WatchProvidersRegionSettings.effectiveRegionCode(from: watchProvidersRegionCode)
-            let providersCountry = try await TMDbAPI.shared.fetchMovieWatchProviders(id: id, region: region)
-
-            await MainActor.run {
-                self.watchProvidersCountry = providersCountry
-                if let linkString = providersCountry?.link {
-                    self.watchProvidersLink = URL(string: linkString)
-                } else {
-                    self.watchProvidersLink = nil
-                }
-
-                self.isLoadingWatchProviders = false
-                self.didLoadWatchProviders = true
-            }
-        } catch {
-            await MainActor.run {
-                self.isLoadingWatchProviders = false
-                self.didLoadWatchProviders = true
-            }
-        }
-    }
+    // (ausgelagert in MovieDetailView+TMDb.swift)
 }
 
 // MARK: - Preview
