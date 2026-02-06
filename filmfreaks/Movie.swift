@@ -42,6 +42,10 @@ struct Rating: Identifiable, Codable, Equatable {
     /// ✅ NEU: Fazit pro User (1–10). nil bedeutet: nicht vergeben.
     var fazitScore: Int? = nil
 
+    /// Zeitpunkt der letzten Bewertungsaenderung (aus CloudKit Record `updatedAt`).
+    /// Optional, damit Legacy-Payloads weiterhin problemlos decodieren.
+    var updatedAt: Date? = nil
+
     /// Durchschnitt über alle bewerteten Kriterien in Sternen (0–3, ggf. z.B. 2.3)
     /// Hinweis: 0 zählt als „nicht bewertet“ und fließt nicht in den Durchschnitt ein.
     var averageStars: Double {
@@ -91,6 +95,14 @@ struct Movie: Identifiable, Codable, Equatable {
 
     var suggestedBy: String?
 
+    /// Zeitpunkt, zu dem der Film in die Gruppe aufgenommen wurde (best-effort).
+    /// Wird beim Hinzufuegen gesetzt und bleibt danach stabil.
+    var addedAt: Date? = nil
+
+    /// Wer den Film hinzugefuegt hat (optional; fuer Social/Activity-Feed).
+    var addedById: UUID? = nil
+    var addedByName: String? = nil
+
     /// ✅ Cast wird als [{personId, name}] gespeichert (eindeutig, skalierbar)
     var cast: [CastMember]?
 
@@ -116,7 +128,10 @@ struct Movie: Identifiable, Codable, Equatable {
         keywordIds: [Int]? = nil,
         suggestedBy: String? = nil,
         cast: [CastMember]? = nil,
-        directors: [CastMember]? = nil
+        directors: [CastMember]? = nil,
+        addedAt: Date? = nil,
+        addedById: UUID? = nil,
+        addedByName: String? = nil
     ) {
         self.id = id
         self.title = title
@@ -134,6 +149,10 @@ struct Movie: Identifiable, Codable, Equatable {
         self.suggestedBy = suggestedBy
         self.cast = cast
         self.directors = directors
+
+        self.addedAt = addedAt
+        self.addedById = addedById
+        self.addedByName = addedByName
     }
 
     // MARK: - Codable (inkl. Migration)
@@ -144,6 +163,7 @@ struct Movie: Identifiable, Codable, Equatable {
         case genres, genreIds
         case keywords, keywordIds
         case suggestedBy
+        case addedAt, addedById, addedByName
         case cast
         case directors
         case groupId, groupName
@@ -169,6 +189,11 @@ struct Movie: Identifiable, Codable, Equatable {
         self.keywordIds = try c.decodeIfPresent([Int].self, forKey: .keywordIds)
 
         self.suggestedBy = try c.decodeIfPresent(String.self, forKey: .suggestedBy)
+
+        self.addedAt = try c.decodeIfPresent(Date.self, forKey: .addedAt)
+        self.addedById = try c.decodeIfPresent(UUID.self, forKey: .addedById)
+        self.addedByName = try c.decodeIfPresent(String.self, forKey: .addedByName)
+
         self.groupId = try c.decodeIfPresent(String.self, forKey: .groupId)
         self.groupName = try c.decodeIfPresent(String.self, forKey: .groupName)
 
@@ -209,6 +234,11 @@ struct Movie: Identifiable, Codable, Equatable {
         try c.encodeIfPresent(keywordIds, forKey: .keywordIds)
 
         try c.encodeIfPresent(suggestedBy, forKey: .suggestedBy)
+
+        try c.encodeIfPresent(addedAt, forKey: .addedAt)
+        try c.encodeIfPresent(addedById, forKey: .addedById)
+        try c.encodeIfPresent(addedByName, forKey: .addedByName)
+
         try c.encodeIfPresent(cast, forKey: .cast)
         try c.encodeIfPresent(directors, forKey: .directors)
         try c.encodeIfPresent(groupId, forKey: .groupId)

@@ -584,22 +584,25 @@ class MovieStore: ObservableObject {
     /// Speichert/aktualisiert die Bewertung des aktuellen Users für einen Film.
     /// - Wichtig: Ratings werden in CloudKit als eigene Records gespeichert (MovieRating).
     func upsertRating(for movieId: UUID, rating: Rating) async -> Bool {
+        var stampedRating = rating
+        stampedRating.updatedAt = Date()
+
         // 1) Lokal in die UI-Models mergen (für sofortiges Feedback + Offline)
         if let idx = movies.firstIndex(where: { $0.id == movieId }) {
             var m = movies[idx]
-            m.ratings = mergeRatings(existing: m.ratings, incoming: [rating])
+            m.ratings = mergeRatings(existing: m.ratings, incoming: [stampedRating])
             movies[idx] = m
         }
         if let idx = backlogMovies.firstIndex(where: { $0.id == movieId }) {
             var m = backlogMovies[idx]
-            m.ratings = mergeRatings(existing: m.ratings, incoming: [rating])
+            m.ratings = mergeRatings(existing: m.ratings, incoming: [stampedRating])
             backlogMovies[idx] = m
         }
 
         // 2) Cloud speichern
         guard let cloudRatingStore else { return true }
         do {
-            try await cloudRatingStore.saveRating(rating, movieId: movieId, groupId: currentGroupId)
+            try await cloudRatingStore.saveRating(stampedRating, movieId: movieId, groupId: currentGroupId)
             return true
         } catch {
             print("CloudKit rating save error: \(error)")

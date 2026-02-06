@@ -37,6 +37,10 @@ struct ContentView: View {
     // MARK: - UI Density Metrics
     private var m: DisplaySettings.LayoutMetrics { displaySettings.metrics }
 
+    private var activityPreviewEvents: [GroupActivityEvent] {
+        movieStore.activityEvents(displayMode: displaySettings.ratingDisplayMode, limit: 3)
+    }
+
     // MARK: - Onboarding (derived state)
 
     private var onboarding: ContentOnboarding.State {
@@ -160,6 +164,8 @@ struct ContentView: View {
                         hasActiveMemberSelected: hasActiveMemberSelected,
                         onTapGroup: { route = .groupSettings },
                         onTapActiveMember: { route = .users },
+                        activityPreviewEvents: activityPreviewEvents,
+                        onTapActivity: { route = .activity },
                         shouldShowOnboardingChecklist: onboarding.shouldShowChecklist,
                         onboardingChecklistExpanded: $onboardingChecklistExpanded,
                         onboardingStepsCompletedCount: onboarding.stepsCompletedCount,

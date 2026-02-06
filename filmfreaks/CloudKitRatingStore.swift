@@ -135,6 +135,9 @@ struct CloudKitRatingStore {
                 var ratingToEncode = item.rating
                 if ratingToEncode.reviewerId == nil { ratingToEncode.reviewerId = reviewerId }
 
+                let now = Date()
+                ratingToEncode.updatedAt = now
+
                 let record = CKRecord(recordType: recordType, recordID: id)
                 let data = try JSONEncoder().encode(ratingToEncode)
                 record[payloadKey] = data as CKRecordValue
@@ -142,7 +145,7 @@ struct CloudKitRatingStore {
                 record[groupIdKey] = (groupId?.isEmpty == false) ? (groupId! as CKRecordValue) : nil
                 record[reviewerIdKey] = reviewerId.uuidString.lowercased() as CKRecordValue
                 record[reviewerNameKey] = ratingToEncode.reviewerName as CKRecordValue
-                record[updatedAtKey] = Date() as CKRecordValue
+                record[updatedAtKey] = now as CKRecordValue
 
                 records.append(record)
             }
@@ -192,6 +195,9 @@ struct CloudKitRatingStore {
 
             var rating = try JSONDecoder().decode(Rating.self, from: data)
 
+            // Timestamp from the CloudKit record (authoritative).
+            rating.updatedAt = record[updatedAtKey] as? Date
+
             if rating.reviewerId == nil {
                 if let ridString = record[reviewerIdKey] as? String,
                    let rid = UUID(uuidString: ridString) {
@@ -235,6 +241,9 @@ struct CloudKitRatingStore {
                 ratingToEncode.reviewerId = reviewerId
             }
 
+            let now = Date()
+            ratingToEncode.updatedAt = now
+
             let data = try JSONEncoder().encode(ratingToEncode)
             record[payloadKey] = data as CKRecordValue
             record[movieIdKey] = movieId.uuidString as CKRecordValue
@@ -251,7 +260,7 @@ struct CloudKitRatingStore {
 
             record[reviewerIdKey] = reviewerId.uuidString.lowercased() as CKRecordValue
             record[reviewerNameKey] = ratingToEncode.reviewerName as CKRecordValue
-            record[updatedAtKey] = Date() as CKRecordValue
+            record[updatedAtKey] = now as CKRecordValue
             return record
         }
 
@@ -351,6 +360,9 @@ struct CloudKitRatingStore {
             else { continue }
 
             var rating = try JSONDecoder().decode(Rating.self, from: data)
+
+            // Timestamp from the CloudKit record (authoritative).
+            rating.updatedAt = record[updatedAtKey] as? Date
 
             // Backfill reviewerId if missing in payload (legacy records)
             if rating.reviewerId == nil {

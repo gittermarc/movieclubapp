@@ -15,6 +15,7 @@ internal enum ContentRoute: String, Identifiable {
     case users
     case stats
     case timeline
+    case activity
     case goals
     case groupSettings
 
@@ -116,6 +117,13 @@ private struct ContentRoutingModifier: ViewModifier {
                     .environmentObject(userStore)
             )
 
+        case .activity:
+            themed(
+                GroupActivityListView()
+                    .environmentObject(movieStore)
+                    .environmentObject(displaySettings)
+            )
+
         case .goals:
             themed(
                 GoalsView()
@@ -148,6 +156,17 @@ private struct ContentRoutingModifier: ViewModifier {
         movieWithGroup.groupId = movieStore.currentGroupId
         movieWithGroup.groupName = movieStore.currentGroupName
 
+        // Activity-Meta: wer hat hinzugefuegt + wann.
+        if movieWithGroup.addedAt == nil {
+            movieWithGroup.addedAt = Date()
+        }
+        if (movieWithGroup.addedByName?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true) {
+            if let u = userStore.selectedUser {
+                movieWithGroup.addedById = u.id
+                movieWithGroup.addedByName = u.name
+            }
+        }
+
         // Eindeutigkeit weiterhin über Titel + Jahr
         let isSame: (Movie) -> Bool = { movie in
             movie.title == movieWithGroup.title && movie.year == movieWithGroup.year
@@ -166,6 +185,17 @@ private struct ContentRoutingModifier: ViewModifier {
         var movieWithGroup = newMovie
         movieWithGroup.groupId = movieStore.currentGroupId
         movieWithGroup.groupName = movieStore.currentGroupName
+
+        // Activity-Meta: wer hat hinzugefuegt + wann.
+        if movieWithGroup.addedAt == nil {
+            movieWithGroup.addedAt = Date()
+        }
+        if (movieWithGroup.addedByName?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true) {
+            if let u = userStore.selectedUser {
+                movieWithGroup.addedById = u.id
+                movieWithGroup.addedByName = u.name
+            }
+        }
 
         let isSame: (Movie) -> Bool = { movie in
             movie.title == movieWithGroup.title && movie.year == movieWithGroup.year
