@@ -12,10 +12,18 @@ struct GroupActivityTeaserView: View {
 
     @EnvironmentObject private var displaySettings: DisplaySettings
 
+    /// Default is collapsed to save vertical space.
+    @AppStorage("groupActivityTeaserExpanded") private var isExpanded: Bool = false
+
     let events: [GroupActivityEvent]
     let onOpenAll: () -> Void
 
     private var m: DisplaySettings.LayoutMetrics { displaySettings.metrics }
+
+    private var visibleEvents: [GroupActivityEvent] {
+        let limit = isExpanded ? 3 : 1
+        return Array(events.prefix(limit))
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -24,11 +32,15 @@ struct GroupActivityTeaserView: View {
             if events.isEmpty {
                 emptyState
             } else {
-                ForEach(events.prefix(3)) { e in
+                ForEach(visibleEvents) { e in
                     GroupActivityRowView(event: e)
-                    if e.id != events.prefix(3).last?.id {
+                    if e.id != visibleEvents.last?.id {
                         Divider().opacity(0.6)
                     }
+                }
+
+                if !isExpanded, events.count > visibleEvents.count {
+                    footerHint
                 }
             }
         }
@@ -41,13 +53,27 @@ struct GroupActivityTeaserView: View {
             RoundedRectangle(cornerRadius: displaySettings.cardCornerRadius)
                 .stroke(Color.primary.opacity(0.06), lineWidth: 1)
         )
+        .animation(.snappy, value: isExpanded)
     }
 
     private var header: some View {
-        HStack(alignment: .firstTextBaseline) {
-            Label("Zuletzt passiert", systemImage: "sparkles")
-                .font(.headline)
-                .symbolRenderingMode(.hierarchical)
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Button(action: toggleExpanded) {
+                HStack(spacing: 8) {
+                    Label("Zuletzt passiert", systemImage: "sparkles")
+                        .font(.headline)
+                        .symbolRenderingMode(.hierarchical)
+
+                    Image(systemName: "chevron.down")
+                        .font(.caption.weight(.semibold))
+                        .rotationEffect(.degrees(isExpanded ? 180 : 0))
+                        .foregroundStyle(.secondary)
+                        .accessibilityHidden(true)
+                }
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(isExpanded ? "Aktivitäten einklappen" : "Aktivitäten ausklappen")
+            .accessibilityHint("Blendet die letzten Gruppenaktionen ein oder aus.")
 
             Spacer(minLength: 8)
 
@@ -61,6 +87,25 @@ struct GroupActivityTeaserView: View {
             .buttonStyle(.plain)
             .foregroundStyle(displaySettings.tintColor)
         }
+    }
+
+    private var footerHint: some View {
+        HStack(spacing: 8) {
+            let remaining = max(0, events.count - visibleEvents.count)
+            Text("Weitere \(remaining)")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Spacer(minLength: 0)
+
+            Button(action: toggleExpanded) {
+                Text("Ausklappen")
+                    .font(.caption.weight(.semibold))
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(displaySettings.tintColor)
+        }
+        .padding(.top, 2)
     }
 
     private var emptyState: some View {
@@ -80,5 +125,9 @@ struct GroupActivityTeaserView: View {
             Spacer(minLength: 0)
         }
         .padding(.vertical, 2)
+    }
+
+    private func toggleExpanded() {
+        isExpanded.toggle()
     }
 }
