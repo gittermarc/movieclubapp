@@ -438,9 +438,10 @@ struct GoalsView: View {
         case .decade:
             ZStack {
                 RoundedRectangle(cornerRadius: 10)
-                    .fill(Color.orange.opacity(0.15))
+                    .fill(displaySettings.tintSoftBackground)
                 Image(systemName: ViewingCustomGoalType.decade.systemImage)
-                    .foregroundStyle(.orange)
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(.tint)
             }
             .frame(width: 44, height: 44)
 
@@ -476,18 +477,20 @@ struct GoalsView: View {
         case .genre:
             ZStack {
                 RoundedRectangle(cornerRadius: 10)
-                    .fill(Color.purple.opacity(0.14))
+                    .fill(displaySettings.tintSoftBackground)
                 Image(systemName: ViewingCustomGoalType.genre.systemImage)
-                    .foregroundStyle(.purple)
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(.tint)
             }
             .frame(width: 44, height: 44)
 
         case .keyword:
             ZStack {
                 RoundedRectangle(cornerRadius: 10)
-                    .fill(Color.green.opacity(0.14))
+                    .fill(displaySettings.tintSoftBackground)
                 Image(systemName: ViewingCustomGoalType.keyword.systemImage)
-                    .foregroundStyle(.green)
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(.tint)
             }
             .frame(width: 44, height: 44)
         }
