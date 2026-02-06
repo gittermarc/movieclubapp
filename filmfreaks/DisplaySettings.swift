@@ -30,6 +30,7 @@ final class DisplaySettings: ObservableObject {
         static let showRatings = "DisplaySettings_ShowRatings"
         static let showTMDbRatingsInLists = "DisplaySettings_ShowTMDbRatingsInLists"
         static let ratingDisplayMode = "DisplaySettings_RatingDisplayMode"
+        static let showMovieYearInLists = "DisplaySettings_ShowMovieYearInLists"
         static let showWatchedDate = "DisplaySettings_ShowWatchedDate"
         static let showWatchedLocation = "DisplaySettings_ShowWatchedLocation"
         static let showSuggestedBy = "DisplaySettings_ShowSuggestedBy"
@@ -420,6 +421,11 @@ final class DisplaySettings: ObservableObject {
         didSet { defaults.set(ratingDisplayMode.rawValue, forKey: Keys.ratingDisplayMode) }
     }
 
+    /// Wenn deaktiviert, wird in Listen das Erscheinungsjahr nicht angezeigt.
+    @Published var showMovieYearInLists: Bool {
+        didSet { defaults.set(showMovieYearInLists, forKey: Keys.showMovieYearInLists) }
+    }
+
     @Published var showWatchedDate: Bool {
         didSet { defaults.set(showWatchedDate, forKey: Keys.showWatchedDate) }
     }
@@ -479,6 +485,8 @@ final class DisplaySettings: ObservableObject {
         let modeRaw = defaults.string(forKey: Keys.ratingDisplayMode) ?? RatingDisplayMode.ratingAverage.rawValue
         self.ratingDisplayMode = RatingDisplayMode(rawValue: modeRaw) ?? .ratingAverage
 
+        self.showMovieYearInLists = defaults.object(forKey: Keys.showMovieYearInLists) as? Bool ?? true
+
         self.showWatchedDate = defaults.object(forKey: Keys.showWatchedDate) as? Bool ?? true
         self.showWatchedLocation = defaults.object(forKey: Keys.showWatchedLocation) as? Bool ?? true
         self.showSuggestedBy = defaults.object(forKey: Keys.showSuggestedBy) as? Bool ?? true
@@ -499,6 +507,7 @@ final class DisplaySettings: ObservableObject {
         showRatings = true
         showTMDbRatingsInLists = true
         ratingDisplayMode = .ratingAverage
+        showMovieYearInLists = true
         showWatchedDate = true
         showWatchedLocation = true
         showSuggestedBy = true

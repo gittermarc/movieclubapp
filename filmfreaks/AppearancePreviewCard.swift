@@ -47,6 +47,14 @@ struct AppearancePreviewCard: View {
 
     @ViewBuilder
     private var previewDetailRow: some View {
+        let metaLine: String? = {
+            var parts: [String] = []
+            if displaySettings.showMovieYearInLists { parts.append("2010") }
+            if displaySettings.showWatchedDate { parts.append("03.02.26") }
+            if displaySettings.showWatchedLocation { parts.append("Couch") }
+            return parts.isEmpty ? nil : parts.joined(separator: " • ")
+        }()
+
         let row = HStack(spacing: m.rowHStackSpacing) {
             posterPlaceholder(size: CGSize(width: 50, height: 75))
 
@@ -55,22 +63,10 @@ struct AppearancePreviewCard: View {
                     .font(.headline)
                     .lineLimit(1)
 
-                HStack(spacing: 8) {
-                    Text("2010")
+                if let metaLine {
+                    Text(metaLine)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
-
-                    if displaySettings.showWatchedDate {
-                        Text("• 03.02.26")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    if displaySettings.showWatchedLocation {
-                        Text("• Couch")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
                 }
 
                 if displaySettings.showSuggestedBy {

@@ -61,6 +61,7 @@ extension DisplaySettings {
                     showRatings: true,
                     showTMDbRatingsInLists: true,
                     ratingDisplayMode: .ratingAverage,
+                    showMovieYearInLists: true,
                     showWatchedDate: true,
                     showWatchedLocation: true,
                     showSuggestedBy: true,
@@ -78,6 +79,7 @@ extension DisplaySettings {
                     showRatings: true,
                     showTMDbRatingsInLists: false,
                     ratingDisplayMode: .fazitAverage,
+                    showMovieYearInLists: true,
                     showWatchedDate: true,
                     showWatchedLocation: false,
                     showSuggestedBy: false,
@@ -95,6 +97,7 @@ extension DisplaySettings {
                     showRatings: true,
                     showTMDbRatingsInLists: true,
                     ratingDisplayMode: .fazitAverage,
+                    showMovieYearInLists: true,
                     showWatchedDate: true,
                     showWatchedLocation: true,
                     showSuggestedBy: true,
@@ -112,6 +115,7 @@ extension DisplaySettings {
                     showRatings: true,
                     showTMDbRatingsInLists: true,
                     ratingDisplayMode: .ratingAverage,
+                    showMovieYearInLists: true,
                     showWatchedDate: true,
                     showWatchedLocation: true,
                     showSuggestedBy: true,
@@ -135,6 +139,7 @@ extension DisplaySettings {
         let showRatings: Bool
         let showTMDbRatingsInLists: Bool
         let ratingDisplayMode: RatingDisplayMode
+        let showMovieYearInLists: Bool
         let showWatchedDate: Bool
         let showWatchedLocation: Bool
         let showSuggestedBy: Bool
@@ -161,6 +166,7 @@ extension DisplaySettings {
         showRatings = c.showRatings
         showTMDbRatingsInLists = c.showTMDbRatingsInLists
         ratingDisplayMode = c.ratingDisplayMode
+        showMovieYearInLists = c.showMovieYearInLists
         showWatchedDate = c.showWatchedDate
         showWatchedLocation = c.showWatchedLocation
         showSuggestedBy = c.showSuggestedBy
@@ -178,6 +184,7 @@ extension DisplaySettings {
             showRatings: showRatings,
             showTMDbRatingsInLists: showTMDbRatingsInLists,
             ratingDisplayMode: ratingDisplayMode,
+            showMovieYearInLists: showMovieYearInLists,
             showWatchedDate: showWatchedDate,
             showWatchedLocation: showWatchedLocation,
             showSuggestedBy: showSuggestedBy,

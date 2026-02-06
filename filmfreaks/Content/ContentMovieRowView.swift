@@ -16,6 +16,24 @@ struct ContentMovieRowView: View {
 
     private var m: DisplaySettings.LayoutMetrics { displaySettings.metrics }
 
+    private var metaLine: String? {
+        var parts: [String] = []
+
+        if displaySettings.showMovieYearInLists {
+            parts.append(movie.year)
+        }
+
+        if displaySettings.showWatchedDate, let dateText = movie.watchedDateText {
+            parts.append(dateText)
+        }
+
+        if displaySettings.showWatchedLocation, let location = movie.watchedLocation, !location.isEmpty {
+            parts.append(location)
+        }
+
+        return parts.isEmpty ? nil : parts.joined(separator: " • ")
+    }
+
     var body: some View {
         let row = HStack(spacing: m.rowHStackSpacing) {
             // Poster
@@ -58,22 +76,10 @@ struct ContentMovieRowView: View {
                     .font(.headline)
                     .lineLimit(2)
 
-                HStack(spacing: 8) {
-                    Text(movie.year)
+                if let metaLine {
+                    Text(metaLine)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
-
-                    if displaySettings.showWatchedDate, let dateText = movie.watchedDateText {
-                        Text("• \(dateText)")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    if displaySettings.showWatchedLocation, let location = movie.watchedLocation, !location.isEmpty {
-                        Text("• \(location)")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
                 }
 
                 if displaySettings.showSuggestedBy, let sugg = movie.suggestedBy, !sugg.isEmpty {

@@ -134,6 +134,8 @@ struct AppearanceSettingsView: View {
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.top, 2)
                 }
+
+                Toggle("Erscheinungsjahr anzeigen", isOn: $displaySettings.showMovieYearInLists)
                 Toggle("Gesehen-Datum anzeigen", isOn: $displaySettings.showWatchedDate)
                 Toggle("Ort anzeigen", isOn: $displaySettings.showWatchedLocation)
                 Toggle("„Vorgeschlagen von“ anzeigen", isOn: $displaySettings.showSuggestedBy)
