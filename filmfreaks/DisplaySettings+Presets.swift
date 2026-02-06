@@ -34,7 +34,7 @@ extension DisplaySettings {
             case .blockbuster: return "Groß, warm, Kino-Feeling"
             case .filmNoir: return "Dunkel, minimal, kompromisslos"
             case .festivalCut: return "Hell, luftig, Arthouse-Vibe"
-            case .neonNight: return "Modern, kontrastreich, Sci‑Fi"
+            case .neonNight: return "Modern, kontrastreich, Sci-Fi"
             }
         }
 
@@ -56,6 +56,7 @@ extension DisplaySettings {
                     accentColor: .orange,
                     fontDesign: .rounded,
                     uiDensity: .cozy,
+                    cornerStyle: .extraRounded,
                     cardStyle: .cards,
                     posterGridDensity: .large,
                     showRatings: true,
@@ -74,6 +75,7 @@ extension DisplaySettings {
                     accentColor: .gray,
                     fontDesign: .serif,
                     uiDensity: .compact,
+                    cornerStyle: .square,
                     cardStyle: .plain,
                     posterGridDensity: .normal,
                     showRatings: true,
@@ -92,6 +94,7 @@ extension DisplaySettings {
                     accentColor: .teal,
                     fontDesign: .serif,
                     uiDensity: .cozy,
+                    cornerStyle: .rounded,
                     cardStyle: .cards,
                     posterGridDensity: .normal,
                     showRatings: true,
@@ -110,6 +113,7 @@ extension DisplaySettings {
                     accentColor: .cyan,
                     fontDesign: .system,
                     uiDensity: .normal,
+                    cornerStyle: .rounded,
                     cardStyle: .cards,
                     posterGridDensity: .small,
                     showRatings: true,
@@ -133,6 +137,9 @@ extension DisplaySettings {
         let accentColor: AccentColorPreference
         let fontDesign: FontDesignPreference
         let uiDensity: UIDensity
+
+        let cornerStyle: CornerStyle
+
         let cardStyle: CardStyle
         let posterGridDensity: PosterGridDensity
 
@@ -160,6 +167,8 @@ extension DisplaySettings {
         fontDesign = c.fontDesign
         uiDensity = c.uiDensity
 
+        cornerStyle = c.cornerStyle
+
         cardStyle = c.cardStyle
         posterGridDensity = c.posterGridDensity
 
@@ -179,6 +188,7 @@ extension DisplaySettings {
             accentColor: accentColor,
             fontDesign: fontDesign,
             uiDensity: uiDensity,
+            cornerStyle: cornerStyle,
             cardStyle: cardStyle,
             posterGridDensity: posterGridDensity,
             showRatings: showRatings,

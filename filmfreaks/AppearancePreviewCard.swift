@@ -25,7 +25,7 @@ struct AppearancePreviewCard: View {
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
                     .background(displaySettings.tintColor.opacity(0.12))
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .clipShape(RoundedRectangle(cornerRadius: displaySettings.pillCornerRadius))
             }
 
             VStack(spacing: m.cardInnerSpacing + 4) {
@@ -36,11 +36,11 @@ struct AppearancePreviewCard: View {
         }
         .padding(m.cardPadding + 4)
         .background(
-            RoundedRectangle(cornerRadius: 16)
+            RoundedRectangle(cornerRadius: displaySettings.cardCornerRadius)
                 .fill(Color(.secondarySystemBackground))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 16)
+            RoundedRectangle(cornerRadius: displaySettings.cardCornerRadius)
                 .strokeBorder(Color.primary.opacity(0.06), lineWidth: 1)
         )
     }
@@ -89,7 +89,7 @@ struct AppearancePreviewCard: View {
             row
                 .padding(m.rowPadding)
                 .background(
-                    RoundedRectangle(cornerRadius: 12)
+                    RoundedRectangle(cornerRadius: displaySettings.cardCornerRadius)
                         .fill(Color(.systemBackground))
                 )
         } else {
@@ -131,7 +131,7 @@ struct AppearancePreviewCard: View {
                 .padding(.vertical, m.compactRowVerticalPadding)
                 .padding(.horizontal, m.rowPadding)
                 .background(
-                    RoundedRectangle(cornerRadius: 12)
+                    RoundedRectangle(cornerRadius: displaySettings.cardCornerRadius)
                         .fill(Color(.systemBackground))
                 )
         } else {
@@ -142,7 +142,7 @@ struct AppearancePreviewCard: View {
     }
 
     private func posterPlaceholder(size: CGSize) -> some View {
-        RoundedRectangle(cornerRadius: 8)
+        RoundedRectangle(cornerRadius: displaySettings.posterCornerRadius)
             .fill(Color.gray.opacity(0.18))
             .frame(width: size.width, height: size.height)
             .overlay {
@@ -157,6 +157,6 @@ struct AppearancePreviewCard: View {
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
             .background(displaySettings.tintColor.opacity(compact ? 0.12 : 0.10))
-            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .clipShape(RoundedRectangle(cornerRadius: displaySettings.pillCornerRadius))
     }
 }

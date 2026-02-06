@@ -17,34 +17,34 @@ struct ContentPosterGridCellView: View {
 
     var body: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
+            RoundedRectangle(cornerRadius: displaySettings.posterCornerRadius, style: .continuous)
                 .fill(Color(.secondarySystemBackground))
 
             if let url = movie.posterURL {
                 CachedAsyncImage(url: url) { phase in
                     switch phase {
                     case .empty:
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        RoundedRectangle(cornerRadius: displaySettings.posterCornerRadius, style: .continuous)
                             .fill(Color.gray.opacity(0.15))
                     case .success(let image):
                         image
                             .resizable()
                             .scaledToFill()
                     case .failure:
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        RoundedRectangle(cornerRadius: displaySettings.posterCornerRadius, style: .continuous)
                             .fill(Color.gray.opacity(0.15))
                             .overlay {
                                 Image(systemName: "film")
                                     .foregroundStyle(.secondary)
                             }
                     @unknown default:
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        RoundedRectangle(cornerRadius: displaySettings.posterCornerRadius, style: .continuous)
                             .fill(Color.gray.opacity(0.15))
                     }
                 }
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: displaySettings.posterCornerRadius, style: .continuous))
             } else {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                RoundedRectangle(cornerRadius: displaySettings.posterCornerRadius, style: .continuous)
                     .fill(Color.gray.opacity(0.12))
                     .overlay {
                         Image(systemName: "film")

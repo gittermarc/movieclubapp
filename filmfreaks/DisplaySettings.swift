@@ -24,6 +24,8 @@ final class DisplaySettings: ObservableObject {
 
         static let uiDensity = "DisplaySettings_UIDensity"
 
+        static let cornerStyle = "DisplaySettings_CornerStyle"
+
         static let cardStyle = "DisplaySettings_CardStyle"
         static let posterGridDensity = "DisplaySettings_PosterGridDensity"
 
@@ -223,6 +225,31 @@ final class DisplaySettings: ObservableObject {
         }
     }
 
+    /// Rundungs-Stil für UI-Elemente (Poster, Karten, Pills).
+    enum CornerStyle: String, CaseIterable, Identifiable {
+        case square
+        case rounded
+        case extraRounded
+
+        var id: Self { self }
+
+        var label: String {
+            switch self {
+            case .square:       return "Kantig"
+            case .rounded:      return "Rund"
+            case .extraRounded: return "Extra"
+            }
+        }
+
+        var shortHint: String {
+            switch self {
+            case .square:       return "Gerade Kanten – clean & minimal."
+            case .rounded:      return "Der aktuelle Look – ausgewogen."
+            case .extraRounded: return "Weicher & verspielter – more ‚cozy‘."
+            }
+        }
+    }
+
     // MARK: - Layout Metrics
 
     /// Zentrale Spacing-Konstanten, abgeleitet aus `uiDensity`.
@@ -395,6 +422,11 @@ final class DisplaySettings: ObservableObject {
         didSet { defaults.set(uiDensity.rawValue, forKey: Keys.uiDensity) }
     }
 
+    /// Rundungs-Stil (Square / Rounded / Extra).
+    @Published var cornerStyle: CornerStyle {
+        didSet { defaults.set(cornerStyle.rawValue, forKey: Keys.cornerStyle) }
+    }
+
     /// Card-Style für Listen (Karten vs. Plain).
     @Published var cardStyle: CardStyle {
         didSet { defaults.set(cardStyle.rawValue, forKey: Keys.cardStyle) }
@@ -453,6 +485,30 @@ final class DisplaySettings: ObservableObject {
 
     var posterGridMetrics: PosterGridMetrics { .init(density: posterGridDensity) }
 
+    var posterCornerRadius: CGFloat {
+        switch cornerStyle {
+        case .square:       return 0
+        case .rounded:      return 8
+        case .extraRounded: return 12
+        }
+    }
+
+    var cardCornerRadius: CGFloat {
+        switch cornerStyle {
+        case .square:       return 0
+        case .rounded:      return 12
+        case .extraRounded: return 16
+        }
+    }
+
+    var pillCornerRadius: CGFloat {
+        switch cornerStyle {
+        case .square:       return 0
+        case .rounded:      return 8
+        case .extraRounded: return 12
+        }
+    }
+
     // MARK: - Init
 
     init(defaults: UserDefaults = .standard) {
@@ -469,6 +525,9 @@ final class DisplaySettings: ObservableObject {
 
         let densityRaw = defaults.string(forKey: Keys.uiDensity) ?? UIDensity.normal.rawValue
         self.uiDensity = UIDensity(rawValue: densityRaw) ?? .normal
+
+        let cornerRaw = defaults.string(forKey: Keys.cornerStyle) ?? CornerStyle.rounded.rawValue
+        self.cornerStyle = CornerStyle(rawValue: cornerRaw) ?? .rounded
 
         let cardRaw = defaults.string(forKey: Keys.cardStyle) ?? CardStyle.cards.rawValue
         self.cardStyle = CardStyle(rawValue: cardRaw) ?? .cards
@@ -500,6 +559,8 @@ final class DisplaySettings: ObservableObject {
         accentColor = .system
         fontDesign = .system
         uiDensity = .normal
+
+        cornerStyle = .rounded
 
         cardStyle = .cards
         posterGridDensity = .normal

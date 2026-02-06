@@ -94,6 +94,9 @@ struct AppearanceSettingsView: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.top, 2)
 
+                CornerStylePickerRow()
+                    .environmentObject(displaySettings)
+
                 Picker("Grid-Dichte", selection: $displaySettings.posterGridDensity) {
                     ForEach(DisplaySettings.PosterGridDensity.allCases) { density in
                         Text(density.label).tag(density)

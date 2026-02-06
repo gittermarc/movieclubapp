@@ -59,12 +59,12 @@ struct ContentMovieRowView: View {
                     }
                 }
                 .frame(width: 50, height: 75)
-                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .clipShape(RoundedRectangle(cornerRadius: displaySettings.posterCornerRadius))
             } else {
                 Rectangle()
                     .foregroundStyle(.gray.opacity(0.1))
                     .frame(width: 50, height: 75)
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .clipShape(RoundedRectangle(cornerRadius: displaySettings.posterCornerRadius))
                     .overlay {
                         Image(systemName: "film")
                             .foregroundStyle(.secondary)
@@ -98,7 +98,7 @@ struct ContentMovieRowView: View {
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
                         .background(Color.accentColor.opacity(0.10))
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                        .clipShape(RoundedRectangle(cornerRadius: displaySettings.pillCornerRadius))
                 } else {
                     Text("-")
                         .font(.headline)
@@ -111,7 +111,7 @@ struct ContentMovieRowView: View {
             row
                 .padding(m.rowPadding)
                 .background(
-                    RoundedRectangle(cornerRadius: 12)
+                    RoundedRectangle(cornerRadius: displaySettings.cardCornerRadius)
                         .fill(Color(.secondarySystemBackground))
                 )
                 .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
