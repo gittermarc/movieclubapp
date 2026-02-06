@@ -96,10 +96,10 @@ struct MovieSearchView: View {
         self.onAddToBacklog = onAddToBacklog
 
         _localWatchedKeys = State(
-            initialValue: Set(existingWatched.map { MovieSearchView.keyFor(movie: $0) })
+            initialValue: Set(existingWatched.map { MovieSearchMapper.key(for: $0) })
         )
         _localBacklogKeys = State(
-            initialValue: Set(existingBacklog.map { MovieSearchView.keyFor(movie: $0) })
+            initialValue: Set(existingBacklog.map { MovieSearchMapper.key(for: $0) })
         )
         // recentQueries kommt über den Default-Initializer (s.o.)
     }
@@ -143,7 +143,7 @@ struct MovieSearchView: View {
                                 Task { await loadRecommendationsIfNeeded(force: true) }
                             },
                             cardContent: { result in
-                                let key = keyFor(result: result)
+                                let key = MovieSearchMapper.key(for: result)
                                 let isWatched = localWatchedKeys.contains(key)
                                 let isBacklog = localBacklogKeys.contains(key)
 
@@ -155,13 +155,13 @@ struct MovieSearchView: View {
                                         openDetail(result)
                                     },
                                     onAddToWatched: {
-                                        let movie = convertToMovie(result)
+                                        let movie = MovieSearchMapper.convertToMovie(result)
                                         onAddToWatched(movie)
                                         localWatchedKeys.insert(key)
                                         showConfirmation("Zu „Gesehen“ hinzugefügt")
                                     },
                                     onAddToBacklog: {
-                                        let movie = convertToMovie(result)
+                                        let movie = MovieSearchMapper.convertToMovie(result)
                                         onAddToBacklog(movie)
                                         localBacklogKeys.insert(key)
                                         showConfirmation("Zum Backlog hinzugefügt")
@@ -206,7 +206,7 @@ struct MovieSearchView: View {
                                 Task { await loadMore() }
                             },
                             rowContent: { result in
-                                let key = keyFor(result: result)
+                                let key = MovieSearchMapper.key(for: result)
                                 let isWatched = localWatchedKeys.contains(key)
                                 let isBacklog = localBacklogKeys.contains(key)
 
@@ -218,13 +218,13 @@ struct MovieSearchView: View {
                                         openDetail(result)
                                     },
                                     onAddToWatched: {
-                                        let movie = convertToMovie(result)
+                                        let movie = MovieSearchMapper.convertToMovie(result)
                                         onAddToWatched(movie)
                                         localWatchedKeys.insert(key)
                                         showConfirmation("Zu „Gesehen“ hinzugefügt")
                                     },
                                     onAddToBacklog: {
-                                        let movie = convertToMovie(result)
+                                        let movie = MovieSearchMapper.convertToMovie(result)
                                         onAddToBacklog(movie)
                                         localBacklogKeys.insert(key)
                                         showConfirmation("Zum Backlog hinzugefügt")
@@ -265,7 +265,7 @@ struct MovieSearchView: View {
                 stickySearchHeader
             }
             .sheet(item: $detailResult) { result in
-                let key = keyFor(result: result)
+                let key = MovieSearchMapper.key(for: result)
                 let isWatched = localWatchedKeys.contains(key)
                 let isBacklog = localBacklogKeys.contains(key)
 
@@ -533,7 +533,7 @@ struct MovieSearchView: View {
                 if seen.contains(r.id) { continue }
                 seen.insert(r.id)
 
-                let key = keyFor(result: r)
+                let key = MovieSearchMapper.key(for: r)
                 if existingKeys.contains(key) { continue }
 
                 filtered.append(r)
@@ -597,7 +597,7 @@ struct MovieSearchView: View {
                 if seenTMDbIds.contains(id) { return }
                 seenTMDbIds.insert(id)
             } else {
-                let k = MovieSearchView.keyFor(movie: movie)
+                let k = MovieSearchMapper.key(for: movie)
                 if seenKeys.contains(k) { return }
                 seenKeys.insert(k)
             }
@@ -889,43 +889,6 @@ struct MovieSearchView: View {
         }
 
         return score
-    }
-    // MARK: - Hilfsfunktionen
-
-    func releaseYear(from dateString: String?) -> String? {
-        guard
-            let dateString,
-            dateString.count >= 4
-        else { return nil }
-        return String(dateString.prefix(4))
-    }
-
-    func yearInt(from dateString: String?) -> Int? {
-        guard let y = releaseYear(from: dateString) else { return nil }
-        return Int(y)
-    }
-
-    // Schlüssel, um konsistent zu erkennen, ob ein Film schon in einer Liste ist
-    private static func keyFor(movie: Movie) -> String {
-        (movie.title.lowercased()) + "|" + movie.year
-    }
-
-    private func keyFor(result: TMDbMovieResult) -> String {
-        let year = releaseYear(from: result.release_date) ?? "n/a"
-        return result.title.lowercased() + "|" + year
-    }
-
-
-    private func convertToMovie(_ result: TMDbMovieResult) -> Movie {
-        let year = releaseYear(from: result.release_date) ?? "n/a"
-        return Movie(
-            title: result.title,
-            year: year,
-            tmdbRating: result.vote_average,
-            ratings: [],
-            posterPath: result.poster_path,
-            tmdbId: result.id
-        )
     }
 }
 
