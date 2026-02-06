@@ -28,22 +28,22 @@ struct MovieSearchView: View {
     @EnvironmentObject private var displaySettings: DisplaySettings
 
     // Keyboard (gegen Content-Jump beim Fokus)
-    @StateObject private var keyboard = KeyboardMonitor()
+    @StateObject var keyboard = KeyboardMonitor()
 
     // Suche
-    @State private var query: String = ""
-    @State private var isLoading: Bool = false
+    @State var query: String = ""
+    @State var isLoading: Bool = false
     @State private var errorMessage: String?
-    @State private var results: [TMDbMovieResult] = []
+    @State var results: [TMDbMovieResult] = []
 
     // Pagination
-    @State private var currentPage: Int = 1
-    @State private var totalPages: Int = 1
+    @State var currentPage: Int = 1
+    @State var totalPages: Int = 1
     @State private var totalResults: Int = 0
-    @State private var isLoadingMore: Bool = false
+    @State var isLoadingMore: Bool = false
 
     // Sortierung
-    @State private var selectedSort: MovieSearchSortOption = .relevance
+    @State var selectedSort: MovieSearchSortOption = .relevance
 
     // Detail-Sheet
     @State private var detailResult: TMDbMovieResult?
@@ -75,7 +75,7 @@ struct MovieSearchView: View {
     @State private var lastTappedScanText: String?
 
     // Optional: Focus fürs Suchfeld (bei „Manuell bearbeiten“)
-    @FocusState private var isSearchFieldFocused: Bool
+    @FocusState var isSearchFieldFocused: Bool
 
     // ✅ NEU: Empfehlungen (Inspiration)
     @State private var recommendations: [TMDbMovieResult] = []
@@ -414,63 +414,6 @@ struct MovieSearchView: View {
         }
 
     }
-
-    // MARK: - Derived
-
-    private var canLoadMore: Bool {
-        currentPage < totalPages
-        && !isLoading
-        && !isLoadingMore
-        && !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    }
-
-    private var sortedResults: [TMDbMovieResult] {
-        switch selectedSort {
-        case .relevance:
-            // TMDb-Reihenfolge, wie geliefert
-            return results
-
-        case .titleAZ:
-            return results.sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
-
-        case .titleZA:
-            return results.sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedDescending }
-
-        case .yearNewest:
-            return results.sorted { (yearInt(from: $0.release_date) ?? -1) > (yearInt(from: $1.release_date) ?? -1) }
-
-        case .yearOldest:
-            return results.sorted { (yearInt(from: $0.release_date) ?? Int.max) < (yearInt(from: $1.release_date) ?? Int.max) }
-
-        case .ratingHigh:
-            return results.sorted { $0.vote_average > $1.vote_average }
-
-        case .ratingLow:
-            return results.sorted { $0.vote_average < $1.vote_average }
-        }
-    }
-
-    private var shouldShowRecommendations: Bool {
-        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        // Nur im „Idle“-Zustand: keine Suche aktiv und keine Ergebnisse sichtbar
-        return trimmed.isEmpty && results.isEmpty && !isLoading && !isSearchFieldFocused
-    }
-
-
-    /// ✅ Basis-Abstand, damit das Suchfeld schon im „Idle“-Zustand weiter unten sitzt.
-    /// Hintergrund: Beim ersten Fokus-Frame kann SwiftUI den `safeAreaInset` kurz neu vermessen
-    /// und der Header rutscht für einen Moment unter den Inline-Titel. Mit diesem Puffer passiert das nicht.
-    private var baseHeaderSpacer: CGFloat { 22 }
-
-    /// ✅ Extra Luft, sobald das Suchfeld Fokus hat (oder das Keyboard sichtbar ist).
-    private var focusedHeaderSpacer: CGFloat {
-        (isSearchFieldFocused || keyboard.height > 0) ? 12 : 0
-    }
-
-    /// Gesamtabstand über dem Suchfeld (Basis + Fokus)
-    private var headerTopSpacer: CGFloat { baseHeaderSpacer + focusedHeaderSpacer }
-
-
 
     // MARK: - Sticky Suchkopf
 
@@ -1587,7 +1530,7 @@ struct MovieSearchView: View {
 
     // MARK: - Hilfsfunktionen
 
-    private func releaseYear(from dateString: String?) -> String? {
+    func releaseYear(from dateString: String?) -> String? {
         guard
             let dateString,
             dateString.count >= 4
@@ -1595,7 +1538,7 @@ struct MovieSearchView: View {
         return String(dateString.prefix(4))
     }
 
-    private func yearInt(from dateString: String?) -> Int? {
+    func yearInt(from dateString: String?) -> Int? {
         guard let y = releaseYear(from: dateString) else { return nil }
         return Int(y)
     }
