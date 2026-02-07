@@ -9,9 +9,15 @@ internal import SwiftUI
 
 struct GroupActivityRowView: View {
 
+    @EnvironmentObject private var movieStore: MovieStore
     @EnvironmentObject private var displaySettings: DisplaySettings
 
     let event: GroupActivityEvent
+
+    private enum MovieLocation {
+        case watched(Int)
+        case backlog(Int)
+    }
 
     private var actorName: String {
         let trimmed = (event.actorName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
@@ -40,7 +46,32 @@ struct GroupActivityRowView: View {
         return f.localizedString(for: event.date, relativeTo: Date())
     }
 
+    private var movieLocation: MovieLocation? {
+        if let idx = movieStore.movies.firstIndex(where: { $0.id == event.movieId }) {
+            return .watched(idx)
+        }
+        if let idx = movieStore.backlogMovies.firstIndex(where: { $0.id == event.movieId }) {
+            return .backlog(idx)
+        }
+        return nil
+    }
+
     var body: some View {
+        Group {
+            if let movieLocation {
+                NavigationLink {
+                    destination(for: movieLocation)
+                } label: {
+                    rowContent
+                }
+                .buttonStyle(.plain)
+            } else {
+                rowContent
+            }
+        }
+    }
+
+    private var rowContent: some View {
         HStack(spacing: 12) {
             avatar
 
@@ -66,6 +97,43 @@ struct GroupActivityRowView: View {
             poster
         }
         .padding(.vertical, 2)
+        .contentShape(Rectangle())
+        .foregroundStyle(.primary)
+        .accessibilityHint("Öffnet den Film")
+    }
+
+    @ViewBuilder
+    private func destination(for location: MovieLocation) -> some View {
+        switch location {
+        case .watched(let idx):
+            if movieStore.movies.indices.contains(idx) {
+                MovieDetailView(
+                    movie: $movieStore.movies[idx],
+                    isBacklog: false
+                )
+            } else {
+                missingMovieDestination
+            }
+
+        case .backlog(let idx):
+            if movieStore.backlogMovies.indices.contains(idx) {
+                MovieDetailView(
+                    movie: $movieStore.backlogMovies[idx],
+                    isBacklog: true
+                )
+            } else {
+                missingMovieDestination
+            }
+        }
+    }
+
+    private var missingMovieDestination: some View {
+        ContentUnavailableView(
+            "Film nicht gefunden",
+            systemImage: "film",
+            description: Text("Der Film ist nicht mehr in deiner aktuellen Gruppe vorhanden.")
+        )
+        .padding()
     }
 
     private var avatar: some View {
