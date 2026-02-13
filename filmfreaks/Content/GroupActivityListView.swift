@@ -11,8 +11,11 @@ struct GroupActivityListView: View {
 
     @EnvironmentObject private var movieStore: MovieStore
     @EnvironmentObject private var movieNightStore: MovieNightStore
+    @EnvironmentObject private var userStore: UserStore
     @EnvironmentObject private var displaySettings: DisplaySettings
     @Environment(\.dismiss) private var dismiss
+
+    @State private var selectedMovieNight: MovieNightSheetSelection? = nil
 
     private var groupId: String {
         (movieStore.currentGroupId ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
@@ -44,7 +47,7 @@ struct GroupActivityListView: View {
                 } else {
                     List {
                         ForEach(unifiedEvents) { e in
-                            UnifiedGroupActivityRowView(event: e)
+                            UnifiedGroupActivityRowView(event: e, movieNightSelection: $selectedMovieNight)
                                 .padding(.vertical, 4)
                         }
                     }
@@ -52,6 +55,12 @@ struct GroupActivityListView: View {
                 }
             }
             .navigationTitle("Aktivität")
+            .sheet(item: $selectedMovieNight) { selection in
+                MovieNightDetailSheet(groupId: selection.groupId, eventId: selection.id)
+                    .environmentObject(movieNightStore)
+                    .environmentObject(userStore)
+                    .environmentObject(displaySettings)
+            }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Fertig") {

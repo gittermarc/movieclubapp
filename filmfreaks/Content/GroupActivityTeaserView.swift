@@ -10,6 +10,8 @@ internal import SwiftUI
 /// Compact activity preview shown directly under the GroupContextBar.
 struct GroupActivityTeaserView: View {
 
+    @EnvironmentObject private var movieNightStore: MovieNightStore
+    @EnvironmentObject private var userStore: UserStore
     @EnvironmentObject private var displaySettings: DisplaySettings
 
     /// Default is collapsed to save vertical space.
@@ -17,6 +19,8 @@ struct GroupActivityTeaserView: View {
 
     let events: [UnifiedGroupActivityEvent]
     let onOpenAll: () -> Void
+
+    @State private var selectedMovieNight: MovieNightSheetSelection? = nil
 
     private var m: DisplaySettings.LayoutMetrics { displaySettings.metrics }
 
@@ -33,7 +37,7 @@ struct GroupActivityTeaserView: View {
                 emptyState
             } else {
                 ForEach(visibleEvents) { e in
-                    UnifiedGroupActivityRowView(event: e)
+                    UnifiedGroupActivityRowView(event: e, movieNightSelection: $selectedMovieNight)
                     if e.id != visibleEvents.last?.id {
                         Divider().opacity(0.6)
                     }
@@ -53,6 +57,12 @@ struct GroupActivityTeaserView: View {
             RoundedRectangle(cornerRadius: displaySettings.cardCornerRadius)
                 .stroke(Color.primary.opacity(0.06), lineWidth: 1)
         )
+        .sheet(item: $selectedMovieNight) { selection in
+            MovieNightDetailSheet(groupId: selection.groupId, eventId: selection.id)
+                .environmentObject(movieNightStore)
+                .environmentObject(userStore)
+                .environmentObject(displaySettings)
+        }
         .animation(.snappy, value: isExpanded)
     }
 
