@@ -15,12 +15,12 @@ struct GroupActivityTeaserView: View {
     /// Default is collapsed to save vertical space.
     @AppStorage("groupActivityTeaserExpanded") private var isExpanded: Bool = false
 
-    let events: [GroupActivityEvent]
+    let events: [UnifiedGroupActivityEvent]
     let onOpenAll: () -> Void
 
     private var m: DisplaySettings.LayoutMetrics { displaySettings.metrics }
 
-    private var visibleEvents: [GroupActivityEvent] {
+    private var visibleEvents: [UnifiedGroupActivityEvent] {
         let limit = isExpanded ? 3 : 1
         return Array(events.prefix(limit))
     }
@@ -33,7 +33,7 @@ struct GroupActivityTeaserView: View {
                 emptyState
             } else {
                 ForEach(visibleEvents) { e in
-                    GroupActivityRowView(event: e)
+                    UnifiedGroupActivityRowView(event: e)
                     if e.id != visibleEvents.last?.id {
                         Divider().opacity(0.6)
                     }
@@ -117,7 +117,7 @@ struct GroupActivityTeaserView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Noch keine Gruppenaktivität")
                     .font(.subheadline.weight(.semibold))
-                Text("Sobald jemand einen Film hinzufügt oder bewertet, taucht es hier auf.")
+                Text("Sobald jemand einen Film bewertet, etwas hinzufügt oder einen Filmabend plant, taucht es hier auf.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

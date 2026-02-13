@@ -26,10 +26,16 @@ struct GroupActivityListView: View {
         movieNightStore.activityEvents(for: groupId)
     }
 
+    private var unifiedEvents: [UnifiedGroupActivityEvent] {
+        let movies = movieEvents.map { UnifiedGroupActivityEvent(movieEvent: $0) }
+        let nights = nightEvents.map { UnifiedGroupActivityEvent(movieNightActivity: $0) }
+        return (movies + nights).sorted(by: { $0.date > $1.date })
+    }
+
     var body: some View {
         NavigationStack {
             Group {
-                if movieEvents.isEmpty && nightEvents.isEmpty {
+                if unifiedEvents.isEmpty {
                     ContentUnavailableView(
                         "Keine Aktivität",
                         systemImage: "sparkles",
@@ -37,26 +43,9 @@ struct GroupActivityListView: View {
                     )
                 } else {
                     List {
-                        if !nightEvents.isEmpty {
-                            Section {
-                                ForEach(nightEvents) { e in
-                                    MovieNightActivityRowView(event: e)
-                                        .padding(.vertical, 4)
-                                }
-                            } header: {
-                                Text("Filmabend-Planung")
-                            }
-                        }
-
-                        if !movieEvents.isEmpty {
-                            Section {
-                                ForEach(movieEvents) { e in
-                                    GroupActivityRowView(event: e)
-                                        .padding(.vertical, 4)
-                                }
-                            } header: {
-                                Text("Filme")
-                            }
+                        ForEach(unifiedEvents) { e in
+                            UnifiedGroupActivityRowView(event: e)
+                                .padding(.vertical, 4)
                         }
                     }
                     .listStyle(.insetGrouped)

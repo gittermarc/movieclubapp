@@ -33,6 +33,15 @@ struct GroupActivityRowView: View {
         }
     }
 
+    private var kindBadgeSystemImage: String {
+        switch event.kind {
+        case .movieAdded:
+            return "plus"
+        case .movieRated:
+            return "star.fill"
+        }
+    }
+
     private var movieText: String {
         if let y = event.movieYear, !y.isEmpty {
             return "\(event.movieTitle) (\(y))"
@@ -73,7 +82,7 @@ struct GroupActivityRowView: View {
 
     private var rowContent: some View {
         HStack(spacing: 12) {
-            avatar
+            ActivityAvatarView(name: actorName, badgeSystemImage: kindBadgeSystemImage)
 
             VStack(alignment: .leading, spacing: 4) {
                 (Text(actorName).fontWeight(.semibold)
@@ -136,23 +145,6 @@ struct GroupActivityRowView: View {
         .padding()
     }
 
-    private var avatar: some View {
-        let initials = initials(from: actorName)
-
-        return Text(initials)
-            .font(.caption.weight(.semibold))
-            .foregroundStyle(.primary)
-            .frame(width: 34, height: 34)
-            .background(
-                Circle()
-                    .fill(Color(.secondarySystemBackground))
-            )
-            .overlay(
-                Circle()
-                    .stroke(Color.primary.opacity(0.06), lineWidth: 1)
-            )
-    }
-
     private var poster: some View {
         Group {
             if let url = event.posterURL {
@@ -180,13 +172,4 @@ struct GroupActivityRowView: View {
         .clipShape(RoundedRectangle(cornerRadius: displaySettings.posterCornerRadius))
     }
 
-    private func initials(from name: String) -> String {
-        let parts = name.split(separator: " ").map(String.init)
-        if parts.count >= 2 {
-            let first = (parts.first ?? "").prefix(1)
-            let last = (parts.last ?? "").prefix(1)
-            return String(first + last).uppercased()
-        }
-        return String(name.prefix(2)).uppercased()
-    }
 }

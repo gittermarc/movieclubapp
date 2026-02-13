@@ -28,7 +28,7 @@ struct ContentHeaderView: View {
     // MARK: - Activity (Social)
 
     let showGroupActivityCard: Bool
-    let activityPreviewEvents: [GroupActivityEvent]
+    let activityPreviewItems: [UnifiedGroupActivityEvent]
     let onTapActivity: () -> Void
 
     // MARK: - Onboarding
@@ -89,7 +89,7 @@ struct ContentHeaderView: View {
 
                 if showGroupActivityCard {
                     GroupActivityTeaserView(
-                        events: activityPreviewEvents,
+                        events: activityPreviewItems,
                         onOpenAll: onTapActivity
                     )
                     .padding(.horizontal)

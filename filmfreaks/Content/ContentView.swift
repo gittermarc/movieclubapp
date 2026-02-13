@@ -38,8 +38,21 @@ struct ContentView: View {
     // MARK: - UI Density Metrics
     private var m: DisplaySettings.LayoutMetrics { displaySettings.metrics }
 
-    private var activityPreviewEvents: [GroupActivityEvent] {
-        movieStore.activityEvents(displayMode: displaySettings.ratingDisplayMode, limit: 3)
+    private var currentGroupId: String {
+        (movieStore.currentGroupId ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var activityPreviewItems: [UnifiedGroupActivityEvent] {
+        let movieItems = movieStore
+            .activityEvents(displayMode: displaySettings.ratingDisplayMode, limit: 10)
+            .map { UnifiedGroupActivityEvent(movieEvent: $0) }
+
+        let nightItems = movieNightStore
+            .activityEvents(for: currentGroupId)
+            .prefix(10)
+            .map { UnifiedGroupActivityEvent(movieNightActivity: $0) }
+
+        return Array((movieItems + nightItems).sorted(by: { $0.date > $1.date }).prefix(3))
     }
 
     // MARK: - Onboarding (derived state)
@@ -166,7 +179,7 @@ struct ContentView: View {
                         onTapGroup: { route = .groupSettings },
                         onTapActiveMember: { route = .users },
                         showGroupActivityCard: displaySettings.showGroupActivityCard,
-                        activityPreviewEvents: activityPreviewEvents,
+                        activityPreviewItems: activityPreviewItems,
                         onTapActivity: { route = .activity },
                         shouldShowOnboardingChecklist: onboarding.shouldShowChecklist,
                         onboardingChecklistExpanded: $onboardingChecklistExpanded,
