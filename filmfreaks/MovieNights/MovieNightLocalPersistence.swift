@@ -18,14 +18,41 @@ actor MovieNightLocalPersistence {
 
         var eventsByGroup: [String: [MovieNightEvent]]
         var responsesByGroup: [String: [MovieNightResponse]]
+        var activityByGroup: [String: [MovieNightActivityEvent]]
 
-        static func empty(schemaVersion: Int = 1) -> Snapshot {
+        static func empty(schemaVersion: Int = 2) -> Snapshot {
             Snapshot(
                 schemaVersion: schemaVersion,
                 savedAt: .now,
                 eventsByGroup: [:],
-                responsesByGroup: [:]
+                responsesByGroup: [:],
+                activityByGroup: [:]
             )
+        }
+
+        init(
+            schemaVersion: Int,
+            savedAt: Date,
+            eventsByGroup: [String: [MovieNightEvent]],
+            responsesByGroup: [String: [MovieNightResponse]],
+            activityByGroup: [String: [MovieNightActivityEvent]]
+        ) {
+            self.schemaVersion = schemaVersion
+            self.savedAt = savedAt
+            self.eventsByGroup = eventsByGroup
+            self.responsesByGroup = responsesByGroup
+            self.activityByGroup = activityByGroup
+        }
+
+        // Backwards compatibility: Snapshot schema v1 didn't have `activityByGroup`.
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+
+            self.schemaVersion = (try? c.decode(Int.self, forKey: .schemaVersion)) ?? 1
+            self.savedAt = (try? c.decode(Date.self, forKey: .savedAt)) ?? .now
+            self.eventsByGroup = (try? c.decode([String: [MovieNightEvent]].self, forKey: .eventsByGroup)) ?? [:]
+            self.responsesByGroup = (try? c.decode([String: [MovieNightResponse]].self, forKey: .responsesByGroup)) ?? [:]
+            self.activityByGroup = (try? c.decode([String: [MovieNightActivityEvent]].self, forKey: .activityByGroup)) ?? [:]
         }
     }
 
@@ -58,7 +85,7 @@ actor MovieNightLocalPersistence {
             let data = try Data(contentsOf: fileURL)
             return try decoder.decode(Snapshot.self, from: data)
         } catch {
-            // Best-effort persistence for P0.
+            // Best-effort persistence for P0/P2.
             return .empty()
         }
     }
@@ -71,7 +98,7 @@ actor MovieNightLocalPersistence {
             let data = try encoder.encode(copy)
             try data.write(to: fileURL, options: [.atomic])
         } catch {
-            // Best-effort persistence for P0.
+            // Best-effort persistence for P0/P2.
         }
     }
 

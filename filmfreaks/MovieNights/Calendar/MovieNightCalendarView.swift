@@ -8,14 +8,19 @@
 internal import SwiftUI
 
 /// P1: Read-only calendar UI for Movie Nights (local data only).
+/// P2: Adds propose + detail sheets (still local).
 struct MovieNightCalendarView: View {
 
     @EnvironmentObject private var movieStore: MovieStore
     @EnvironmentObject private var movieNightStore: MovieNightStore
+    @EnvironmentObject private var userStore: UserStore
     @EnvironmentObject private var displaySettings: DisplaySettings
 
     @State private var monthAnchor: Date = Calendar.current.startOfMonth(for: .now)
     @State private var selectedDay: Date = Calendar.current.startOfDay(for: .now)
+
+    @State private var isProposeSheetPresented: Bool = false
+    @State private var selectedEvent: SelectedEvent? = nil
 
     private var m: DisplaySettings.LayoutMetrics { displaySettings.metrics }
 
@@ -49,6 +54,10 @@ struct MovieNightCalendarView: View {
             .sorted(by: { $0.proposedStart < $1.proposedStart })
     }
 
+    private var defaultProposedStart: Date {
+        Calendar.current.defaultMovieNightStart(for: selectedDay)
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -64,7 +73,10 @@ struct MovieNightCalendarView: View {
                     DayEventListView(
                         day: selectedDay,
                         groupId: groupId,
-                        events: eventsForSelectedDay
+                        events: eventsForSelectedDay,
+                        onSelectEvent: { event in
+                            selectedEvent = SelectedEvent(id: event.id)
+                        }
                     )
                 }
                 .padding(.horizontal, 16)
@@ -96,6 +108,14 @@ struct MovieNightCalendarView: View {
 
                 ToolbarItemGroup(placement: .topBarTrailing) {
                     Button {
+                        isProposeSheetPresented = true
+                    } label: {
+                        Image(systemName: "plus")
+                    }
+                    .accessibilityLabel("Filmabend vorschlagen")
+                    .disabled(userStore.selectedUser == nil)
+
+                    Button {
                         monthAnchor = Calendar.current.date(byAdding: .month, value: -1, to: monthAnchor) ?? monthAnchor
                     } label: {
                         Image(systemName: "chevron.left")
@@ -110,6 +130,18 @@ struct MovieNightCalendarView: View {
                     .accessibilityLabel("Nächster Monat")
                 }
             }
+        }
+        .sheet(isPresented: $isProposeSheetPresented) {
+            ProposeMovieNightSheet(groupId: groupId, initialDate: defaultProposedStart)
+                .environmentObject(movieNightStore)
+                .environmentObject(userStore)
+                .environmentObject(displaySettings)
+        }
+        .sheet(item: $selectedEvent) { selection in
+            MovieNightDetailSheet(groupId: groupId, eventId: selection.id)
+                .environmentObject(movieNightStore)
+                .environmentObject(userStore)
+                .environmentObject(displaySettings)
         }
     }
 
@@ -140,6 +172,11 @@ struct MovieNightCalendarView: View {
             } else if eventsInMonth.isEmpty {
                 Text("In diesem Monat sind noch keine Filmabende geplant.")
                     .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .padding(.top, 2)
+            } else {
+                Text("Tippe auf einen Eintrag, um zuzusagen oder abzusagen.")
+                    .font(.caption)
                     .foregroundStyle(.secondary)
                     .padding(.top, 2)
             }
@@ -182,12 +219,24 @@ struct MovieNightCalendarView: View {
         df.setLocalizedDateFormatFromTemplate("MMMM yyyy")
         return df
     }()
+
+    private struct SelectedEvent: Identifiable {
+        let id: UUID
+    }
 }
 
 private extension Calendar {
     func startOfMonth(for date: Date) -> Date {
         let comps = dateComponents([.year, .month], from: date)
         return self.date(from: comps) ?? date
+    }
+
+    func defaultMovieNightStart(for day: Date) -> Date {
+        let base = startOfDay(for: day)
+        if let candidate = date(bySettingHour: 20, minute: 0, second: 0, of: base) {
+            return candidate
+        }
+        return day
     }
 }
 

@@ -12,11 +12,13 @@ import Combine
 /// Group-scoped store for movie night proposals and responses.
 ///
 /// P0: Local-only persistence (JSON) via `MovieNightLocalPersistence`.
+/// P2: Adds local activity events + accept/decline flow.
 @MainActor
 final class MovieNightStore: ObservableObject {
 
     @Published private(set) var eventsByGroup: [String: [MovieNightEvent]] = [:]
     @Published private(set) var responsesByGroup: [String: [MovieNightResponse]] = [:]
+    @Published private(set) var activityByGroup: [String: [MovieNightActivityEvent]] = [:]
     @Published private(set) var isLoaded: Bool = false
 
     private let persistence = MovieNightLocalPersistence()
@@ -26,6 +28,7 @@ final class MovieNightStore: ObservableObject {
             let snapshot = await persistence.load()
             self.eventsByGroup = snapshot.eventsByGroup
             self.responsesByGroup = snapshot.responsesByGroup
+            self.activityByGroup = snapshot.activityByGroup
             self.isLoaded = true
         }
     }
@@ -50,6 +53,10 @@ final class MovieNightStore: ObservableObject {
 
     func response(for groupId: String, eventId: UUID, userId: UUID) -> MovieNightResponse? {
         (responsesByGroup[groupId] ?? []).first { $0.eventId == eventId && $0.userId == userId }
+    }
+
+    func activityEvents(for groupId: String) -> [MovieNightActivityEvent] {
+        (activityByGroup[groupId] ?? []).sorted(by: { $0.createdAt > $1.createdAt })
     }
 
     // MARK: - Write API
@@ -79,6 +86,22 @@ final class MovieNightStore: ObservableObject {
         list.sort(by: { $0.proposedStart < $1.proposedStart })
         eventsByGroup[groupId] = list
 
+        appendActivity(
+            MovieNightActivityEvent(
+                groupId: groupId,
+                kind: .proposed,
+                createdAt: now,
+                eventId: event.id,
+                eventStart: event.proposedStart,
+                actorUserId: proposerUserId,
+                actorName: proposerName,
+                decision: nil,
+                newStatus: .open,
+                note: note
+            ),
+            groupId: groupId
+        )
+
         persist()
         return event
     }
@@ -88,11 +111,15 @@ final class MovieNightStore: ObservableObject {
         eventId: UUID,
         proposedStart: Date? = nil,
         note: String?? = nil,
-        status: MovieNightEvent.Status? = nil
+        status: MovieNightEvent.Status? = nil,
+        actorUserId: UUID? = nil,
+        actorName: String? = nil
     ) {
         guard var list = eventsByGroup[groupId], let idx = list.firstIndex(where: { $0.id == eventId }) else { return }
 
         var event = list[idx]
+        let beforeStatus = event.status
+
         if let proposedStart { event.proposedStart = proposedStart }
         if let status { event.status = status }
         if let note { event.note = note }
@@ -102,10 +129,38 @@ final class MovieNightStore: ObservableObject {
         list.sort(by: { $0.proposedStart < $1.proposedStart })
         eventsByGroup[groupId] = list
 
+        if let newStatus = status, newStatus != beforeStatus {
+            appendActivity(
+                MovieNightActivityEvent(
+                    groupId: groupId,
+                    kind: .statusChanged,
+                    createdAt: .now,
+                    eventId: event.id,
+                    eventStart: event.proposedStart,
+                    actorUserId: actorUserId ?? event.proposerUserId,
+                    actorName: actorName ?? (actorUserId == nil ? "System" : (actorName ?? event.proposerName)),
+                    decision: nil,
+                    newStatus: newStatus,
+                    note: nil
+                ),
+                groupId: groupId
+            )
+        }
+
         persist()
     }
 
-    func deleteEvent(groupId: String, eventId: UUID) {
+    func deleteEvent(
+        groupId: String,
+        eventId: UUID,
+        actorUserId: UUID? = nil,
+        actorName: String? = nil
+    ) {
+        let removed: MovieNightEvent? = {
+            guard let list = eventsByGroup[groupId] else { return nil }
+            return list.first(where: { $0.id == eventId })
+        }()
+
         if var list = eventsByGroup[groupId] {
             list.removeAll(where: { $0.id == eventId })
             eventsByGroup[groupId] = list
@@ -114,6 +169,24 @@ final class MovieNightStore: ObservableObject {
         if var responses = responsesByGroup[groupId] {
             responses.removeAll(where: { $0.eventId == eventId })
             responsesByGroup[groupId] = responses
+        }
+
+        if let removed {
+            appendActivity(
+                MovieNightActivityEvent(
+                    groupId: groupId,
+                    kind: .deleted,
+                    createdAt: .now,
+                    eventId: removed.id,
+                    eventStart: removed.proposedStart,
+                    actorUserId: actorUserId ?? removed.proposerUserId,
+                    actorName: actorName ?? (actorUserId == nil ? "System" : (actorName ?? removed.proposerName)),
+                    decision: nil,
+                    newStatus: nil,
+                    note: removed.note
+                ),
+                groupId: groupId
+            )
         }
 
         persist()
@@ -147,6 +220,25 @@ final class MovieNightStore: ObservableObject {
         }
 
         responsesByGroup[groupId] = responses
+
+        if let event = events(for: groupId).first(where: { $0.id == eventId }) {
+            appendActivity(
+                MovieNightActivityEvent(
+                    groupId: groupId,
+                    kind: .responded,
+                    createdAt: .now,
+                    eventId: eventId,
+                    eventStart: event.proposedStart,
+                    actorUserId: userId,
+                    actorName: userName,
+                    decision: decision,
+                    newStatus: nil,
+                    note: nil
+                ),
+                groupId: groupId
+            )
+        }
+
         persist()
     }
 
@@ -155,6 +247,7 @@ final class MovieNightStore: ObservableObject {
     func purgeAllLocalData() {
         eventsByGroup.removeAll()
         responsesByGroup.removeAll()
+        activityByGroup.removeAll()
 
         Task { await persistence.deleteLocalFile() }
 
@@ -166,14 +259,25 @@ final class MovieNightStore: ObservableObject {
 
     private func persist() {
         let snapshot = MovieNightLocalPersistence.Snapshot(
-            schemaVersion: 1,
+            schemaVersion: 2,
             savedAt: .now,
             eventsByGroup: eventsByGroup,
-            responsesByGroup: responsesByGroup
+            responsesByGroup: responsesByGroup,
+            activityByGroup: activityByGroup
         )
 
         Task {
             await persistence.save(snapshot)
         }
+    }
+
+    private func appendActivity(_ event: MovieNightActivityEvent, groupId: String) {
+        var list = activityByGroup[groupId] ?? []
+        list.append(event)
+        // Keep a cap so the JSON doesn't grow forever in P2.
+        if list.count > 200 {
+            list = Array(list.suffix(200))
+        }
+        activityByGroup[groupId] = list
     }
 }

@@ -10,17 +10,26 @@ internal import SwiftUI
 struct GroupActivityListView: View {
 
     @EnvironmentObject private var movieStore: MovieStore
+    @EnvironmentObject private var movieNightStore: MovieNightStore
     @EnvironmentObject private var displaySettings: DisplaySettings
     @Environment(\.dismiss) private var dismiss
 
-    private var events: [GroupActivityEvent] {
+    private var groupId: String {
+        (movieStore.currentGroupId ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var movieEvents: [GroupActivityEvent] {
         movieStore.activityEvents(displayMode: displaySettings.ratingDisplayMode)
+    }
+
+    private var nightEvents: [MovieNightActivityEvent] {
+        movieNightStore.activityEvents(for: groupId)
     }
 
     var body: some View {
         NavigationStack {
             Group {
-                if events.isEmpty {
+                if movieEvents.isEmpty && nightEvents.isEmpty {
                     ContentUnavailableView(
                         "Keine Aktivität",
                         systemImage: "sparkles",
@@ -28,12 +37,29 @@ struct GroupActivityListView: View {
                     )
                 } else {
                     List {
-                        ForEach(events) { e in
-                            GroupActivityRowView(event: e)
-                                .padding(.vertical, 4)
+                        if !nightEvents.isEmpty {
+                            Section {
+                                ForEach(nightEvents) { e in
+                                    MovieNightActivityRowView(event: e)
+                                        .padding(.vertical, 4)
+                                }
+                            } header: {
+                                Text("Filmabend-Planung")
+                            }
+                        }
+
+                        if !movieEvents.isEmpty {
+                            Section {
+                                ForEach(movieEvents) { e in
+                                    GroupActivityRowView(event: e)
+                                        .padding(.vertical, 4)
+                                }
+                            } header: {
+                                Text("Filme")
+                            }
                         }
                     }
-                    .listStyle(.plain)
+                    .listStyle(.insetGrouped)
                 }
             }
             .navigationTitle("Aktivität")

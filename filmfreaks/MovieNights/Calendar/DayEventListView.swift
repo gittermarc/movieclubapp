@@ -13,6 +13,7 @@ struct DayEventListView: View {
     let day: Date
     let groupId: String
     let events: [MovieNightEvent]
+    let onSelectEvent: ((MovieNightEvent) -> Void)?
 
     @EnvironmentObject private var movieNightStore: MovieNightStore
     @EnvironmentObject private var displaySettings: DisplaySettings
@@ -21,6 +22,18 @@ struct DayEventListView: View {
 
     private var dayTitle: String {
         Self.dayTitleFormatter.string(from: day)
+    }
+
+    init(
+        day: Date,
+        groupId: String,
+        events: [MovieNightEvent],
+        onSelectEvent: ((MovieNightEvent) -> Void)? = nil
+    ) {
+        self.day = day
+        self.groupId = groupId
+        self.events = events
+        self.onSelectEvent = onSelectEvent
     }
 
     var body: some View {
@@ -49,11 +62,8 @@ struct DayEventListView: View {
             } else {
                 VStack(spacing: 0) {
                     ForEach(events) { event in
-                        MovieNightEventRow(
-                            event: event,
-                            responses: movieNightStore.responses(for: groupId, eventId: event.id)
-                        )
-                        .padding(.vertical, 10)
+                        row(for: event)
+                            .padding(.vertical, 10)
 
                         if event.id != events.last?.id {
                             Divider().opacity(0.6)
@@ -71,6 +81,25 @@ struct DayEventListView: View {
             RoundedRectangle(cornerRadius: displaySettings.cardCornerRadius)
                 .stroke(Color.primary.opacity(0.06), lineWidth: 1)
         )
+    }
+
+    @ViewBuilder
+    private func row(for event: MovieNightEvent) -> some View {
+        let row = MovieNightEventRow(
+            event: event,
+            responses: movieNightStore.responses(for: groupId, eventId: event.id)
+        )
+
+        if let onSelectEvent {
+            Button {
+                onSelectEvent(event)
+            } label: {
+                row
+            }
+            .buttonStyle(.plain)
+        } else {
+            row
+        }
     }
 
     private var emptyState: some View {
