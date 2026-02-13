@@ -21,10 +21,24 @@ final class MovieNightStore: ObservableObject {
     @Published private(set) var activityByGroup: [String: [MovieNightActivityEvent]] = [:]
     @Published private(set) var isLoaded: Bool = false
 
+    // MARK: - Cloud (Phase 3: read-only)
+
+    private let useCloud: Bool
+    private let cloudStore: CloudKitMovieNightStore?
+
+    private var isRefreshingFromCloud: Bool = false
+    private var lastRefreshAtByGroup: [String: Date] = [:]
+    private let minRefreshInterval: TimeInterval = 8
+
+    private var initialLoadTask: Task<Void, Never>?
+
     private let persistence = MovieNightLocalPersistence()
 
-    init() {
-        Task { @MainActor in
+    init(useCloud: Bool = true, cloudStore: CloudKitMovieNightStore = CloudKitMovieNightStore()) {
+        self.useCloud = useCloud
+        self.cloudStore = useCloud ? cloudStore : nil
+
+        self.initialLoadTask = Task { @MainActor in
             let snapshot = await persistence.load()
             self.eventsByGroup = snapshot.eventsByGroup
             self.responsesByGroup = snapshot.responsesByGroup
@@ -57,6 +71,49 @@ final class MovieNightStore: ObservableObject {
 
     func activityEvents(for groupId: String) -> [MovieNightActivityEvent] {
         (activityByGroup[groupId] ?? []).sorted(by: { $0.createdAt > $1.createdAt })
+    }
+
+    // MARK: - Cloud read (Phase 3)
+
+    /// Pulls movie night data from CloudKit for a given group and merges it into the local snapshot.
+    ///
+    /// Phase 3 is read-only: local changes are NOT uploaded yet.
+    func refreshFromCloud(groupId: String?, force: Bool = false) async {
+        guard useCloud, let cloudStore else { return }
+
+        let gid = (groupId ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !gid.isEmpty else {
+            // No group -> local-only.
+            return
+        }
+
+        // Ensure local snapshot has been loaded, otherwise we'd overwrite cloud merges.
+        if let t = initialLoadTask {
+            await t.value
+        }
+
+        if isRefreshingFromCloud { return }
+        if !force, let last = lastRefreshAtByGroup[gid], Date().timeIntervalSince(last) < minRefreshInterval {
+            return
+        }
+
+        lastRefreshAtByGroup[gid] = Date()
+        isRefreshingFromCloud = true
+        defer { isRefreshingFromCloud = false }
+
+        do {
+            if GroupContextStore.context(forGroupId: gid) != nil {
+                let changes = try await cloudStore.fetchMovieNightChanges(forGroupId: gid)
+                applyCloudChanges(changes, groupId: gid)
+            } else {
+                let snapshot = try await cloudStore.fetchMovieNightSnapshot(forGroupId: gid)
+                applyCloudSnapshot(snapshot, groupId: gid)
+            }
+
+            persist()
+        } catch {
+            print("MovieNightStore.refreshFromCloud error: \(error)")
+        }
     }
 
     // MARK: - Write API
@@ -279,5 +336,85 @@ final class MovieNightStore: ObservableObject {
             list = Array(list.suffix(200))
         }
         activityByGroup[groupId] = list
+    }
+
+    // MARK: - Cloud merge helpers
+
+    private func applyCloudChanges(_ delta: CloudKitMovieNightStore.MovieNightChanges, groupId: String) {
+        mergeEvents(delta.changedEvents, deleted: delta.deletedEventIDs, groupId: groupId)
+        mergeResponses(delta.changedResponses, deleted: delta.deletedResponseIDs, groupId: groupId)
+        mergeActivity(delta.changedActivity, deleted: delta.deletedActivityIDs, groupId: groupId)
+    }
+
+    private func applyCloudSnapshot(_ snapshot: CloudKitMovieNightStore.MovieNightSnapshot, groupId: String) {
+        // Snapshot path is mainly for legacy/public groups.
+        // We merge in a way that never deletes local-only data.
+        mergeEvents(snapshot.events, deleted: [], groupId: groupId)
+        mergeResponses(snapshot.responses, deleted: [], groupId: groupId)
+        mergeActivity(snapshot.activity, deleted: [], groupId: groupId)
+    }
+
+    private func mergeEvents(_ changed: [MovieNightEvent], deleted: [UUID], groupId: String) {
+        var current = eventsByGroup[groupId] ?? []
+        var byId: [UUID: MovieNightEvent] = Dictionary(uniqueKeysWithValues: current.map { ($0.id, $0) })
+
+        for e in changed {
+            if let local = byId[e.id] {
+                // Keep the newest version (best-effort, local can still be ahead in Phase 3).
+                if local.updatedAt >= e.updatedAt {
+                    continue
+                }
+            }
+            byId[e.id] = e
+        }
+
+        for id in deleted {
+            byId.removeValue(forKey: id)
+        }
+
+        current = Array(byId.values)
+        current.sort(by: { $0.proposedStart < $1.proposedStart })
+        eventsByGroup[groupId] = current
+    }
+
+    private func mergeResponses(_ changed: [MovieNightResponse], deleted: [String], groupId: String) {
+        var current = responsesByGroup[groupId] ?? []
+        var byId: [String: MovieNightResponse] = Dictionary(uniqueKeysWithValues: current.map { ($0.id, $0) })
+
+        for r in changed {
+            if let local = byId[r.id] {
+                // respondedAt is our best proxy for "newer".
+                if local.respondedAt >= r.respondedAt {
+                    continue
+                }
+            }
+            byId[r.id] = r
+        }
+
+        for id in deleted {
+            byId.removeValue(forKey: id)
+        }
+
+        responsesByGroup[groupId] = Array(byId.values)
+    }
+
+    private func mergeActivity(_ changed: [MovieNightActivityEvent], deleted: [UUID], groupId: String) {
+        var current = activityByGroup[groupId] ?? []
+        var byId: [UUID: MovieNightActivityEvent] = Dictionary(uniqueKeysWithValues: current.map { ($0.id, $0) })
+
+        for a in changed {
+            byId[a.id] = a
+        }
+
+        for id in deleted {
+            byId.removeValue(forKey: id)
+        }
+
+        current = Array(byId.values)
+        current.sort(by: { $0.createdAt > $1.createdAt })
+        if current.count > 200 {
+            current = Array(current.prefix(200))
+        }
+        activityByGroup[groupId] = current
     }
 }

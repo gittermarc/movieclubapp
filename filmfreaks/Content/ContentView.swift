@@ -10,6 +10,7 @@ internal import SwiftUI
 struct ContentView: View {
 
     @EnvironmentObject var movieStore: MovieStore
+    @EnvironmentObject var movieNightStore: MovieNightStore
     @EnvironmentObject var userStore: UserStore
     @EnvironmentObject var networkMonitor: NetworkMonitor
     @EnvironmentObject var displaySettings: DisplaySettings

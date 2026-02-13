@@ -23,6 +23,9 @@ extension ContentView {
             group.addTask {
                 await userStore.refreshFromCloud(force: true)
             }
+            group.addTask {
+                await movieNightStore.refreshFromCloud(groupId: movieStore.currentGroupId, force: true)
+            }
             await group.waitForAll()
         }
     }

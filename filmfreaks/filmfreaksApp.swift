@@ -68,6 +68,7 @@ struct filmfreaksApp: App {
                     await groupStore.refresh()
                     await movieStore.refreshFromCloud(force: false)
                     await userStore.refreshFromCloud(force: false)
+                    await movieNightStore.refreshFromCloud(groupId: movieStore.currentGroupId, force: false)
                 }
             }
         }

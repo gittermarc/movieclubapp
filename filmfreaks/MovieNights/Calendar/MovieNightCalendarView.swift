@@ -86,6 +86,9 @@ struct MovieNightCalendarView: View {
             .background(Color(.systemGroupedBackground))
             .navigationTitle("Kalender")
             .navigationBarTitleDisplayMode(.inline)
+            .task(id: groupId) {
+                await movieNightStore.refreshFromCloud(groupId: groupId, force: false)
+            }
             .onChange(of: monthAnchor) { _, newValue in
                 let cal = Calendar.current
                 if !cal.isDate(selectedDay, equalTo: newValue, toGranularity: .month) {
