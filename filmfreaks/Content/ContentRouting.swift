@@ -15,6 +15,7 @@ internal enum ContentRoute: String, Identifiable {
     case users
     case stats
     case timeline
+    case calendar
     case activity
     case goals
     case groupSettings
@@ -116,6 +117,9 @@ private struct ContentRoutingModifier: ViewModifier {
                     .environmentObject(movieStore)
                     .environmentObject(userStore)
             )
+
+        case .calendar:
+            themed(MovieNightCalendarView())
 
         case .activity:
             themed(

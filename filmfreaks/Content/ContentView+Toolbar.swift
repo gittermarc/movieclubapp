@@ -48,6 +48,12 @@ struct ContentToolbar: ToolbarContent {
                 }
 
                 Button {
+                    route = .calendar
+                } label: {
+                    Label("Kalender", systemImage: "calendar")
+                }
+
+                Button {
                     route = .goals
                 } label: {
                     Label("Ziele", systemImage: "target")
