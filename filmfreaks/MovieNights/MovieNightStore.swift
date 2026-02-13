@@ -5,8 +5,8 @@
 //  Created by Marc Fechner on 13.02.26.
 //
 
-internal import SwiftUI
 import Foundation
+internal import SwiftUI
 import Combine
 
 /// Group-scoped store for movie night proposals and responses.
@@ -22,7 +22,7 @@ final class MovieNightStore: ObservableObject {
     private let persistence = MovieNightLocalPersistence()
 
     init() {
-        Task {
+        Task { @MainActor in
             let snapshot = await persistence.load()
             self.eventsByGroup = snapshot.eventsByGroup
             self.responsesByGroup = snapshot.responsesByGroup
@@ -155,7 +155,10 @@ final class MovieNightStore: ObservableObject {
     func purgeAllLocalData() {
         eventsByGroup.removeAll()
         responsesByGroup.removeAll()
+
         Task { await persistence.deleteLocalFile() }
+
+        // Persist the empty snapshot so the app state matches disk state even if file delete fails.
         persist()
     }
 
@@ -168,6 +171,7 @@ final class MovieNightStore: ObservableObject {
             eventsByGroup: eventsByGroup,
             responsesByGroup: responsesByGroup
         )
+
         Task {
             await persistence.save(snapshot)
         }

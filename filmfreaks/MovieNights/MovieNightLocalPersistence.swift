@@ -58,7 +58,7 @@ actor MovieNightLocalPersistence {
             let data = try Data(contentsOf: fileURL)
             return try decoder.decode(Snapshot.self, from: data)
         } catch {
-            // If anything goes wrong, we return an empty snapshot instead of crashing the app.
+            // Best-effort persistence for P0.
             return .empty()
         }
     }
