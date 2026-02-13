@@ -20,6 +20,7 @@ struct filmfreaksApp: App {
     }
 
     @StateObject var movieStore = MovieStore(useCloud: true)
+    @StateObject var movieNightStore = MovieNightStore()
     @StateObject var userStore = UserStore()
     @StateObject var groupStore = CloudKitGroupStore()
     @StateObject var networkMonitor = NetworkMonitor.shared
@@ -35,6 +36,7 @@ struct filmfreaksApp: App {
             ZStack {
                 ContentView()
                     .environmentObject(movieStore)
+                    .environmentObject(movieNightStore)
                     .environmentObject(userStore)
                     .environmentObject(groupStore)
                     .environmentObject(networkMonitor)
