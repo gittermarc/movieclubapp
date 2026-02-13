@@ -28,6 +28,9 @@ struct MovieNightEvent: Identifiable, Codable, Equatable, Hashable {
     var proposerUserId: UUID
     var proposerName: String
 
+    /// Optional movie picked from the current group backlog.
+    var suggestedMovie: MovieNightMovieRef?
+
     var note: String?
     var status: Status
 
@@ -39,6 +42,7 @@ struct MovieNightEvent: Identifiable, Codable, Equatable, Hashable {
         updatedAt: Date = .now,
         proposerUserId: UUID,
         proposerName: String,
+        suggestedMovie: MovieNightMovieRef? = nil,
         note: String? = nil,
         status: Status = .open
     ) {
@@ -49,6 +53,7 @@ struct MovieNightEvent: Identifiable, Codable, Equatable, Hashable {
         self.updatedAt = updatedAt
         self.proposerUserId = proposerUserId
         self.proposerName = proposerName
+        self.suggestedMovie = suggestedMovie
         self.note = note
         self.status = status
     }

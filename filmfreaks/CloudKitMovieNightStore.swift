@@ -48,6 +48,11 @@ struct CloudKitMovieNightStore {
     private let updatedAtKey = "updatedAt"
     private let proposerUserIdKey = "proposerUserId"
     private let proposerNameKey = "proposerName"
+    private let movieIdKey = "movieId"
+    private let movieTitleKey = "movieTitle"
+    private let movieYearKey = "movieYear"
+    private let moviePosterPathKey = "moviePosterPath"
+    private let movieTmdbIdKey = "movieTmdbId"
     private let noteKey = "note"
     private let statusKey = "status"
 
@@ -236,6 +241,11 @@ struct CloudKitMovieNightStore {
             record[updatedAtKey] = e.updatedAt as CKRecordValue
             record[proposerUserIdKey] = e.proposerUserId.uuidString as CKRecordValue
             record[proposerNameKey] = e.proposerName as CKRecordValue
+            record[movieIdKey] = e.suggestedMovie?.movieId.uuidString as CKRecordValue?
+            record[movieTitleKey] = e.suggestedMovie?.title as CKRecordValue?
+            record[movieYearKey] = e.suggestedMovie?.year as CKRecordValue?
+            record[moviePosterPathKey] = e.suggestedMovie?.posterPath as CKRecordValue?
+            record[movieTmdbIdKey] = e.suggestedMovie?.tmdbId.map { NSNumber(value: $0) } as CKRecordValue?
             record[noteKey] = e.note as CKRecordValue?
             record[statusKey] = e.status.rawValue as CKRecordValue
             if let rootRef { record.parent = rootRef }
@@ -323,6 +333,33 @@ struct CloudKitMovieNightStore {
 
         let note = record[noteKey] as? String
 
+        let suggestedMovie: MovieNightMovieRef? = {
+            guard
+                let movieIdString = record[movieIdKey] as? String,
+                let movieId = UUID(uuidString: movieIdString),
+                let title = record[movieTitleKey] as? String,
+                let year = record[movieYearKey] as? String
+            else {
+                return nil
+            }
+
+            let posterPath = record[moviePosterPathKey] as? String
+
+            let tmdbId: Int? = {
+                if let n = record[movieTmdbIdKey] as? NSNumber { return n.intValue }
+                if let i = record[movieTmdbIdKey] as? Int { return i }
+                return nil
+            }()
+
+            return MovieNightMovieRef(
+                movieId: movieId,
+                title: title,
+                year: year,
+                posterPath: posterPath,
+                tmdbId: tmdbId
+            )
+        }()
+
         return MovieNightEvent(
             id: id,
             groupId: groupId,
@@ -331,6 +368,7 @@ struct CloudKitMovieNightStore {
             updatedAt: updatedAt,
             proposerUserId: proposerUserId,
             proposerName: proposerName,
+            suggestedMovie: suggestedMovie,
             note: note,
             status: status
         )

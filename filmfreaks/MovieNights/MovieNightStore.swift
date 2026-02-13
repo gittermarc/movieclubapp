@@ -301,6 +301,7 @@ final class MovieNightStore: ObservableObject {
     func proposeEvent(
         groupId: String,
         proposedStart: Date,
+        suggestedMovie: MovieNightMovieRef? = nil,
         note: String? = nil,
         proposerUserId: UUID,
         proposerName: String
@@ -313,6 +314,7 @@ final class MovieNightStore: ObservableObject {
             updatedAt: now,
             proposerUserId: proposerUserId,
             proposerName: proposerName,
+            suggestedMovie: suggestedMovie,
             note: note,
             status: .open
         )

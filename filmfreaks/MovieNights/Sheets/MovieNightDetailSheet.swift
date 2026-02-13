@@ -158,6 +158,10 @@ struct MovieNightDetailSheet: View {
                 .foregroundStyle(.secondary)
             }
 
+            if let suggested = event.suggestedMovie {
+                MovieNightSelectedMovieRowView(movie: suggested)
+            }
+
             if let note = normalized(event.note) {
                 Text(note)
                     .font(.callout)

@@ -88,6 +88,17 @@ struct MovieNightEventRow: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
 
+            if let m = event.suggestedMovie {
+                Text("•")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.secondary)
+
+                Label(m.title, systemImage: "film")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+
             if hasNote, let note = event.note?.trimmingCharacters(in: .whitespacesAndNewlines) {
                 Text("•")
                     .font(.caption.weight(.bold))
