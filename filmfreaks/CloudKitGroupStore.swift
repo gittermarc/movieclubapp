@@ -20,6 +20,8 @@ final class CloudKitGroupStore: ObservableObject {
     private var privateDB: CKDatabase { container.privateCloudDatabase }
     private var sharedDB: CKDatabase { container.sharedCloudDatabase }
 
+    private let subscriptionManager: CloudKitActivitySubscriptionManager
+
     private let groupRecordType = "FFGroup"
     private let nameKey = "name"
     private let createdAtKey = "createdAt"
@@ -32,6 +34,7 @@ final class CloudKitGroupStore: ObservableObject {
 
     init(container: CKContainer = .default()) {
         self.container = container
+        self.subscriptionManager = CloudKitActivitySubscriptionManager(container: container)
 
         // When a share is accepted, refresh the list.
         NotificationCenter.default.addObserver(
@@ -64,6 +67,21 @@ final class CloudKitGroupStore: ObservableObject {
             // Persist contexts so other stores can route by groupId.
             for g in owned + shared {
                 GroupContextStore.upsert(g)
+            }
+
+            // P1: Ensure CloudKit subscriptions exist so group activity can trigger
+            // content-available pushes (we will translate those into user-visible
+            // notifications in a later step).
+            Task {
+                await subscriptionManager.ensureSubscriptions(forOwnedGroups: owned)
+                await subscriptionManager.ensureSubscriptions(forSharedGroups: shared)
+            }
+
+            // P1: Ensure CloudKit subscriptions exist so changes can wake the app via
+            // content-available pushes (later -> map to local notifications).
+            Task {
+                await subscriptionManager.ensureSubscriptions(forOwnedGroups: owned)
+                await subscriptionManager.ensureSubscriptions(forSharedGroups: shared)
             }
 
             // One-time repair for older builds:

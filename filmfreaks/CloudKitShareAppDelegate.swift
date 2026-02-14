@@ -7,12 +7,32 @@
 
 internal import UIKit
 import CloudKit
+import UserNotifications
 
 extension Notification.Name {
     static let cloudKitShareAccepted = Notification.Name("CloudKitShareAccepted")
 }
 
-final class CloudKitShareAppDelegate: NSObject, UIApplicationDelegate {
+final class CloudKitShareAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
+
+    func application(
+        _ application: UIApplication,
+        didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
+    ) -> Bool {
+        NotificationsPermissionManager.shared.bootstrapIfNeeded(application: application, delegate: self)
+        return true
+    }
+
+    // MARK: - Remote notifications (P2 minimal)
+
+    func application(
+        _ application: UIApplication,
+        didReceiveRemoteNotification userInfo: [AnyHashable: Any],
+        fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void
+    ) {
+        CloudKitRemoteNotificationDebugger.log(userInfo: userInfo)
+        completionHandler(.noData)
+    }
 
     // MARK: Scene delegate wiring
 
@@ -37,5 +57,16 @@ final class CloudKitShareAppDelegate: NSObject, UIApplicationDelegate {
     ) {
         // Some OS versions still call the app delegate path.
         Task { await CloudKitShareCoordinator.shared.accept(cloudKitShareMetadata) }
+    }
+
+    // MARK: - UNUserNotificationCenterDelegate
+
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification
+    ) async -> UNNotificationPresentationOptions {
+        // We keep this permissive so future *local* activity notifications can show a banner
+        // even while the app is in the foreground.
+        return [.banner, .sound]
     }
 }
