@@ -7,6 +7,7 @@
 
 internal import UIKit
 import CloudKit
+import UserNotifications
 
 final class CloudKitShareSceneDelegate: NSObject, UIWindowSceneDelegate {
 
@@ -18,6 +19,11 @@ final class CloudKitShareSceneDelegate: NSObject, UIWindowSceneDelegate {
     ) {
         if let metadata = connectionOptions.cloudKitShareMetadata {
             Task { await CloudKitShareCoordinator.shared.accept(metadata) }
+        }
+
+        // Cold-start path: app launched by tapping a push notification.
+        if let response = connectionOptions.notificationResponse {
+            PushDeepLinkRouter.route(userInfo: response.notification.request.content.userInfo)
         }
     }
 

@@ -12,6 +12,7 @@ struct ContentView: View {
     @EnvironmentObject var movieStore: MovieStore
     @EnvironmentObject var movieNightStore: MovieNightStore
     @EnvironmentObject var userStore: UserStore
+    @EnvironmentObject var groupStore: CloudKitGroupStore
     @EnvironmentObject var networkMonitor: NetworkMonitor
     @EnvironmentObject var displaySettings: DisplaySettings
 
@@ -274,6 +275,10 @@ struct ContentView: View {
                 updateOnboardingCompletionFlag()
             }
 
+            .onReceive(NotificationCenter.default.publisher(for: .pushDeepLinkRequested)) { note in
+                handlePushDeepLink(note.userInfo)
+            }
+
             .toolbar {
                 ContentToolbar(
                     route: $route,
@@ -298,12 +303,55 @@ struct ContentView: View {
         ContentOnboarding.trackSearchOpened(forGroupId: onboarding.groupIdForProgress)
     }
 
+    // MARK: - Push Deep Link (P2.4)
+
+    private func handlePushDeepLink(_ userInfo: [AnyHashable: Any]?) {
+        guard
+            let userInfo,
+            let groupId = userInfo["groupId"] as? String
+        else { return }
+
+        let trimmed = groupId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
+        // 1) Switch group (best effort) so Activity screen shows the right context.
+        if let ctx = GroupContextStore.context(forGroupId: trimmed) {
+            if movieStore.currentGroupId != ctx.id {
+                movieStore.activateCloudGroup(ctx)
+            } else {
+                // Ensure group name is up to date even if already active.
+                if movieStore.currentGroupName != ctx.name {
+                    movieStore.currentGroupName = ctx.name
+                }
+            }
+        } else {
+            // Fallback: switch by id only.
+            if movieStore.currentGroupId != trimmed {
+                movieStore.currentGroupId = trimmed
+            }
+        }
+
+        // 2) Keep dependent stores in sync.
+        userStore.loadUsers(forGroupId: trimmed)
+
+        Task {
+            await groupStore.refresh()
+            await movieStore.refreshFromCloud(force: true)
+            await userStore.refreshFromCloud(force: true)
+            await movieNightStore.refreshFromCloud(groupId: trimmed, force: true)
+        }
+
+        // 3) Open Activity.
+        route = .activity
+    }
+
     
 }
 
 #Preview {
     ContentView()
         .environmentObject(MovieStore.preview())
+        .environmentObject(CloudKitGroupStore())
         .environmentObject(UserStore())
         .environmentObject(NetworkMonitor.shared)
         .environmentObject(DisplaySettings())

@@ -11,6 +11,7 @@ import UserNotifications
 
 extension Notification.Name {
     static let cloudKitShareAccepted = Notification.Name("CloudKitShareAccepted")
+    static let pushDeepLinkRequested = Notification.Name("PushDeepLinkRequested")
 }
 
 final class CloudKitShareAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
@@ -72,5 +73,13 @@ final class CloudKitShareAppDelegate: NSObject, UIApplicationDelegate, UNUserNot
     ) async -> UNNotificationPresentationOptions {
         // Allow banners while app is in foreground (esp. for local notifications later).
         return [.banner, .sound]
+    }
+
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse
+    ) async {
+        // Deep link when the user taps on a push.
+        PushDeepLinkRouter.route(userInfo: response.notification.request.content.userInfo)
     }
 }
