@@ -2,13 +2,9 @@
 //  CloudKitActivityPushFetchCoordinator.swift
 //  filmfreaks
 //
-//  P2 (light): Fetch the changed record for an incoming CloudKit push and log
-//  a short summary.
-//
-//  This intentionally does NOT create user-facing notifications yet.
-//  It is purely an end-to-end verification step:
-//  push -> subscriptionID -> group routing (private/shared + zone) -> record fetch
-//  -> minimal decode -> log.
+//  P2 (full): Fetch the changed record for an incoming CloudKit push,
+//  decode a minimal activity summary, and show a local notification
+//  (deduped + best-effort own-action suppression).
 //
 
 import Foundation
@@ -18,15 +14,17 @@ enum CloudKitActivityPushFetchCoordinator {
 
     private static let container = CKContainer.default()
 
-    /// Returns true if we fetched a record and produced a summary log.
-    static func fetchAndLog(userInfo: [AnyHashable: Any]) async -> Bool {
+    /// P2 (full): Primary entry point used by AppDelegate.
+    ///
+    /// Returns true if we fetched a record (even if we decide to skip notifying).
+    static func fetchAndHandle(userInfo: [AnyHashable: Any]) async -> Bool {
         #if DEBUG
         guard let ck = CKNotification(fromRemoteNotificationDictionary: userInfo) else {
             return false
         }
 
         guard ck.notificationType == .query, let q = ck as? CKQueryNotification else {
-            // For P2 (light) we only handle query subscriptions.
+            // For now we only handle query subscriptions.
             return false
         }
 
@@ -51,7 +49,14 @@ enum CloudKitActivityPushFetchCoordinator {
 
         do {
             let record = try await fetchRecord(database: db, recordID: recordID)
-            logSummary(kind: parsed.kind, record: record, fallbackGroupId: ctx.id)
+
+            let summary = decodeSummary(kind: parsed.kind, record: record, groupContext: ctx)
+            logFetchResult(kind: parsed.kind, record: record, summary: summary, groupId: ctx.id)
+
+            if let summary {
+                await GroupActivityLocalNotifier.shared.maybeNotify(summary)
+            }
+
             return true
         } catch {
             print("[Push] Fetch failed kind=\(parsed.kind.rawValue) groupId=\(ctx.id) recordID=\(recordID.recordName) error=\(error)")
@@ -60,6 +65,12 @@ enum CloudKitActivityPushFetchCoordinator {
         #else
         return false
         #endif
+    }
+
+    /// Backward-compatible alias.
+    /// Your earlier P2 light called this method name.
+    static func fetchAndLog(userInfo: [AnyHashable: Any]) async -> Bool {
+        await fetchAndHandle(userInfo: userInfo)
     }
 
     // MARK: - Fetch
@@ -75,13 +86,18 @@ enum CloudKitActivityPushFetchCoordinator {
                     cont.resume(returning: record)
                     return
                 }
-                cont.resume(throwing: NSError(domain: "CloudKit", code: -1, userInfo: [NSLocalizedDescriptionKey: "Missing CKRecord"]))
+                cont.resume(throwing: NSError(
+                    domain: "CloudKit",
+                    code: -1,
+                    userInfo: [NSLocalizedDescriptionKey: "Missing CKRecord"]
+                ))
             }
         }
     }
 
     private static func normalizedRecordID(from incoming: CKRecord.ID?, groupContext ctx: GroupContext) -> CKRecord.ID? {
         guard let incoming else { return nil }
+
         // Most of the time CloudKit provides zoneID already.
         if incoming.zoneID != nil { return incoming }
 
@@ -89,50 +105,62 @@ enum CloudKitActivityPushFetchCoordinator {
         return CKRecord.ID(recordName: incoming.recordName, zoneID: zoneID)
     }
 
-    // MARK: - Decode + Log
+    // MARK: - Decode
 
-    private static func logSummary(kind: CloudKitActivitySubscriptionID.Kind, record: CKRecord, fallbackGroupId: String) {
+    private static func decodeSummary(
+        kind: CloudKitActivitySubscriptionID.Kind,
+        record: CKRecord,
+        groupContext ctx: GroupContext
+    ) -> GroupActivityNotificationSummary? {
         switch kind {
         case .movie:
-            if let summary = decodeMovieSummary(record: record) {
-                print("[Push] ✅ fetched Movie \(summary)")
-            } else {
-                print("[Push] ✅ fetched Movie recordID=\(record.recordID.recordName) (no payload decode)")
-            }
-
+            return decodeMovieSummary(record: record, groupContext: ctx)
         case .rating:
-            if let summary = decodeRatingSummary(record: record) {
-                print("[Push] ✅ fetched Rating \(summary)")
-            } else {
-                print("[Push] ✅ fetched Rating recordID=\(record.recordID.recordName) (no payload decode)")
-            }
-
+            return decodeRatingSummary(record: record, groupContext: ctx)
         case .movieNightActivity:
-            if let summary = decodeMovieNightActivitySummary(record: record, fallbackGroupId: fallbackGroupId) {
-                print("[Push] ✅ fetched MovieNightActivity \(summary)")
-            } else {
-                print("[Push] ✅ fetched MovieNightActivity recordID=\(record.recordID.recordName)")
-            }
+            return decodeMovieNightActivitySummary(record: record, groupContext: ctx)
         }
     }
 
-    private static func decodeMovieSummary(record: CKRecord) -> String? {
-        // CloudKitMovieStore uses: payload(Data) + groupId(String) + updatedAt(Date)
+    private static func decodeMovieSummary(record: CKRecord, groupContext ctx: GroupContext) -> GroupActivityNotificationSummary? {
         guard let data = record["payload"] as? Data else { return nil }
         guard let movie = try? JSONDecoder().decode(Movie.self, from: data) else { return nil }
-        let gid = (record["groupId"] as? String) ?? movie.groupId ?? ""
-        let updated = (record["updatedAt"] as? Date)
-        let updatedPart = updated.map { " updatedAt=\($0)" } ?? ""
-        return "id=\(movie.id.uuidString) title=\(movie.title) groupId=\(gid)\(updatedPart)"
+
+        let groupId = (record["groupId"] as? String) ?? movie.groupId ?? ctx.id
+        let actorName = movie.addedByName
+        let actorId = movie.addedById
+
+        let title = "In \(ctx.name)"
+        let bodyActor = (actorName?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false) ? actorName! : "Jemand"
+        let body = "\(bodyActor) hat „\(movie.title)“ hinzugefügt."
+
+        return GroupActivityNotificationSummary(
+            kind: .movie,
+            groupId: groupId,
+            groupName: ctx.name,
+            recordID: record.recordID.recordName,
+            actorName: actorName,
+            actorId: actorId,
+            title: title,
+            body: body,
+            userInfo: [
+                "groupId": groupId,
+                "kind": "movie",
+                "movieId": movie.id.uuidString,
+                "recordID": record.recordID.recordName
+            ]
+        )
     }
 
-    private static func decodeRatingSummary(record: CKRecord) -> String? {
-        // CloudKitRatingStore uses: payload(Data) + groupId(String) + movieId(String)
+    private static func decodeRatingSummary(record: CKRecord, groupContext ctx: GroupContext) -> GroupActivityNotificationSummary? {
         guard let data = record["payload"] as? Data else { return nil }
         guard let rating = try? JSONDecoder().decode(Rating.self, from: data) else { return nil }
 
-        let gid = (record["groupId"] as? String) ?? ""
-        let movieId = (record["movieId"] as? String) ?? "(nil)"
+        let groupId = (record["groupId"] as? String) ?? ctx.id
+        let movieId = (record["movieId"] as? String) ?? ""
+
+        let actorName = rating.reviewerName
+        let actorId = rating.reviewerId
 
         let score10: String = {
             if let f = rating.fazitScore { return String(f) }
@@ -140,35 +168,82 @@ enum CloudKitActivityPushFetchCoordinator {
             return String(approx)
         }()
 
-        return "id=\(rating.id.uuidString) score10=\(score10) movieId=\(movieId) reviewer=\(rating.reviewerName) groupId=\(gid)"
+        let title = "Neue Bewertung"
+        let body = "\(actorName) hat eine Bewertung abgegeben (\(score10)/10)."
+
+        return GroupActivityNotificationSummary(
+            kind: .rating,
+            groupId: groupId,
+            groupName: ctx.name,
+            recordID: record.recordID.recordName,
+            actorName: actorName,
+            actorId: actorId,
+            title: title,
+            body: body,
+            userInfo: [
+                "groupId": groupId,
+                "kind": "rating",
+                "movieId": movieId,
+                "reviewerId": actorId?.uuidString ?? "",
+                "recordID": record.recordID.recordName
+            ]
+        )
     }
 
-    private static func decodeMovieNightActivitySummary(record: CKRecord, fallbackGroupId: String) -> String? {
-        // Mirrors CloudKitMovieNightStore.decodeActivity (kept local for minimal dependencies).
-        let groupId = (record["groupId"] as? String) ?? fallbackGroupId
+    private static func decodeMovieNightActivitySummary(record: CKRecord, groupContext ctx: GroupContext) -> GroupActivityNotificationSummary? {
+        let groupId = (record["groupId"] as? String) ?? ctx.id
+
         guard
             let kindRaw = record["kind"] as? String,
-            let createdAt = record["createdAt"] as? Date,
-            let eventId = record["eventId"] as? String,
-            let eventStart = record["eventStart"] as? Date,
             let actorName = record["actorName"] as? String
         else { return nil }
 
+        let eventId = (record["eventId"] as? String) ?? ""
         let decision = record["decision"] as? String
         let newStatus = record["newStatus"] as? String
-        let note = record["note"] as? String
 
-        var parts: [String] = []
-        parts.append("id=\(record.recordID.recordName)")
-        parts.append("groupId=\(groupId)")
-        parts.append("kind=\(kindRaw)")
-        parts.append("actor=\(actorName)")
-        parts.append("eventId=\(eventId)")
-        parts.append("eventStart=\(eventStart)")
-        parts.append("createdAt=\(createdAt)")
-        if let decision { parts.append("decision=\(decision)") }
-        if let newStatus { parts.append("newStatus=\(newStatus)") }
-        if let note, !note.isEmpty { parts.append("note=\(note)") }
-        return parts.joined(separator: " ")
+        let title = "Filmabend-Update"
+        let body: String = {
+            if let decision, !decision.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                return "\(actorName) hat reagiert: \(decision)."
+            }
+            if let newStatus, !newStatus.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                return "\(actorName) hat den Status geändert: \(newStatus)."
+            }
+            return "\(actorName) hat den Filmabend aktualisiert."
+        }()
+
+        return GroupActivityNotificationSummary(
+            kind: .movieNightActivity,
+            groupId: groupId,
+            groupName: ctx.name,
+            recordID: record.recordID.recordName,
+            actorName: actorName,
+            actorId: nil,
+            title: title,
+            body: body,
+            userInfo: [
+                "groupId": groupId,
+                "kind": "movieNightActivity",
+                "eventId": eventId,
+                "activityKind": kindRaw,
+                "recordID": record.recordID.recordName
+            ]
+        )
+    }
+
+    // MARK: - Debug
+
+    private static func logFetchResult(
+        kind: CloudKitActivitySubscriptionID.Kind,
+        record: CKRecord,
+        summary: GroupActivityNotificationSummary?,
+        groupId: String
+    ) {
+        if let summary {
+            print("[Push] ✅ fetched \(kind.rawValue) groupId=\(summary.groupId) recordID=\(summary.recordID) actor=\(summary.actorName ?? "(nil)")")
+        } else {
+            print("[Push] ✅ fetched \(kind.rawValue) groupId=\(groupId) recordID=\(record.recordID.recordName) (no summary decode)")
+        }
     }
 }

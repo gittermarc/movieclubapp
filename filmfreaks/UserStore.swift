@@ -66,7 +66,7 @@ class UserStore: ObservableObject {
     /// Wer gerade bewertet etc.
     @Published var selectedUser: User? {
         didSet {
-            // Best-effort identity for push notification suppression (own actions).
+            // P2 full: Persist current identity so we can suppress notifications for own actions.
             CurrentUserIdentityStore.setCurrentUser(id: selectedUser?.id, name: selectedUser?.name)
         }
     }
@@ -124,6 +124,9 @@ class UserStore: ObservableObject {
             self.selectedUser = nil
         }
 
+        // P2 full: Make sure identity is persisted immediately (also covers first launch).
+        CurrentUserIdentityStore.setCurrentUser(id: selectedUser?.id, name: selectedUser?.name)
+
         // Falls wir direkt in einer Gruppe sind: Members aus iCloud nachladen.
         if let gid = groupIdFromDefaults, !gid.isEmpty {
             Task { await self.refreshFromCloud(force: true) }
@@ -147,6 +150,9 @@ class UserStore: ObservableObject {
         } else {
             self.selectedUser = nil
         }
+
+        // P2 full: Persist identity for own-action suppression.
+        CurrentUserIdentityStore.setCurrentUser(id: selectedUser?.id, name: selectedUser?.name)
 
         // Für Gruppen: direkt Cloud-Fetch.
         if let gid = groupId, !gid.isEmpty {
@@ -332,6 +338,9 @@ class UserStore: ObservableObject {
         } else {
             selectedUser = users.first
         }
+
+        // P2 full: Make sure the final selection is persisted for own-action suppression.
+        CurrentUserIdentityStore.setCurrentUser(id: selectedUser?.id, name: selectedUser?.name)
     }
 
 }

@@ -2,7 +2,8 @@
 //  GroupActivityLocalNotifier.swift
 //  filmfreaks
 //
-//  P2 (full): Convert fetched CloudKit activity into a user-facing local notification.
+//  P2 (full): Convert fetched CloudKit activity into a local user notification.
+//  Includes dedupe + best-effort own-action suppression.
 //
 
 import Foundation
@@ -31,11 +32,12 @@ final class GroupActivityLocalNotifier {
             #if DEBUG
             print("[Push] 🔕 skip notify (own action) groupId=\(summary.groupId) recordID=\(summary.recordID)")
             #endif
+            // still mark as handled so we don't notify later for the same record
             state.markNotified(groupId: summary.groupId, recordID: summary.recordID)
             return
         }
 
-        // 3) Only notify if we are authorized to display alerts.
+        // 3) Must be authorized for alerts (or provisional)
         let center = UNUserNotificationCenter.current()
         let settings = await center.notificationSettings()
         guard settings.authorizationStatus == .authorized || settings.authorizationStatus == .provisional else {
@@ -49,8 +51,6 @@ final class GroupActivityLocalNotifier {
         content.title = summary.title
         content.body = summary.body
         content.sound = .default
-
-        // Attach payload for future deep links.
         content.userInfo = summary.userInfo
 
         let identifier = "ff.act.\(summary.groupId).\(summary.recordID)"

@@ -2,8 +2,7 @@
 //  GroupActivityNotificationSummary.swift
 //  filmfreaks
 //
-//  P2 (full): Minimal, stable representation of a fetched activity event.
-//  Used to build a local notification and later for deep-link routing.
+//  P2 (full): Minimal activity summary used to build a local notification.
 //
 
 import Foundation
@@ -31,6 +30,6 @@ struct GroupActivityNotificationSummary: Equatable {
     let title: String
     let body: String
 
-    /// Extra payload for future deep links.
+    /// Payload for future deep links.
     let userInfo: [String: String]
 }

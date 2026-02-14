@@ -3,7 +3,7 @@
 //  filmfreaks
 //
 //  Best-effort identity of the currently selected user.
-//  Used to avoid notifying for the user's own actions.
+//  Used to suppress notifications for the user's own actions.
 //
 
 import Foundation

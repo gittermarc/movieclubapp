@@ -2,8 +2,8 @@
 //  ActivityNotificationStateStore.swift
 //  filmfreaks
 //
-//  Keeps a tiny dedupe state so we don't spam users when CloudKit coalesces
-//  or re-delivers notifications.
+//  Keeps a small dedupe state so CloudKit coalescing / re-delivery
+//  doesn't spam the user.
 //
 
 import Foundation
@@ -15,9 +15,8 @@ final class ActivityNotificationStateStore {
     private let key = "ff.notifications.activity.state.v1"
     private let maxRecentPerGroup = 32
 
-    private struct State: Codable {
+    private struct State: Codable, Equatable {
         var recentByGroup: [String: [String]] = [:] // groupId -> [recordID]
-        var lastNotifiedAtByGroup: [String: Date] = [:]
     }
 
     private var state: State
@@ -25,9 +24,9 @@ final class ActivityNotificationStateStore {
     private init() {
         if let data = UserDefaults.standard.data(forKey: key),
            let decoded = try? JSONDecoder().decode(State.self, from: data) {
-            self.state = decoded
+            state = decoded
         } else {
-            self.state = State()
+            state = State()
         }
     }
 
@@ -40,11 +39,12 @@ final class ActivityNotificationStateStore {
         var recent = state.recentByGroup[groupId] ?? []
         recent.removeAll(where: { $0 == recordID })
         recent.insert(recordID, at: 0)
+
         if recent.count > maxRecentPerGroup {
             recent = Array(recent.prefix(maxRecentPerGroup))
         }
+
         state.recentByGroup[groupId] = recent
-        state.lastNotifiedAtByGroup[groupId] = Date()
         persist()
     }
 
