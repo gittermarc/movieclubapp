@@ -344,6 +344,8 @@ struct GroupSettingsView: View {
 
             // Local cleanup
             PersistenceManager.shared.deleteGroupData(groupId: action.group.id)
+            // Also clear persisted member selection for this group.
+            SelectedUserSelectionStore.setSelectedUser(groupId: action.group.id, userId: nil, userName: nil)
             movieStore.knownGroups.removeAll { $0.id == action.group.id }
 
             if movieStore.currentGroupId == action.group.id {

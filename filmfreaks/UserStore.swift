@@ -66,7 +66,15 @@ class UserStore: ObservableObject {
     /// Wer gerade bewertet etc.
     @Published var selectedUser: User? {
         didSet {
+            // Persist per-group selection so the app can restore the active member on next launch.
+            SelectedUserSelectionStore.setSelectedUser(
+                groupId: currentGroupId,
+                userId: selectedUser?.id,
+                userName: selectedUser?.name
+            )
+
             // P2 full: Persist current identity so we can suppress notifications for own actions.
+            // (Global "best effort" identity — used by the notification layer.)
             CurrentUserIdentityStore.setCurrentUser(id: selectedUser?.id, name: selectedUser?.name)
         }
     }
@@ -118,14 +126,8 @@ class UserStore: ObservableObject {
 
         self.users = PersistenceManager.shared.loadUsers(groupId: groupIdFromDefaults)
 
-        if let first = users.first {
-            self.selectedUser = first
-        } else {
-            self.selectedUser = nil
-        }
-
-        // P2 full: Make sure identity is persisted immediately (also covers first launch).
-        CurrentUserIdentityStore.setCurrentUser(id: selectedUser?.id, name: selectedUser?.name)
+        // Restore the previously selected user for this group (fallback: first user).
+        restoreSelection(forGroupId: groupIdFromDefaults)
 
         // Falls wir direkt in einer Gruppe sind: Members aus iCloud nachladen.
         if let gid = groupIdFromDefaults, !gid.isEmpty {
@@ -145,14 +147,8 @@ class UserStore: ObservableObject {
         // Erst lokal laden (schnelle UI), dann Cloud (Autorität für Gruppen).
         self.users = PersistenceManager.shared.loadUsers(groupId: groupId)
 
-        if let first = users.first {
-            self.selectedUser = first
-        } else {
-            self.selectedUser = nil
-        }
-
-        // P2 full: Persist identity for own-action suppression.
-        CurrentUserIdentityStore.setCurrentUser(id: selectedUser?.id, name: selectedUser?.name)
+        // Restore the previously selected user for this group (fallback: first user).
+        restoreSelection(forGroupId: groupId)
 
         // Für Gruppen: direkt Cloud-Fetch.
         if let gid = groupId, !gid.isEmpty {
@@ -332,15 +328,62 @@ class UserStore: ObservableObject {
         if let prevId = previousSelectedId,
            let match = users.first(where: { $0.id == prevId }) {
             selectedUser = match
-        } else if let prevName = previousSelectedName,
-                  let match = users.first(where: { $0.name.caseInsensitiveCompare(prevName) == .orderedSame }) {
-            selectedUser = match
-        } else {
-            selectedUser = users.first
+            return
         }
 
-        // P2 full: Make sure the final selection is persisted for own-action suppression.
-        CurrentUserIdentityStore.setCurrentUser(id: selectedUser?.id, name: selectedUser?.name)
+        if let prevName = previousSelectedName,
+           let match = users.first(where: { $0.name.caseInsensitiveCompare(prevName) == .orderedSame }) {
+            selectedUser = match
+            return
+        }
+
+        // If previous selection is missing (e.g. user deleted / id changed), fall back to persisted selection.
+        restoreSelection(forGroupId: groupId)
+    }
+
+    // MARK: - Selection restore
+
+    private func restoreSelection(forGroupId groupId: String?) {
+        guard !users.isEmpty else {
+            selectedUser = nil
+            return
+        }
+
+        // 1) Per-group persisted selection (the new canonical source)
+        if let storedId = SelectedUserSelectionStore.selectedUserId(groupId: groupId),
+           let match = users.first(where: { $0.id == storedId }) {
+            selectedUser = match
+            return
+        }
+
+        if let storedName = SelectedUserSelectionStore.selectedUserName(groupId: groupId) {
+            let trimmed = storedName.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty,
+               let match = users.first(where: { $0.name.caseInsensitiveCompare(trimmed) == .orderedSame }) {
+                selectedUser = match
+                return
+            }
+        }
+
+        // 2) Legacy fallback: global "current user" (used by notifications). If it matches this group's users,
+        // we treat it as the selection and automatically migrate it into the per-group store via didSet.
+        if let legacyId = CurrentUserIdentityStore.currentUserId(),
+           let match = users.first(where: { $0.id == legacyId }) {
+            selectedUser = match
+            return
+        }
+
+        if let legacyName = CurrentUserIdentityStore.currentUserName() {
+            let trimmed = legacyName.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty,
+               let match = users.first(where: { $0.name.caseInsensitiveCompare(trimmed) == .orderedSame }) {
+                selectedUser = match
+                return
+            }
+        }
+
+        // 3) Fallback
+        selectedUser = users.first
     }
 
 }
