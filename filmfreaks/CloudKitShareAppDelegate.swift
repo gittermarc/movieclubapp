@@ -23,7 +23,7 @@ final class CloudKitShareAppDelegate: NSObject, UIApplicationDelegate, UNUserNot
         return true
     }
 
-    // MARK: - Remote notifications (P2 minimal)
+    // MARK: - Remote notifications (P2)
 
     func application(
         _ application: UIApplication,
@@ -31,7 +31,12 @@ final class CloudKitShareAppDelegate: NSObject, UIApplicationDelegate, UNUserNot
         fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void
     ) {
         CloudKitRemoteNotificationDebugger.log(userInfo: userInfo)
-        completionHandler(.noData)
+
+        // P2 (light/full): Best-effort fetch + handling. Method name must match coordinator.
+        Task {
+            let didFetch = await CloudKitActivityPushFetchCoordinator.fetchAndLog(userInfo: userInfo)
+            completionHandler(didFetch ? .newData : .noData)
+        }
     }
 
     // MARK: Scene delegate wiring
@@ -65,8 +70,7 @@ final class CloudKitShareAppDelegate: NSObject, UIApplicationDelegate, UNUserNot
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification
     ) async -> UNNotificationPresentationOptions {
-        // We keep this permissive so future *local* activity notifications can show a banner
-        // even while the app is in the foreground.
+        // Allow banners while app is in foreground (esp. for local notifications later).
         return [.banner, .sound]
     }
 }

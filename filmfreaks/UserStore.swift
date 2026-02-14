@@ -64,7 +64,12 @@ class UserStore: ObservableObject {
     }
 
     /// Wer gerade bewertet etc.
-    @Published var selectedUser: User?
+    @Published var selectedUser: User? {
+        didSet {
+            // Best-effort identity for push notification suppression (own actions).
+            CurrentUserIdentityStore.setCurrentUser(id: selectedUser?.id, name: selectedUser?.name)
+        }
+    }
 
     /// Wird gesetzt, während wir Members aus iCloud laden oder Änderungen pushen.
     @Published var isSyncing: Bool = false
