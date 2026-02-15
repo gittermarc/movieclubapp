@@ -1,414 +1,233 @@
-
----
-
-```markdown
 # ARCHITECTURE_NOTES.md
 
-## Big Files List (Top 15 nach Zeilen)
-> Quelle: Lines grob aus Codebestand (Swift). Risiko = Änderungsfläche + Seiteneffekte + Wiederverwendung.
+_Last updated: 2026-02-15 (Europe/Berlin)_
 
-1. `MovieStore.swift` (~864)
-   - Zweck: Zentrale Movie-Quelle + Persistenz + Cloud Sync Koordination + Ratings Merge + Group Switching.
-   - Risiko: Viele Responsibilities, hohe Kopplung zu CloudKit/Persistence/UI-Sync.
+(Paths are relative to the Xcode project root `filmfreaks/` unless stated otherwise.)
 
-2. `CloudKitMovieStore.swift` (~720)
-   - Zweck: CloudKit CRUD + Routing (public vs zone) + Zone Changes + Batch modify.
-   - Risiko: Komplexe Sync-Pfade, Fehler schwer reproduzierbar, Token/Zone-Edge-Cases.
+## Big Files List (Top 15 by lines)
+High line count is not inherently bad, but here it correlates with mixed responsibilities and higher regression risk.
 
-3. `DisplaySettings.swift` (~599)
-   - Zweck: UI Theme/Density/Appearance Presets, AppStorage, Metrics.
-   - Risiko: Viele UI-Entscheidungen zentral; Änderungen wirken app-weit.
+- `MovieStore.swift` — **863 lines**
+  - Purpose: In-memory canonical source of watched/backlog movie lists + per-group selection + local persistence + CloudKit sync queueing.
+  - Why risky: Many responsibilities in one file; didSet triggers persistence + cloud sync and can run often; correctness/perf risk when lists grow.
 
-4. `TMDbAPI.swift` (~592)
-   - Zweck: Alle TMDb Models + Endpoints + Decoding.
-   - Risiko: API-Wachstum, fehlende Separation (Models vs Client), Testbarkeit.
+- `CloudKitMovieStore.swift` — **719 lines**
+  - Purpose: CloudKit access layer for Movie records (query path + zone-changes incremental fetch + save/delete).
+  - Why risky: High complexity + multiple code paths (legacy public DB vs shared/private zones, incremental changes); easy to regress edge cases.
 
-5. `Goals/CustomGoalEditorView.swift` (~546)
-   - Zweck: Custom Goal Editor (viel UI + Rule Handling).
-   - Risiko: UI-Logik + Domain-Logik vermischt, schwer wartbar.
+- `MovieNights/MovieNightStore.swift` — **647 lines**
+  - Purpose: Group-scoped store for MovieNightEvent/Response/Activity, local persistence + CloudKit sync + derived views.
+  - Why risky: Mixes persistence, sync meta, and business rules; lots of state dictionaries keyed by group; risk of subtle inconsistencies.
 
-6. `SearchResultDetail/SearchResultDetailView.swift` (~523)
-   - Zweck: Detail für Suchresultat inkl. Trailer/Watch Providers/Add-to-list.
-   - Risiko: Viele States/Tasks, potenziell racey.
+- `DisplaySettings.swift` — **598 lines**
+  - Purpose: User appearance settings (theme, tint, layout metrics) + persistence + derived metrics used across UI.
+  - Why risky: Large surface area affecting most UI; changes can cause wide invalidations and hard-to-trace layout regressions.
 
-7. `CloudKitRatingStore.swift` (~509)
-   - Zweck: Ratings separat syncen (RecordName Strategy, stability, fetch).
-   - Risiko: Identity/RecordName muss konsistent bleiben; Migration/Legacy.
+- `TMDbAPI.swift` — **591 lines**
+  - Purpose: Networking layer for TMDb (search, details, providers, images), plus caching helpers and attribution.
+  - Why risky: Many endpoints + request building + decoding; network error handling/caching behavior can affect UX broadly.
 
-8. `TimelineView.swift` (~502)
-   - Zweck: Timeline UI (wahrscheinlich Gruppierung/Sorting/Poster).
-   - Risiko: Rendering/Scroll Hotspot je nach Datenmenge.
+- `CloudKitMovieNightStore.swift` — **580 lines**
+  - Purpose: CloudKit access layer for movie night records (event/response/activity) with routing for shared zones.
+  - Why risky: CloudKit schema mapping + routing; concurrency and conflict resolution can be tricky.
 
-9. `CloudKitGroupStore.swift` (~446)
-   - Zweck: Gruppen (owned/shared) listen/erstellen, Sharing, Repair.
-   - Risiko: Sharing-Edge-Cases (AccountStatus, share acceptance, repair loops).
+- `Goals/CustomGoalEditorView.swift` — **545 lines**
+  - Purpose: Large SwiftUI editor for custom viewing goals (validation, UI state, saving).
+  - Why risky: Big SwiftUI view with many bindings/validation; prone to invalidation storms and preview/debug friction.
 
-10. `Stats/StatsView+Calculations.swift` (~430)
-    - Zweck: Aggregationen/Filter/Derivations für Stats.
-    - Risiko: Wird im Renderpfad oft neu berechnet; perf-sensitiv.
+- `SearchResultDetail/SearchResultDetailView.swift` — **522 lines**
+  - Purpose: Large SwiftUI sheet for a TMDb search result with sections, fetches, actions.
+  - Why risky: Large SwiftUI view likely doing async fetches; risk of multiple tasks and state races.
 
-11. `MovieSearch/MovieSearchView.swift` (~421)
-    - Zweck: Suche + Empfehlungen + Query History + Navigation in Detail.
-    - Risiko: Network-Task Lifecycle, Debounce, UI-State Explosion.
+- `CloudKitRatingStore.swift` — **508 lines**
+  - Purpose: CloudKit access for MovieRating records (save/fetch, zone changes tokens, mapping into Movie.Rating).
+  - Why risky: CloudKit writes/reads + mapping into movies; race conditions with movie updates; token invalidation complexity.
 
-12. `ViewingCustomGoal.swift` (~370)
-    - Zweck: Custom Goal Model + Codable Rule Varianten.
-    - Risiko: Backward-compatibility bei Codable Änderungen.
+- `TimelineView.swift` — **501 lines**
+  - Purpose: Timeline UI aggregating watched/backlog events; likely sorts/filters and builds sections.
+  - Why risky: Aggregations/sorts likely recomputed on invalidation; can become sluggish with large movie lists.
 
-13. `Movie.swift` (~367)
-    - Zweck: Core Model + Migration (Codable), Ratings, Cast/Directors.
-    - Risiko: Schemaänderungen betreffen Persistenz + Cloud Payload.
+- `SearchResultDetail/SearchResultDetailView.swift`
+  - Starts async loading with `Task { await loadDetails() }` in `.onAppear` and also triggers reloads in `.onChange(of: result.id)`.
+  - Reason: tasks are not explicitly cancelled on disappear; if the sheet is dismissed quickly, late responses may still mutate state (racey UI updates).
+- `MovieSearch/MovieSearchView.swift`
+  - Uses multiple `Task { ... }` blocks for search/pagination and one `.task { ... }`.
+  - Reason: without careful cancellation/debounce, it can generate overlapping network requests and stale state updates.
 
-14. `SettingsView.swift` (~362)
-    - Zweck: Einstellungen UI inkl. Cache/Appearance/Infos.
-    - Risiko: Viele Toggles/Side Effects; schnell “God View”.
 
-15. `GroupSettingsView.swift` (~359)
-    - Zweck: Gruppenverwaltung UI (create/share/select/leave?).
-    - Risiko: Share UX + Routing + CloudKit Abhängigkeiten.
+- `CloudKitGroupStore.swift` — **463 lines**
+  - Purpose: Group creation/listing + CloudKit sharing + context persistence + subscription bootstrap.
+  - Why risky: Touches account status, shares, zones, subscriptions; failure modes involve user-visible data access issues.
 
----
+- `Stats/StatsView+Calculations.swift` — **429 lines**
+  - Purpose: Computed properties and aggregation helpers powering StatsView cards (counts, leaderboards, charts).
+  - Why risky: Heavy computations likely run in render path if used as computed vars in body; can impact scrolling/interaction.
+
+- `MovieSearch/MovieSearchView.swift` — **421 lines**
+  - Purpose: Main search/discovery screen with TMDb querying, pagination, results list/grid.
+  - Why risky: Pagination and request cancellation; risk of duplicated calls or stale results.
+
+- `UserStore.swift` — **389 lines**
+  - Purpose: Members store + active user selection + local persistence + CloudKit sync + per-group sync status.
+  - Why risky: Selection persistence + sync status; mis-sync can break onboarding and user attribution in ratings/activity.
+
+- `ViewingCustomGoal.swift` — **369 lines**
+  - Purpose: Custom goal model + evaluation logic and helpers; used in goals feature.
+  - Why risky: Non-trivial evaluation logic; bugs are correctness issues that are hard to spot.
+
 
 ## Hot Path Analyse
 
 ### Rendering / Scrolling
+Hot paths are code that runs frequently during scrolling or view invalidations.
 
-#### 1) Sort/Filter im Renderpfad (Listen)
-- Dateien:
-  - `Content/ContentView+MovieItems.swift`
-- Konkreter Grund:
-  - `buildIndexedItems(from:isBacklog:)` macht `enumerated().filter(...).sorted(...)` und mappt zu `IndexedMovie`.
-  - Diese Derivations hängen an `selectedSort`, Search-Text, User-Filter, Mode – und werden bei jeder View-Invalidation neu evaluiert.
-- Symptome:
-  - Bei großen Listen: UI janky beim Tippen in Search, beim Umschalten von Sort/Filter oder wenn `MovieStore.movies` häufig updated wird.
+**Candidates (with concrete reasons):**
+- `Content/ContentView+MovieItems.swift`
+  - Rebuilds filtered+sorted arrays via `.filter` + `.sorted` in computed properties (`watchedItems` / `backlogItems`).
+  - Reason: called from `ContentView.body` (via parameters into `ContentMainAreaView`), so it can rerun on many unrelated state changes → O(n log n) + allocations.
+- `Content/ContentView+Filtering.swift`
+  - `passesListSearch(...)` normalizes strings (`folding` + `lowercased`) and tokenizes search text; used per movie inside list building.
+  - Reason: per-item string normalization can dominate CPU for large lists.
+- `MovieStore+Activity.swift`
+  - Builds activity events by iterating **all movies + all ratings** each call.
+  - Reason: if the activity teaser/list is derived in a view’s render path, cost scales with dataset size.
+- `Stats/StatsView+Calculations.swift`
+  - Contains many computed properties with loops/reduces and sorting.
+  - Reason: if these are read from `StatsView.body`, every invalidation recomputes aggregations.
+- `TimelineView.swift`
+  - Likely builds sorted/sectioned timelines from `movieStore.movies` and/or backlog.
+  - Reason: timeline is typically aggregation-heavy; verify it doesn’t recompute everything on minor state changes.
 
-#### 2) Stats: Wiederholte Aggregationen als computed properties
-- Dateien:
-  - `Stats/StatsView+Calculations.swift`
-- Konkreter Grund:
-  - computed properties wie `moviesForCurrentTimeRange`, `filteredMovies`, `availableLocations` laufen über `movieStore.movies` und werden potentiell mehrfach pro Renderpass abgefragt.
-  - Kein Memoization/Cache zwischen Cards/Sections.
-- Risiko:
-  - Stats-View wird bei jedem State Change teurer, skaliert linear mit Movie-Anzahl.
-
-#### 3) Binding auf Array-Index + “struct Movie” Updates
-- Dateien:
-  - `Content/ContentMoviesListSection.swift` (NavigationLink → `MovieDetailView(movie: $movies[item.index])`)
-  - `MovieDetail/MovieDetailView.swift` (+ Extensions)
-  - `MovieStore.swift` (`@Published var movies` didSet)
-- Konkreter Grund:
-  - Detail-View mutiert `Movie` (Struct) über Binding → triggert Array-Replace → `MovieStore.movies` didSet.
-  - didSet startet Persistenz + queued Cloud Sync (debounced, aber dennoch frequent).
-- Outcome:
-  - Viele kleine Änderungen (z.B. Location tippen, Rating ändern) können zu häufigen “whole array” Updates führen.
-
-#### 4) Images: Doppel-Caching + Disk IO im kritischen Pfad
-- Dateien:
-  - `filmfreaksApp.swift` (global `URLCache.shared` set)
-  - `CachedAsyncImage.swift` (eigener Disk+Memory Cache via `ImageCacheStore` actor)
-- Konkreter Grund:
-  - HTTP Cache + eigener Disk Cache = potentiell redundante Speicherung.
-  - Disk reads sind synchron (z.B. `Data(contentsOf:)`) – zwar im Actor, aber trotzdem blocking IO.
-- Risiko:
-  - Bei schnellen Scrolls: IO contention, Memory Pressure.
-
----
+**Concrete mitigation levers:**
+- Move expensive list building into a dedicated view model with memoization keyed by:
+  - `movies` version / `backlogMovies` version (or change counters)
+  - filter state (`selectedSort`, `filterByUser`, search text)
+- Precompute and cache normalized search tokens once per search string.
+- Use stable IDs for bindings (bind by `Movie.id`, not array index) to avoid invalidations and index drift.
 
 ### Sync / Storage
+**CloudKit fetch/write complexity hotspots:**
+- `CloudKitMovieStore.swift`
+  - Two fetch modes: legacy query vs zone-change delta.
+  - Reason: multiple backends and token logic increase edge cases (token reset, partial failures, deletes).
+- `CloudKitRatingStore.swift`
+  - Ratings are separate records; they must be merged back into the correct `Movie`.
+  - Reason: ordering/races when movies are modified while ratings sync is in flight.
+- `CloudKitGroupStore.swift`
+  - Creates/list groups, writes `GroupContext`, and bootstraps subscriptions.
+  - Reason: failures here can strand users without access to shared data.
+- `PersistenceManager.swift`
+  - Disk writes are debounced but still triggered by `MovieStore` didSet.
+  - Reason: frequent small edits can cause repeated encode/write churn if debounce is bypassed.
 
-#### 1) CloudKit: Multi-Pfad Routing (Legacy Public vs Zone Sharing)
-- Dateien:
-  - `CloudKitMovieStore.swift`, `CloudKitRatingStore.swift`, `CloudKitUserStore.swift`, `CloudKitGoalStore.swift`
-  - `GroupContext.swift` (`GroupContextStore`)
-- Konkreter Grund:
-  - Wenn kein `GroupContext` vorhanden (oder groupId leer): Public DB ohne Zone.
-  - Mit Kontext: private/shared DB + Zone.
-- Risiko:
-  - Drift: Falls `GroupContextStore` nicht sauber aktualisiert ist, liest/schreibt man in den falschen Scope.
-
-#### 2) Inkrementelle Zone Changes + Token Persistenz
-- Dateien:
-  - `CloudKitZoneChanges.swift` (Wrapper um `CKFetchRecordZoneChangesOperation`)
-  - `CloudKitZoneChangeTokenStore.swift`
-  - `CloudKitMovieStore.swift` (nutzt fetchMovieChanges)
-- Konkreter Grund:
-  - ChangeTokens in UserDefaults; Korruption/Schemawechsel → kompletter Re-Sync nötig.
-- Edge Cases:
-  - Token invalid (Zone reset, share changes) → muss erkannt/cleared werden (**Handling im Detail: UNKNOWN**, abhängig vom Error-Handling in Stores).
-
-#### 3) Refresh Trigger: App wird aktiv → Cloud Pull
-- Dateien:
-  - `filmfreaksApp.swift`
-- Konkreter Grund:
-  - `.onChange(of: scenePhase)` bei `.active` startet Task mit `groupStore.refresh()`, `movieStore.refreshFromCloud()`, `userStore.refreshFromCloud()`.
-  - Kommentar sagt explizit: “Ohne Subscriptions ist das der einfachste Weg…”
-- Risiko:
-  - Parallelität/Overfetch bei häufigem Background/Foreground.
-  - Throttle existiert in `MovieStore.swift` (`minRefreshInterval = 8`), aber nicht zwingend für alle Stores identisch.
-
-#### 4) Cloud Writes: Debounced/Batched Coordinator (gut, aber zentral)
-- Dateien:
-  - `MovieCloudSyncCoordinator.swift`
-  - `MovieStore.swift` (enqueueCloudSync, pending counts)
-- Konkreter Grund:
-  - Pending Saves/Deletes, scheduled flush Task, “flush on reconnect” via `NetworkMonitor`.
-- Risiko:
-  - Koordinator lebt auf MainActor (bewusst) → bei großem pending backlog könnte MainActor belastet werden.
-
-#### 5) Local persistence: Debounced JSON, Group-scoped
-- Dateien:
-  - `PersistenceManager.swift`
-- Konkreter Grund:
-  - Jede Änderung am Movies/Backlog/Users Array kann einen debounced write triggern.
-- Tradeoff:
-  - Einfach und robust, aber speichert meist ganze Arrays (nicht incremental).
-
----
+**Where sync starts / is triggered:**
+- `filmfreaksApp.swift` on `scenePhase == .active` runs refresh for groups/movies/users/movie nights.
+- Remote-notification background mode is enabled (`Info.plist`), and CloudKit query subscriptions are installed (`CloudKit/CloudKitActivitySubscriptionManager.swift`).
 
 ### Concurrency
+- Stores are `@MainActor` (`MovieStore.swift`, `UserStore.swift`, `MovieNights/MovieNightStore.swift`).
+  - Pro: avoids Sendable headaches with SwiftUI.
+  - Con: risk of MainActor contention if heavy work happens in store methods.
+- Debounced flush tasks (`MovieCloudSyncCoordinator.swift`, `MovieNights/MovieNightCloudSyncCoordinator.swift`).
+  - Verify cancellation behavior: `scheduledFlush` tasks are replaced, but long-running flush calls should also be cancellation-aware (**UNKNOWN**: not fully audited).
+- Remote push handling:
+  - Entry point: `CloudKitShareAppDelegate.application(_:didReceiveRemoteNotification:fetchCompletionHandler:)`.
+  - Fetch logic is currently **debug-only** (`#if DEBUG` in `CloudKit/CloudKitActivityPushFetchCoordinator.swift`).
 
-#### 1) Unbounded Tasks aus View-Lifecycle
-- Dateien:
-  - `MovieDetail/MovieDetailView+Lifecycle.swift` (`Task { await loadDetails() }`, `reloadWatchProvidersOnly`)
-  - `SearchResultDetail/SearchResultDetailView.swift` (Detail-Ladepfade: **konkret vorhanden, aber hier nicht vollständig zitiert**)
-  - `filmfreaksApp.swift` (scenePhase Task)
-- Konkreter Grund:
-  - `Task { ... }` ohne gespeicherten Handle → keine explizite Cancellation bei `onDisappear` oder Route-Wechsel.
-- Risiko:
-  - “Stale updates”: Task beendet später und schreibt State in eine View, die nicht mehr sichtbar ist (SwiftUI schützt teils, aber nicht komplett).
-  - Doppel-Requests.
-
-#### 2) MainActor contention in zentralen Stores
-- Dateien:
-  - `MovieStore.swift` (`@MainActor`)
-  - `UserStore.swift` (`@MainActor`)
-- Konkreter Grund:
-  - Große Operationen (Merge/Map/Sort) laufen potentiell auf MainActor, wenn nicht explizit offloaded.
-- Risiko:
-  - UI stalls bei großen Datenmengen.
-
-#### 3) Actor für Image Cache (positiv), aber IO blocking
-- Dateien:
-  - `CachedAsyncImage.swift` (`actor ImageCacheStore`)
-- Konkreter Grund:
-  - IO im Actor ist seriell; das verhindert Data Races, aber kann Durchsatz limitieren.
-- Risiko:
-  - Viele gleichzeitige Image-Loads → Warteschlange.
-
----
 
 ## Refactor Map
+### Konkrete Splits (low-risk, mechanical)
+- `MovieStore.swift` → split by responsibility:
+  - `MovieStore+Persistence.swift` (load/save + sync meta)
+  - `MovieStore+CloudSync.swift` (enqueue logic + coordinator hooks)
+  - `MovieStore+Groups.swift` (group selection + known groups)
+- `CloudKitMovieStore.swift` → split by data type / mode:
+  - `CloudKitMovieStore+Routing.swift`
+  - `CloudKitMovieStore+QueryFetch.swift` (legacy public DB)
+  - `CloudKitMovieStore+ZoneChanges.swift` (delta fetch)
+  - `CloudKitMovieStore+Write.swift`
+- `Stats/StatsView+Calculations.swift` → move aggregation into a memoized `StatsEngine` object:
+  - keep view layer as formatting only.
+- `TMDbAPI.swift` → split by endpoint families:
+  - `TMDbAPI+Search.swift`, `TMDbAPI+Details.swift`, `TMDbAPI+Providers.swift`, `TMDbAPI+People.swift`.
 
-### Konkrete Splits (Datei → neue Dateien)
+### Cache-/Index-Ideen
+- **Movie list indexing:** build an index structure once per movie list version:
+  - e.g. `[UUID: Int]` (movieId → index in array) to replace fragile `indices.contains(item.index)` patterns.
+- **Search normalization cache:** store `normalizedTitle` / `normalizedTokens` per movie in an in-memory cache keyed by `Movie.id`.
+  - Invalidate when title/year/keywords change.
+- **Activity feed cache:** store derived `GroupActivityEvent` list with a `sourceRevision` counter.
+  - Increment counter when movies/backlog or ratings change.
 
-#### A) `MovieStore.swift`
-Ziel: klare Verantwortlichkeiten, weniger “God Store”.
-Vorschlag:
-- `MovieStore+LocalPersistence.swift`
-  - Laden/Speichern via `PersistenceManager`
-- `MovieStore+CloudRefresh.swift`
-  - `loadFromCloud`, `refreshFromCloud`, group switch discard
-- `MovieStore+Ratings.swift`
-  - `upsertRating`, merge helpers, reviewerKey/stable id bridging
-- `MovieStore+SyncMeta.swift`
-  - pending count, last sync, error persistence (UserDefaults keys)
-
-Risiko: mittel (viele cross-calls).
-Nutzen: deutlich höhere Wartbarkeit + testbarer.
-
-#### B) `CloudKitMovieStore.swift`
-Ziel: CloudKit-Komplexität isolieren.
-Vorschlag:
-- `CloudKitMovieStore+Routing.swift` (db/zone selection, context lookup)
-- `CloudKitMovieStore+ZoneChanges.swift` (fetchMovieChanges, token handling)
-- `CloudKitMovieStore+Queries.swift` (Legacy public query fetch)
-- `CloudKitMovieStore+Modify.swift` (batch modify, record encode/decode)
-
-Risiko: mittel.
-Nutzen: weniger Fehlerfläche pro Change.
-
-#### C) `TMDbAPI.swift`
-Ziel: Client vs Models trennen.
-Vorschlag:
-- `TMDbModels.swift` (Codable structs)
-- `TMDbClient.swift` (request building, decoding, error mapping)
-- `TMDbEndpoints.swift` (URL building, paths, image base)
-
-Risiko: niedrig–mittel.
-Nutzen: bessere Testbarkeit, weniger Merge-Konflikte.
-
-#### D) `Stats/StatsView+Calculations.swift`
-Ziel: Aggregationen einmalig pro Filterstate berechnen.
-Vorschlag:
-- `StatsEngine.swift` (pure functions, takes `[Movie]`, returns computed DTO)
-- `StatsViewModel.swift` (`@MainActor`, memoized results keyed by range/location)
-- `StatsView+Render.swift` bleibt UI.
-
-Risiko: niedrig–mittel.
-Nutzen: spürbar bessere Performance bei großen Datenmengen.
-
-#### E) `Goals/CustomGoalEditorView.swift`
-Ziel: Domain-Regeln aus UI lösen.
-Vorschlag:
-- `CustomGoalEditorState.swift` (state machine / validation)
-- `CustomGoalRulePickerView.swift` (UI)
-- `CustomGoalRuleBuilders.swift` (rule construction, TMDb ID integration)
-
-Risiko: mittel.
-Nutzen: schnelleres Weiterentwickeln neuer Goal-Typen.
-
----
-
-### Cache-/Index-Ideen (was cachen, Keys, Invalidation)
-
-#### 1) Content list derivations cache
-- Problem:
-  - Filter/Sort wird pro Invalidation neu gebaut (`ContentView+MovieItems.swift`).
-- Cache Key:
-  - `(groupId, selectedMode, selectedSort, filterUserId?, searchText, viewStyle)`
-- Value:
-  - `[IndexedMovie]` für watched/backlog.
-- Invalidation:
-  - Wenn `movieStore.movies`/`backlogMovies` geändert (z.B. via version counter).
-  - Wenn Filter/Sort/Search/Mode wechselt.
-
-#### 2) Stats pre-aggregation cache
-- Problem:
-  - `StatsView+Calculations` computed properties werden mehrfach abgefragt.
-- Cache Key:
-  - `(groupId, selectedRange, selectedLocationFilter)`
-- Value:
-  - Precomputed “StatsSnapshot” (counts, top lists, distributions)
-- Invalidation:
-  - On movies array change oder filter change.
-
-#### 3) TMDb request dedupe + cancellation
-- Problem:
-  - Mehrere Tasks können gleiche Details laden.
-- Ansatz:
-  - Pro View: `@State private var detailsTask: Task<Void, Never>?`
-  - cancel on `onDisappear`, dedupe by `tmdbId`.
-- Optional:
-  - global in-flight cache (ähnlich `ImageCacheStore.inFlight`).
-
----
-
-### Vereinheitlichungen (Patterns, Services, DI)
-
-#### CloudKit Routing wiederverwenden
-- Aktuell:
-  - `routedDatabase(forGroupId:)` ist in mehreren Stores dupliziert.
-- Vorschlag:
-  - `CloudKitRouting.swift` mit:
-    - `resolve(groupId) -> (db, zoneID, scope)`
-    - `scope enum` + mapping auf `CloudKitZoneChangeTokenStore.Scope`
-
-#### Error Mapping
-- Vorschlag:
-  - `CloudKitErrorMapper.swift` (friendly messages, retryable vs fatal)
-  - Konsistent in `MovieStore`, `UserStore`, `CloudKitGroupStore`, `CloudKitShareCoordinator`.
-
-#### Dependency Injection (lightweight)
-- Aktuell:
-  - Stores instanziieren CloudKit Stores direkt.
-- Vorschlag:
-  - Protocols + default implementations oder init injection, um Tests zu ermöglichen (**Tests: UNKNOWN**).
-
----
+### Vereinheitlichungen (Patterns/DI)
+- Introduce a small protocol-based boundary for CloudKit access:
+  - e.g. `MovieCloudBackingStore` with methods used by `MovieCloudSyncCoordinator`.
+  - Benefit: easier unit testing and reduced coupling.
+- Standardize per-group sync meta storage:
+  - Movies use `MovieStore` properties; users store in `UserStore` custom dict; movie nights store in `MovieNightStore` dict.
+  - Consider a shared `PerGroupSyncStatusStore` utility.
 
 ## Risiken & Edge Cases
-
-- **GroupContext Drift**
-  - Wenn `GroupContextStore` nicht aktualisiert ist, routet man evtl. falsch (public vs zone). (Files: `GroupContext.swift`, CloudKit Stores)
-- **Share acceptance timing**
-  - Share acceptance postet `.cloudKitShareAccepted` → `CloudKitGroupStore.refresh()` (Observer in `CloudKitGroupStore.swift`).
-  - Race möglich, wenn UI bereits Group-Switch macht (**genauer Ablauf: UNKNOWN**, abhängig von UI-Flows).
-- **Token corruption / zone reset**
-  - `CloudKitZoneChangeTokenStore` entfernt Token bei Decode-Fehler; ansonsten ist Re-Sync-Strategie je nach Error Handling in Stores (**Details: UNKNOWN**).
-- **Array index binding hazards**
-  - Du hast bereits Guard gegen out-of-range in `ContentMoviesListSection.swift`. Trotzdem bleibt Risiko bei schnellen Group Switches + UI stale state.
-- **Offline write backlog**
-  - Debounced writes + pending cloud changes: gut, aber worst-case backlog groß (MainActor pressure).
+- **Index-based bindings in NavigationLinks**
+  - Files: `Content/ContentMainAreaView.swift` and other places binding `movieStore.movies[item.index]`.
+  - Risk: if the underlying array changes while a detail view is on screen, indices can drift.
+- **CloudKit conflict policy**
+  - Multiple devices can edit the same movie/ratings.
+  - Code uses `updatedAt` fields and some best-effort merging, but an explicit documented policy is missing (**UNKNOWN**: authoritative resolution rule).
+- **Public DB legacy path**
+  - Many CloudKit stores have fallback to `publicCloudDatabase` when no `GroupContext` exists.
+  - Risk: behavior divergence (sharing groups vs legacy) and migration complexity.
+- **Push notification behavior**
+  - Subscriptions create visible notifications (alert/sound/badge) in `CloudKit/CloudKitActivitySubscriptionManager.swift`.
+  - Deep link parsing relies on subscriptionID parsing (`Notifications/PushDeepLinkRouter.swift`). If subscription IDs change, routing breaks.
 - **Secrets exposure**
-  - `.gitignore` schützt, aber ZIP/Sharing kann Secrets enthalten.
-
----
+  - `Secrets.xcconfig` contains a plaintext API key; exclude from any shared archives.
 
 ## Observability / Debuggability
-
-### Logging
-- Positiv:
-  - `PersistenceManager.swift` nutzt `os.Logger`.
-  - Cloud-Sync hat Debug prints (z.B. `MovieStore.swift` “CloudKit: ...”).
-- Verbesserung:
-  - CloudKit prints → Logger mit Subsystem + Kategorien:
-    - `Sync.Movie`, `Sync.Rating`, `Sync.Group`, `TMDb`, `UI.Routing`.
-
-### Repro/Debug Checkliste
-- Cloud Sharing:
-  - Gruppe erstellen (`CloudKitGroupStore.createGroup`)
-  - Share Link erzeugen (UI: `GroupShareSheetView.swift`)
-  - Auf zweitem Gerät Share akzeptieren (Delegates + `CloudKitShareCoordinator`)
-  - Prüfen: `CloudKitGroupStore.refresh()` → `GroupContextStore` upserts.
-- Sync correctness:
-  - Film hinzufügen → auf anderem Gerät sichtbar nach `.active` oder Pull-to-refresh.
-  - Rating pro User ändern → anderer User sieht Update (RatingStore).
-- Offline:
-  - Flugmodus → Änderungen lokal → wieder online → `NetworkMonitor` triggert `flushPendingCloudChanges()`.
-
----
+- Push debugging:
+  - `CloudKit/CloudKitRemoteNotificationDebugger.swift` logs the raw push payload.
+- Sync transparency in UI:
+  - `Content/ContentSyncStatusLineView.swift` + store-exposed fields (`MovieStore.swift`, `UserStore.swift`, `MovieNights/MovieNightStore.swift`).
+- Logging:
+  - `PersistenceManager.swift` uses `os.Logger` (subsystem `filmfreaks`, category `Persistence`).
+  - CloudKit layers mostly use `print` / best-effort toasts (search for `print("[Push]` etc).
+- Repro tips:
+  - For CloudKit zone-change issues, wipe local tokens in `UserDefaults` keys prefixed with `CKZoneToken.` (see `CloudKitZoneChangeTokenStore.swift`).
+  - For share issues, verify `GroupContextStore` entries exist for group IDs (key `GroupContextsById` in UserDefaults).
 
 ## Open Questions (UNKNOWN)
-- **CloudKit Dashboard Schema**
-  - Indexes, Required Fields, Query Constraints, Production vs Development setup: **UNKNOWN**
-- **Subscription Strategy**
-  - Aktuell wirkt es “ohne Subscriptions” (Kommentar in `filmfreaksApp.swift`). Ob geplant: **UNKNOWN**
-- **Test Coverage**
-  - Targets existieren (Project), aber konkrete Testfiles im ZIP: **UNKNOWN**
-- **Conflict Resolution Semantics**
-  - Movies vs Ratings: Ratings separat; “last writer wins” pro Record? (implizit via `updatedAt`, Record overwrites) Detailregeln: **UNKNOWN**
-- **Background Sync**
-  - BGTasks / silent push / fetch scheduling: **UNKNOWN**
-- **Watch Providers Region Defaults**
-  - Persist/Reset/UX Edge Cases über Länderwechsel: **UNKNOWN**
-
----
+- CloudKit Dashboard schema: indexes and query performance characteristics for `groupId`, `updatedAt`, `movieId`, etc.
+- Release behavior for push record-fetching: `CloudKit/CloudKitActivityPushFetchCoordinator.swift` wraps `fetchAndHandle` in `#if DEBUG`.
+- Whether activity feed should be derived-only forever, or later moved into a dedicated record type for server-side queries.
+- Exact migration plan from legacy public DB groups to sharing zones (code supports both, but a one-way migration flow is not explicit).
 
 ## First 3 Refactors I would do (P0)
 
-### P0.1 – Cache/memoize Content list derivations
-- Ziel:
-  - Smooth scrolling & weniger CPU bei Search/Sort/Filter (kein Re-sort pro Render).
-- Betroffene Dateien:
+### P0.1 Cache movie list building (filter/sort/search)
+- **Ziel:** Make scrolling and state changes cheaper by avoiding repeated O(n log n) work in render path.
+- **Betroffene Dateien:**
   - `Content/ContentView+MovieItems.swift`
+  - `Content/ContentView+Filtering.swift`
+  - (consumer) `Content/ContentView.swift`, `Content/ContentMainAreaView.swift`
+- **Risiko:** Low–medium. Risk of subtle behavior changes in filtering/sorting and focus/search UI.
+- **Erwarteter Nutzen:** Big performance win as lists grow; fewer allocations; less MainActor CPU.
+
+### P0.2 Split `MovieStore` by responsibility + add stable movie indexing
+- **Ziel:** Reduce coupling and regression risk; eliminate index drift patterns.
+- **Betroffene Dateien:**
+  - `MovieStore.swift`
+  - `MovieCloudSyncCoordinator.swift`
+  - `PersistenceManager.swift`
   - `Content/ContentMainAreaView.swift`
-  - (optional) `Content/ContentView.swift`
-- Risiko:
-  - Mittel: Gefahr von “stale results” wenn Invalidation falsch.
-- Erwarteter Nutzen:
-  - Spürbar flüssiger bei großen Listen; weniger Battery bei häufigen State Changes.
+- **Risiko:** Medium. Store refactor touches persistence and sync triggers.
+- **Erwarteter Nutzen:** Better testability, simpler diffs, fewer crashes from array index drift.
 
-### P0.2 – Cancelable TMDb tasks in Detail Views
-- Ziel:
-  - Keine doppelten Requests, keine späten State-Writes in nicht sichtbare Views.
-- Betroffene Dateien:
-  - `MovieDetail/MovieDetailView+Lifecycle.swift` (Tasks für `loadDetails`, Watch Providers reload)
-  - `SearchResultDetail/SearchResultDetailView.swift` (Detail-Ladepfade)
-  - (optional) `TMDbAPI.swift` (dedupe layer)
-- Risiko:
-  - Niedrig–mittel: UI darf nicht “leer bleiben”, wenn Task zu aggressiv gecancelt wird.
-- Erwarteter Nutzen:
-  - Weniger Netztraffic, weniger race bugs, stabilere UX beim schnellen Navigieren.
-
-### P0.3 – CloudKit routing + error handling vereinheitlichen
-- Ziel:
-  - Reduzierte Duplikation, konsistentes Verhalten zwischen Movie/Rating/User/Goal Stores.
-- Betroffene Dateien:
-  - `CloudKitMovieStore.swift`, `CloudKitRatingStore.swift`, `CloudKitUserStore.swift`, `CloudKitGoalStore.swift`
-  - neu: `CloudKitRouting.swift`, `CloudKitErrorMapper.swift`
-- Risiko:
-  - Mittel: viele Call-Sites; falsches Routing wäre kritisch.
-- Erwarteter Nutzen:
-  - Wartbarkeit hoch, weniger “one-off fixes”, leichtere Weiterentwicklung (Subscriptions, background sync).
-
----
+### P0.3 Normalize CloudKit push handling and make release behavior explicit
+- **Ziel:** Make notification behavior predictable and easier to debug.
+- **Betroffene Dateien:**
+  - `CloudKit/CloudKitActivityPushFetchCoordinator.swift`
+  - `CloudKitShareAppDelegate.swift`
+  - `Notifications/PushDeepLinkRouter.swift`
+  - `CloudKit/CloudKitActivitySubscriptionManager.swift`
+- **Risiko:** Medium. Notification changes are hard to test and can affect deliverability.
+- **Erwarteter Nutzen:** Clear separation: system push (always) vs local-enriched notifications (optional), consistent deep links.
