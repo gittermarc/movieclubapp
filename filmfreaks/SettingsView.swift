@@ -209,6 +209,8 @@ struct SettingsView: View {
                             Label("TMDB: Attribution & Datenschutz", systemImage: "info.circle")
                         }
                     }
+
+                    SettingsAboutSectionView()
                 }
                 .navigationTitle("Einstellungen")
                 .navigationBarTitleDisplayMode(.inline)
