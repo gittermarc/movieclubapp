@@ -21,6 +21,15 @@ struct ContentToolbar: ToolbarContent {
         // Wichtigste Aktion als Quick-Button – bleibt immer erreichbar.
         ToolbarItem(placement: .topBarTrailing) {
             Menu {
+                // Ganz oben: Kalender (eigener Block)
+                Button {
+                    route = .calendar
+                } label: {
+                    Label("Kalender", systemImage: "calendar")
+                }
+
+                Divider()
+
                 Button {
                     route = .users
                 } label: {
@@ -45,12 +54,6 @@ struct ContentToolbar: ToolbarContent {
                     route = .timeline
                 } label: {
                     Label("Timeline", systemImage: "rectangle.stack.fill")
-                }
-
-                Button {
-                    route = .calendar
-                } label: {
-                    Label("Kalender", systemImage: "calendar")
                 }
 
                 Button {
