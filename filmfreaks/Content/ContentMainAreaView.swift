@@ -40,68 +40,95 @@ struct ContentMainAreaView: View {
 
     private var g: DisplaySettings.PosterGridMetrics { displaySettings.posterGridMetrics }
 
-    var body: some View {
-        if hasAnyMoviesInCurrentGroup {
-            switch selectedViewStyle {
-            case .posterGrid:
-                ScrollView {
-                    switch selectedMode {
-                    case .watched:
-                        posterGrid(items: watchedGridItems, isBacklog: false)
-                    case .backlog:
-                        posterGrid(items: backlogGridItems, isBacklog: true)
-                    }
-                }
-                .safeAreaInset(edge: .bottom, spacing: 0) {
-                    bottomSearchBar
-                }
-                .refreshable {
-                    await onRefresh()
-                }
+    @State private var pendingGridDelete: MovieDeleteConfirmation?
 
-            case .cards, .compactList:
-                List {
-                    switch selectedMode {
-                    case .watched:
-                        ContentMoviesListSection(
-                            items: watchedListItems,
-                            movies: $movieStore.movies,
-                            isBacklog: false,
-                            selectedViewStyle: selectedViewStyle,
-                            query: watchedSearchText,
-                            displayScore: displayScore
-                        )
-                    case .backlog:
-                        ContentMoviesListSection(
-                            items: backlogListItems,
-                            movies: $movieStore.backlogMovies,
-                            isBacklog: true,
-                            selectedViewStyle: selectedViewStyle,
-                            query: backlogSearchText,
-                            displayScore: displayScore
-                        )
+    private var isPresentingGridDeleteAlert: Binding<Bool> {
+        Binding(
+            get: { pendingGridDelete != nil },
+            set: { newValue in
+                if !newValue { pendingGridDelete = nil }
+            }
+        )
+    }
+
+    var body: some View {
+        Group {
+            if hasAnyMoviesInCurrentGroup {
+                switch selectedViewStyle {
+                case .posterGrid:
+                    ScrollView {
+                        switch selectedMode {
+                        case .watched:
+                            posterGrid(items: watchedGridItems, isBacklog: false)
+                        case .backlog:
+                            posterGrid(items: backlogGridItems, isBacklog: true)
+                        }
+                    }
+                    .safeAreaInset(edge: .bottom, spacing: 0) {
+                        bottomSearchBar
+                    }
+                    .refreshable {
+                        await onRefresh()
+                    }
+
+                case .cards, .compactList:
+                    List {
+                        switch selectedMode {
+                        case .watched:
+                            ContentMoviesListSection(
+                                items: watchedListItems,
+                                movies: $movieStore.movies,
+                                isBacklog: false,
+                                selectedViewStyle: selectedViewStyle,
+                                query: watchedSearchText,
+                                displayScore: displayScore
+                            )
+                        case .backlog:
+                            ContentMoviesListSection(
+                                items: backlogListItems,
+                                movies: $movieStore.backlogMovies,
+                                isBacklog: true,
+                                selectedViewStyle: selectedViewStyle,
+                                query: backlogSearchText,
+                                displayScore: displayScore
+                            )
+                        }
+                    }
+                    .scrollContentBackground(.hidden)
+                    .listStyle(.plain)
+                    .safeAreaInset(edge: .bottom, spacing: 0) {
+                        bottomSearchBar
+                    }
+                    .refreshable {
+                        await onRefresh()
                     }
                 }
-                .scrollContentBackground(.hidden)
-                .listStyle(.plain)
-                .safeAreaInset(edge: .bottom, spacing: 0) {
-                    bottomSearchBar
+            } else {
+                // Empty State: trotzdem pull-to-refresh ermöglichen
+                ScrollView {
+                    emptyStateView
+                        .padding(.horizontal, 24)
+                        .padding(.top, 32)
+                    Spacer(minLength: 0)
                 }
                 .refreshable {
                     await onRefresh()
                 }
             }
-        } else {
-            // Empty State: trotzdem pull-to-refresh ermöglichen
-            ScrollView {
-                emptyStateView
-                    .padding(.horizontal, 24)
-                    .padding(.top, 32)
-                Spacer(minLength: 0)
+        }
+        .alert(
+            pendingGridDelete?.alertTitle ?? "Film löschen?",
+            isPresented: isPresentingGridDeleteAlert,
+            presenting: pendingGridDelete
+        ) { pending in
+            Button("Löschen", role: .destructive) {
+                confirmGridDelete(pending)
             }
-            .refreshable {
-                await onRefresh()
+            Button("Abbrechen", role: .cancel) {
+                pendingGridDelete = nil
             }
+        } message: { pending in
+            Text(pending.alertMessage)
         }
     }
 
@@ -230,8 +257,7 @@ struct ContentMainAreaView: View {
                             .buttonStyle(.plain)
                             .contextMenu {
                                 Button(role: .destructive) {
-                                    guard movieStore.backlogMovies.indices.contains(item.index) else { return }
-                                    movieStore.backlogMovies.remove(at: item.index)
+                                    requestGridDelete(movie: movie, isBacklog: true)
                                 } label: {
                                     Label("Löschen", systemImage: "trash")
                                 }
@@ -251,8 +277,7 @@ struct ContentMainAreaView: View {
                             .buttonStyle(.plain)
                             .contextMenu {
                                 Button(role: .destructive) {
-                                    guard movieStore.movies.indices.contains(item.index) else { return }
-                                    movieStore.movies.remove(at: item.index)
+                                    requestGridDelete(movie: movie, isBacklog: false)
                                 } label: {
                                     Label("Löschen", systemImage: "trash")
                                 }
@@ -265,5 +290,25 @@ struct ContentMainAreaView: View {
             .padding(.top, 10)
             .padding(.bottom, 18)
         }
+    }
+
+    // MARK: - Deletion confirmation (Grid)
+
+    private func requestGridDelete(movie: Movie, isBacklog: Bool) {
+        pendingGridDelete = MovieDeleteConfirmation(
+            movieIds: [movie.id],
+            movieTitles: [movie.title],
+            isBacklog: isBacklog
+        )
+    }
+
+    private func confirmGridDelete(_ pending: MovieDeleteConfirmation) {
+        let ids = Set(pending.movieIds)
+        if pending.isBacklog {
+            movieStore.backlogMovies.removeAll { ids.contains($0.id) }
+        } else {
+            movieStore.movies.removeAll { ids.contains($0.id) }
+        }
+        pendingGridDelete = nil
     }
 }
