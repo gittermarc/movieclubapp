@@ -16,59 +16,61 @@ import Combine
 @MainActor
 final class MovieNightStore: ObservableObject {
 
-    @Published private(set) var eventsByGroup: [String: [MovieNightEvent]] = [:]
-    @Published private(set) var responsesByGroup: [String: [MovieNightResponse]] = [:]
-    @Published private(set) var activityByGroup: [String: [MovieNightActivityEvent]] = [:]
-    @Published private(set) var isLoaded: Bool = false
+    // MARK: - Published state
+
+    @Published var eventsByGroup: [String: [MovieNightEvent]] = [:]
+    @Published var responsesByGroup: [String: [MovieNightResponse]] = [:]
+    @Published var activityByGroup: [String: [MovieNightActivityEvent]] = [:]
+    @Published var isLoaded: Bool = false
 
     // MARK: - Sync transparency (per group)
 
     /// Combined sync state (fetch + upload). We use a counter to avoid flicker.
-    @Published private(set) var isSyncing: Bool = false
+    @Published var isSyncing: Bool = false
 
     /// Number of locally queued changes that still need to be pushed to iCloud (per group).
-    @Published private(set) var pendingCloudChangesByGroup: [String: Int] = [:]
+    @Published var pendingCloudChangesByGroup: [String: Int] = [:]
 
     /// Timestamp of the last successful sync (fetch or upload) per group.
-    @Published private(set) var lastCloudSyncAtByGroup: [String: Date] = [:]
+    @Published var lastCloudSyncAtByGroup: [String: Date] = [:]
 
     /// Last sync error message (best effort) per group. Cleared on success.
-    @Published private(set) var lastCloudSyncErrorByGroup: [String: String] = [:]
+    @Published var lastCloudSyncErrorByGroup: [String: String] = [:]
 
-    // MARK: - Cloud (Phase 3: read-only)
+    // MARK: - Cloud
 
-    private let useCloud: Bool
-    private let cloudStore: CloudKitMovieNightStore?
+    let useCloud: Bool
+    let cloudStore: CloudKitMovieNightStore?
 
-    private var isRefreshingFromCloud: Bool = false
-    private var lastRefreshAtByGroup: [String: Date] = [:]
-    private let minRefreshInterval: TimeInterval = 8
+    var isRefreshingFromCloud: Bool = false
+    var lastRefreshAtByGroup: [String: Date] = [:]
+    let minRefreshInterval: TimeInterval = 8
 
-    private var cloudSyncCoordinator: MovieNightCloudSyncCoordinator?
+    var cloudSyncCoordinator: MovieNightCloudSyncCoordinator?
 
     // Combined sync state (fetch + upload). We use a counter to avoid flicker.
-    private var syncCount: Int = 0
+    var syncCount: Int = 0
 
     // MARK: - Network reconnect handling
 
-    private var networkCancellable: AnyCancellable?
-    private var lastNetworkConnected: Bool = true
+    var networkCancellable: AnyCancellable?
+    var lastNetworkConnected: Bool = true
 
     // MARK: - GroupContext retry handling
 
     /// When a Sharing/Zone group becomes routable (GroupContext persisted), automatically:
     /// - flush pending writes
     /// - refresh from cloud
-    private var groupContextCancellable: AnyCancellable?
-    private var lastGroupContextRetryAtByGroup: [String: Date] = [:]
-    private let minGroupContextRetryInterval: TimeInterval = 2
+    var groupContextCancellable: AnyCancellable?
+    var lastGroupContextRetryAtByGroup: [String: Date] = [:]
+    let minGroupContextRetryInterval: TimeInterval = 2
 
     // UserDefaults base key (per group)
-    private static let syncMetaPrefix = "MovieNightStore.SyncMeta."
+    static let syncMetaPrefix = "MovieNightStore.SyncMeta."
 
-    private var initialLoadTask: Task<Void, Never>?
+    var initialLoadTask: Task<Void, Never>?
 
-    private let persistence = MovieNightLocalPersistence()
+    let persistence = MovieNightLocalPersistence()
 
     init(useCloud: Bool = true, cloudStore: CloudKitMovieNightStore = CloudKitMovieNightStore()) {
         self.useCloud = useCloud
@@ -101,7 +103,6 @@ final class MovieNightStore: ObservableObject {
         }
 
         setupNetworkReconnectHandling()
-
         setupGroupContextRetryHandling()
     }
 
@@ -132,214 +133,6 @@ final class MovieNightStore: ObservableObject {
 
         flushPendingCloudChanges()
         Task { await self.refreshFromCloud(groupId: normalized, force: true) }
-    }
-
-    // MARK: - Read API
-
-    func events(for groupId: String) -> [MovieNightEvent] {
-        (eventsByGroup[groupId] ?? []).sorted(by: { $0.proposedStart < $1.proposedStart })
-    }
-
-    func upcomingEvents(for groupId: String, now: Date = .now) -> [MovieNightEvent] {
-        events(for: groupId).filter { $0.proposedStart >= now && $0.status != .cancelled }
-    }
-
-    func pastEvents(for groupId: String, now: Date = .now) -> [MovieNightEvent] {
-        events(for: groupId).filter { $0.proposedStart < now && $0.status != .cancelled }
-    }
-
-    func responses(for groupId: String, eventId: UUID) -> [MovieNightResponse] {
-        (responsesByGroup[groupId] ?? []).filter { $0.eventId == eventId }
-    }
-
-    func response(for groupId: String, eventId: UUID, userId: UUID) -> MovieNightResponse? {
-        (responsesByGroup[groupId] ?? []).first { $0.eventId == eventId && $0.userId == userId }
-    }
-
-    func activityEvents(for groupId: String) -> [MovieNightActivityEvent] {
-        (activityByGroup[groupId] ?? []).sorted(by: { $0.createdAt > $1.createdAt })
-    }
-
-    // MARK: - Cloud read (Phase 3)
-
-    /// Pulls movie night data from CloudKit for a given group and merges it into the local snapshot.
-    ///
-    /// Phase 3 is read-only: local changes are NOT uploaded yet.
-    func refreshFromCloud(groupId: String?, force: Bool = false) async {
-        guard useCloud, let cloudStore else { return }
-
-        let gid = (groupId ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !gid.isEmpty else {
-            // No group -> local-only.
-            return
-        }
-
-        ensureSyncMetaLoaded(forGroupId: gid)
-
-        // Sharing/Zone Gruppen (UUID groupId) dürfen niemals in die Public DB fallen.
-        // Wenn der GroupContext noch nicht geladen ist, brechen wir ab und versuchen es
-        // später erneut (z.B. nach groupStore.refresh / SceneActive).
-        if UUID(uuidString: gid) != nil, GroupContextStore.context(forGroupId: gid) == nil {
-            return
-        }
-
-        // Ensure local snapshot has been loaded, otherwise we'd overwrite cloud merges.
-        if let t = initialLoadTask {
-            await t.value
-        }
-
-        if isRefreshingFromCloud { return }
-        if !force, let last = lastRefreshAtByGroup[gid], Date().timeIntervalSince(last) < minRefreshInterval {
-            return
-        }
-
-        lastRefreshAtByGroup[gid] = Date()
-        isRefreshingFromCloud = true
-        beginSync()
-        defer {
-            isRefreshingFromCloud = false
-            endSync()
-        }
-
-        do {
-            if GroupContextStore.context(forGroupId: gid) != nil {
-                let changes = try await cloudStore.fetchMovieNightChanges(forGroupId: gid)
-                applyCloudChanges(changes, groupId: gid)
-            } else {
-                let snapshot = try await cloudStore.fetchMovieNightSnapshot(forGroupId: gid)
-                applyCloudSnapshot(snapshot, groupId: gid)
-            }
-
-            persist()
-            markCloudSyncSuccess(forGroupId: gid)
-        } catch {
-            print("MovieNightStore.refreshFromCloud error: \(error)")
-            markCloudSyncFailure(error, forGroupId: gid)
-        }
-    }
-
-    // MARK: - Cloud write (Phase 4)
-
-    func flushPendingCloudChanges() {
-        cloudSyncCoordinator?.flushImmediately()
-    }
-
-    private func queueCloudWrites(
-        groupId: String,
-        eventToSave: MovieNightEvent?,
-        responsesToSave: [MovieNightResponse],
-        activityToSave: [MovieNightActivityEvent],
-        eventIDsToDelete: [UUID],
-        responseDeletes: [(UUID, UUID)],
-        activityIDsToDelete: [UUID]
-    ) {
-        guard useCloud, cloudStore != nil, let coordinator = cloudSyncCoordinator else { return }
-
-        let gid = groupId.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !gid.isEmpty else { return }
-
-        ensureSyncMetaLoaded(forGroupId: gid)
-
-        if let eventToSave {
-            coordinator.queueEventSave(eventToSave, groupId: gid)
-        }
-
-        for id in eventIDsToDelete {
-            coordinator.queueEventDelete(eventId: id, groupId: gid)
-        }
-
-        for r in responsesToSave {
-            coordinator.queueResponseSave(r, groupId: gid)
-        }
-
-        for (eventId, userId) in responseDeletes {
-            coordinator.queueResponseDelete(eventId: eventId, userId: userId, groupId: gid)
-        }
-
-        for a in activityToSave {
-            coordinator.queueActivitySave(a, groupId: gid)
-        }
-
-        for id in activityIDsToDelete {
-            coordinator.queueActivityDelete(activityId: id, groupId: gid)
-        }
-    }
-
-    // MARK: - Sync meta + reconnect handling
-
-    private func setupNetworkReconnectHandling() {
-        // Seed with current state so we only react to transitions.
-        lastNetworkConnected = NetworkMonitor.shared.isConnected
-
-        networkCancellable = NetworkMonitor.shared.$isConnected
-            .removeDuplicates()
-            .sink { [weak self] connected in
-                guard let self else { return }
-
-                Task { @MainActor in
-                    let wasConnected = self.lastNetworkConnected
-                    self.lastNetworkConnected = connected
-
-                    // Only flush on offline -> online.
-                    guard connected, !wasConnected else { return }
-                    self.flushPendingCloudChanges()
-                }
-            }
-    }
-
-    private func beginSync() {
-        syncCount += 1
-        if syncCount == 1 {
-            isSyncing = true
-        }
-    }
-
-    private func endSync() {
-        syncCount = max(0, syncCount - 1)
-        if syncCount == 0 {
-            isSyncing = false
-        }
-    }
-
-    private func applyPendingCount(_ count: Int, forGroupId groupId: String) {
-        pendingCloudChangesByGroup[groupId] = count
-        UserDefaults.standard.set(count, forKey: syncMetaKey(groupId, "pending"))
-    }
-
-    private func markCloudSyncSuccess(forGroupId groupId: String) {
-        lastCloudSyncAtByGroup[groupId] = .now
-        lastCloudSyncErrorByGroup.removeValue(forKey: groupId)
-
-        UserDefaults.standard.set(Date(), forKey: syncMetaKey(groupId, "lastAt"))
-        UserDefaults.standard.removeObject(forKey: syncMetaKey(groupId, "lastError"))
-    }
-
-    private func markCloudSyncFailure(_ error: Error, forGroupId groupId: String) {
-        let msg = String(describing: error)
-        lastCloudSyncErrorByGroup[groupId] = msg
-        UserDefaults.standard.set(msg, forKey: syncMetaKey(groupId, "lastError"))
-    }
-
-    private func ensureSyncMetaLoaded(forGroupId groupId: String) {
-        // Only load once per group. Pending count can legitimately be 0.
-        if pendingCloudChangesByGroup.keys.contains(groupId) {
-            return
-        }
-
-        let pending = UserDefaults.standard.integer(forKey: syncMetaKey(groupId, "pending"))
-        pendingCloudChangesByGroup[groupId] = pending
-
-        if let lastAt = UserDefaults.standard.object(forKey: syncMetaKey(groupId, "lastAt")) as? Date {
-            lastCloudSyncAtByGroup[groupId] = lastAt
-        }
-
-        if let err = UserDefaults.standard.string(forKey: syncMetaKey(groupId, "lastError")), !err.isEmpty {
-            lastCloudSyncErrorByGroup[groupId] = err
-        }
-    }
-
-    private func syncMetaKey(_ groupId: String, _ suffix: String) -> String {
-        Self.syncMetaPrefix + groupId + "." + suffix
     }
 
     // MARK: - Write API
@@ -573,122 +366,25 @@ final class MovieNightStore: ObservableObject {
         persist()
     }
 
-    // MARK: - Debug / Utilities
+    // MARK: - Network reconnect handling
 
-    func purgeAllLocalData() {
-        eventsByGroup.removeAll()
-        responsesByGroup.removeAll()
-        activityByGroup.removeAll()
+    private func setupNetworkReconnectHandling() {
+        // Seed with current state so we only react to transitions.
+        lastNetworkConnected = NetworkMonitor.shared.isConnected
 
-        Task { await persistence.deleteLocalFile() }
+        networkCancellable = NetworkMonitor.shared.$isConnected
+            .removeDuplicates()
+            .sink { [weak self] connected in
+                guard let self else { return }
 
-        // Persist the empty snapshot so the app state matches disk state even if file delete fails.
-        persist()
-    }
+                Task { @MainActor in
+                    let wasConnected = self.lastNetworkConnected
+                    self.lastNetworkConnected = connected
 
-    // MARK: - Persistence
-
-    private func persist() {
-        let snapshot = MovieNightLocalPersistence.Snapshot(
-            schemaVersion: 2,
-            savedAt: .now,
-            eventsByGroup: eventsByGroup,
-            responsesByGroup: responsesByGroup,
-            activityByGroup: activityByGroup
-        )
-
-        Task {
-            await persistence.save(snapshot)
-        }
-    }
-
-    private func appendActivity(_ event: MovieNightActivityEvent, groupId: String) {
-        var list = activityByGroup[groupId] ?? []
-        list.append(event)
-        // Keep a cap so the JSON doesn't grow forever in P2.
-        if list.count > 200 {
-            list = Array(list.suffix(200))
-        }
-        activityByGroup[groupId] = list
-    }
-
-    // MARK: - Cloud merge helpers
-
-    private func applyCloudChanges(_ delta: CloudKitMovieNightStore.MovieNightChanges, groupId: String) {
-        mergeEvents(delta.changedEvents, deleted: delta.deletedEventIDs, groupId: groupId)
-        mergeResponses(delta.changedResponses, deleted: delta.deletedResponseIDs, groupId: groupId)
-        mergeActivity(delta.changedActivity, deleted: delta.deletedActivityIDs, groupId: groupId)
-    }
-
-    private func applyCloudSnapshot(_ snapshot: CloudKitMovieNightStore.MovieNightSnapshot, groupId: String) {
-        // Snapshot path is mainly for legacy/public groups.
-        // We merge in a way that never deletes local-only data.
-        mergeEvents(snapshot.events, deleted: [], groupId: groupId)
-        mergeResponses(snapshot.responses, deleted: [], groupId: groupId)
-        mergeActivity(snapshot.activity, deleted: [], groupId: groupId)
-    }
-
-    private func mergeEvents(_ changed: [MovieNightEvent], deleted: [UUID], groupId: String) {
-        var current = eventsByGroup[groupId] ?? []
-        var byId: [UUID: MovieNightEvent] = Dictionary(uniqueKeysWithValues: current.map { ($0.id, $0) })
-
-        for e in changed {
-            if let local = byId[e.id] {
-                // Keep the newest version (best-effort, local can still be ahead in Phase 3).
-                if local.updatedAt >= e.updatedAt {
-                    continue
+                    // Only flush on offline -> online.
+                    guard connected, !wasConnected else { return }
+                    self.flushPendingCloudChanges()
                 }
             }
-            byId[e.id] = e
-        }
-
-        for id in deleted {
-            byId.removeValue(forKey: id)
-        }
-
-        current = Array(byId.values)
-        current.sort(by: { $0.proposedStart < $1.proposedStart })
-        eventsByGroup[groupId] = current
-    }
-
-    private func mergeResponses(_ changed: [MovieNightResponse], deleted: [String], groupId: String) {
-        var current = responsesByGroup[groupId] ?? []
-        var byId: [String: MovieNightResponse] = Dictionary(uniqueKeysWithValues: current.map { ($0.id, $0) })
-
-        for r in changed {
-            if let local = byId[r.id] {
-                // respondedAt is our best proxy for "newer".
-                if local.respondedAt >= r.respondedAt {
-                    continue
-                }
-            }
-            byId[r.id] = r
-        }
-
-        for id in deleted {
-            byId.removeValue(forKey: id)
-        }
-
-        responsesByGroup[groupId] = Array(byId.values)
-    }
-
-    private func mergeActivity(_ changed: [MovieNightActivityEvent], deleted: [UUID], groupId: String) {
-        var current = activityByGroup[groupId] ?? []
-        var byId: [UUID: MovieNightActivityEvent] = Dictionary(uniqueKeysWithValues: current.map { ($0.id, $0) })
-
-        for a in changed {
-            byId[a.id] = a
-        }
-
-        for id in deleted {
-            byId.removeValue(forKey: id)
-        }
-
-        current = Array(byId.values)
-        current.sort(by: { $0.createdAt > $1.createdAt })
-        if current.count > 200 {
-            current = Array(current.prefix(200))
-        }
-        activityByGroup[groupId] = current
     }
 }
