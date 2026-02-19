@@ -5,6 +5,7 @@
 //  Created by Marc Fechner on 13.02.26.
 //
 
+import Foundation
 internal import SwiftUI
 
 /// P2: Detail sheet for a movie night proposal (local only).
@@ -15,6 +16,7 @@ struct MovieNightDetailSheet: View {
 
     @EnvironmentObject private var movieNightStore: MovieNightStore
     @EnvironmentObject private var userStore: UserStore
+    @EnvironmentObject private var groupStore: CloudKitGroupStore
     @EnvironmentObject private var displaySettings: DisplaySettings
     @Environment(\.dismiss) private var dismiss
 
@@ -47,12 +49,26 @@ struct MovieNightDetailSheet: View {
         }
     }
 
+    private var requiresGroupContext: Bool {
+        UUID(uuidString: groupId.trimmingCharacters(in: .whitespacesAndNewlines)) != nil
+    }
+
+    private var isGroupContextReady: Bool {
+        let gid = groupId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !gid.isEmpty else { return false }
+        if !requiresGroupContext { return true }
+        return GroupContextStore.context(forGroupId: gid) != nil
+    }
+
     var body: some View {
         NavigationStack {
             Group {
                 if let event {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 16) {
+                            if requiresGroupContext && !isGroupContextReady {
+                                contextNotReadyCard
+                            }
                             headerCard(event: event)
                             myResponseCard(event: event)
                             participantsCard(event: event)
@@ -105,6 +121,7 @@ struct MovieNightDetailSheet: View {
                     } label: {
                         Image(systemName: "ellipsis.circle")
                     }
+                    .disabled(requiresGroupContext && !isGroupContextReady)
                 }
             }
             .confirmationDialog(
@@ -184,21 +201,33 @@ struct MovieNightDetailSheet: View {
             Text("Deine Antwort")
                 .font(.headline)
 
-            if let me = userStore.selectedUser {
+            if requiresGroupContext && !isGroupContextReady {
+                Text("Gruppe wird noch geladen – bitte kurz warten oder neu laden.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                Button("Neu laden") {
+                    reloadGroupContextAndNightData()
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            } else if let me = userStore.selectedUser {
                 let myDecision = decision(for: me.id)
 
                 HStack(spacing: 10) {
                     decisionButton(title: "Dabei", systemImage: "checkmark", isSelected: myDecision == .accepted) {
                         setDecision(.accepted, for: me, event: event)
                     }
+                    .disabled(requiresGroupContext && !isGroupContextReady)
 
                     decisionButton(title: "Nein", systemImage: "xmark", isSelected: myDecision == .declined) {
                         setDecision(.declined, for: me, event: event)
                     }
+                    .disabled(requiresGroupContext && !isGroupContextReady)
 
                     decisionButton(title: "Offen", systemImage: "hourglass", isSelected: myDecision == .pending) {
                         setDecision(.pending, for: me, event: event)
                     }
+                    .disabled(requiresGroupContext && !isGroupContextReady)
                 }
             } else {
                 ContentUnavailableView(
@@ -316,6 +345,47 @@ struct MovieNightDetailSheet: View {
         }
         .buttonStyle(.bordered)
         .tint(isSelected ? displaySettings.tintColor : .secondary)
+    }
+
+    private var contextNotReadyCard: some View {
+        HStack(alignment: .center, spacing: 10) {
+            Image(systemName: "icloud.and.arrow.down")
+                .symbolRenderingMode(.hierarchical)
+                .foregroundStyle(.secondary)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Gruppe wird noch geladen …")
+                    .font(.subheadline.weight(.semibold))
+                Text("Aktionen sind kurz blockiert, damit nichts im falschen Cloud-Scope landet.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer(minLength: 8)
+
+            Button("Neu laden") {
+                reloadGroupContextAndNightData()
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+        }
+        .padding(displaySettings.metrics.cardPadding)
+        .background(
+            RoundedRectangle(cornerRadius: displaySettings.cardCornerRadius)
+                .fill(.thinMaterial)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: displaySettings.cardCornerRadius)
+                .stroke(Color.primary.opacity(0.06), lineWidth: 1)
+        )
+    }
+
+    private func reloadGroupContextAndNightData() {
+        Task {
+            await groupStore.refresh()
+            await movieNightStore.refreshFromCloud(groupId: groupId, force: true)
+            movieNightStore.flushPendingCloudChanges()
+        }
     }
 
     private func normalized(_ value: String?) -> String? {

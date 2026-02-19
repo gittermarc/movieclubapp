@@ -5,6 +5,7 @@
 //  Created by Marc Fechner on 13.02.26.
 //
 
+import Foundation
 internal import SwiftUI
 
 /// P2: Create a new movie night proposal (local only).
@@ -23,6 +24,14 @@ struct ProposeMovieNightSheet: View {
     @State private var note: String
     @State private var suggestedMovie: MovieNightMovieRef? = nil
     @State private var showNoUserAlert: Bool = false
+
+    private var isGroupContextReady: Bool {
+        let gid = groupId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !gid.isEmpty else { return false }
+        // UUID groupId => sehr wahrscheinlich Sharing/Zone Gruppe.
+        if UUID(uuidString: gid) == nil { return true }
+        return GroupContextStore.context(forGroupId: gid) != nil
+    }
 
     init(groupId: String, initialDate: Date) {
         self.groupId = groupId
@@ -127,6 +136,7 @@ struct ProposeMovieNightSheet: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Vorschlagen") { propose() }
                         .font(.body.weight(.semibold))
+                        .disabled(userStore.selectedUser == nil || !isGroupContextReady)
                 }
             }
             .alert(
@@ -170,6 +180,10 @@ struct ProposeMovieNightSheet: View {
     private func propose() {
         guard let user = userStore.selectedUser else {
             showNoUserAlert = true
+            return
+        }
+
+        guard isGroupContextReady else {
             return
         }
 

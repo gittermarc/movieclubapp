@@ -1,3 +1,4 @@
+
 //
 //  CloudKitMovieNightStore.swift
 //  filmfreaks
@@ -22,14 +23,38 @@ struct CloudKitMovieNightStore {
         self.container = container
     }
 
-    private func routedDatabase(forGroupId groupId: String) -> (db: CKDatabase, zoneID: CKRecordZone.ID?) {
-        guard let ctx = GroupContextStore.context(forGroupId: groupId) else {
-            return (container.publicCloudDatabase, nil)
+    private enum RoutingError: LocalizedError {
+        case groupContextNotReady(groupId: String)
+
+        var errorDescription: String? {
+            switch self {
+            case .groupContextNotReady(let groupId):
+                return "GroupContext not ready for groupId=\(groupId)"
+            }
+        }
+    }
+
+    /// Heuristik: groupId als UUID => sehr wahrscheinlich eine Sharing/Zone-Gruppe.
+    /// In diesem Fall darf es **keinen** Fallback auf Public DB geben, sonst landen Records im falschen Scope.
+    private func requiresGroupContext(_ groupId: String) -> Bool {
+        UUID(uuidString: groupId) != nil
+    }
+
+    private func routedDatabase(forGroupId groupId: String) throws -> (db: CKDatabase, zoneID: CKRecordZone.ID?) {
+        let gid = groupId.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if let ctx = GroupContextStore.context(forGroupId: gid) {
+            let zoneID = CKRecordZone.ID(zoneName: ctx.zoneName, ownerName: ctx.ownerName)
+            let db: CKDatabase = (ctx.scope == .shared) ? container.sharedCloudDatabase : container.privateCloudDatabase
+            return (db, zoneID)
         }
 
-        let zoneID = CKRecordZone.ID(zoneName: ctx.zoneName, ownerName: ctx.ownerName)
-        let db: CKDatabase = (ctx.scope == .shared) ? container.sharedCloudDatabase : container.privateCloudDatabase
-        return (db, zoneID)
+        if requiresGroupContext(gid) {
+            throw RoutingError.groupContextNotReady(groupId: gid)
+        }
+
+        // Legacy/public Gruppe (kein GroupContext): Public DB ohne Zone.
+        return (container.publicCloudDatabase, nil)
     }
 
     // MARK: - Schema
@@ -99,7 +124,7 @@ struct CloudKitMovieNightStore {
             )
         }
 
-        let route = routedDatabase(forGroupId: groupId)
+        let route = try routedDatabase(forGroupId: groupId)
         guard let zoneID = route.zoneID else {
             return MovieNightChanges(
                 changedEvents: [], deletedEventIDs: [],
@@ -190,7 +215,7 @@ struct CloudKitMovieNightStore {
     ///
     /// - Note: For zone-based groups we prefer `fetchMovieNightChanges`.
     func fetchMovieNightSnapshot(forGroupId groupId: String) async throws -> MovieNightSnapshot {
-        let route = routedDatabase(forGroupId: groupId)
+        let route = try routedDatabase(forGroupId: groupId)
 
         let predicate = NSPredicate(format: "%K == %@", groupIdKey, groupId)
 
@@ -219,7 +244,7 @@ struct CloudKitMovieNightStore {
         let gid = groupId.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !gid.isEmpty else { return }
 
-        let route = routedDatabase(forGroupId: gid)
+        let route = try routedDatabase(forGroupId: gid)
 
         var recordsToSave: [CKRecord] = []
         recordsToSave.reserveCapacity(saveEvents.count + saveResponses.count + saveActivity.count)

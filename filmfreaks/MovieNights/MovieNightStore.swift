@@ -136,6 +136,13 @@ final class MovieNightStore: ObservableObject {
 
         ensureSyncMetaLoaded(forGroupId: gid)
 
+        // Sharing/Zone Gruppen (UUID groupId) dürfen niemals in die Public DB fallen.
+        // Wenn der GroupContext noch nicht geladen ist, brechen wir ab und versuchen es
+        // später erneut (z.B. nach groupStore.refresh / SceneActive).
+        if UUID(uuidString: gid) != nil, GroupContextStore.context(forGroupId: gid) == nil {
+            return
+        }
+
         // Ensure local snapshot has been loaded, otherwise we'd overwrite cloud merges.
         if let t = initialLoadTask {
             await t.value

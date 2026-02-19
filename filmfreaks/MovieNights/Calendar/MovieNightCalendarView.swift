@@ -5,6 +5,7 @@
 //  Created by Marc Fechner on 13.02.26.
 //
 
+import Foundation
 internal import SwiftUI
 
 /// P1: Read-only calendar UI for Movie Nights (local data only).
@@ -14,6 +15,7 @@ struct MovieNightCalendarView: View {
     @EnvironmentObject private var movieStore: MovieStore
     @EnvironmentObject private var movieNightStore: MovieNightStore
     @EnvironmentObject private var userStore: UserStore
+    @EnvironmentObject private var groupStore: CloudKitGroupStore
     @EnvironmentObject private var displaySettings: DisplaySettings
 
     @State private var monthAnchor: Date = Calendar.current.startOfMonth(for: .now)
@@ -35,6 +37,16 @@ struct MovieNightCalendarView: View {
 
     private var monthTitle: String {
         Self.monthTitleFormatter.string(from: monthAnchor)
+    }
+
+    private var requiresGroupContext: Bool {
+        UUID(uuidString: groupId) != nil
+    }
+
+    private var isGroupContextReady: Bool {
+        guard !groupId.isEmpty else { return false }
+        if !requiresGroupContext { return true }
+        return GroupContextStore.context(forGroupId: groupId) != nil
     }
 
     private var eventsInMonth: [MovieNightEvent] {
@@ -116,7 +128,7 @@ struct MovieNightCalendarView: View {
                         Image(systemName: "plus")
                     }
                     .accessibilityLabel("Filmabend vorschlagen")
-                    .disabled(userStore.selectedUser == nil)
+                    .disabled(userStore.selectedUser == nil || !isGroupContextReady)
 
                     Button {
                         monthAnchor = Calendar.current.date(byAdding: .month, value: -1, to: monthAnchor) ?? monthAnchor
@@ -172,6 +184,33 @@ struct MovieNightCalendarView: View {
                         .foregroundStyle(.secondary)
                 }
                 .padding(.top, 4)
+            } else if requiresGroupContext && !isGroupContextReady {
+                HStack(alignment: .center, spacing: 10) {
+                    Image(systemName: "icloud.and.arrow.down")
+                        .symbolRenderingMode(.hierarchical)
+                        .foregroundStyle(.secondary)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Gruppe wird noch geladen …")
+                            .font(.subheadline.weight(.semibold))
+                        Text("Kurz warten – oder neu laden.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Spacer(minLength: 8)
+
+                    Button("Neu laden") {
+                        Task {
+                            await groupStore.refresh()
+                            await movieNightStore.refreshFromCloud(groupId: groupId, force: true)
+                            movieNightStore.flushPendingCloudChanges()
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                }
+                .padding(.top, 6)
             } else if eventsInMonth.isEmpty {
                 Text("In diesem Monat sind noch keine Filmabende geplant.")
                     .font(.subheadline)

@@ -154,6 +154,17 @@ final class MovieNightCloudSyncCoordinator {
 
     // MARK: - Flush
 
+    /// Heuristik: groupId als UUID => sehr wahrscheinlich eine Sharing/Zone-Gruppe.
+    /// Ohne GroupContext dürfen wir **nicht** auf Public DB ausweichen.
+    private func requiresGroupContext(_ groupId: String) -> Bool {
+        UUID(uuidString: groupId) != nil
+    }
+
+    private func isRoutingReady(for groupId: String) -> Bool {
+        if GroupContextStore.context(forGroupId: groupId) != nil { return true }
+        return !requiresGroupContext(groupId)
+    }
+
     private func scheduleFlush() {
         scheduledFlush?.cancel()
         scheduledFlush = Task { [debounceNanoseconds] in
@@ -180,6 +191,14 @@ final class MovieNightCloudSyncCoordinator {
         for gid in groupIds {
             let snapshot = snapshotForGroup(gid)
             if snapshot.isEmpty { continue }
+
+            // WICHTIG: Sharing/Zone Gruppen dürfen niemals in die Public DB fallen.
+            // Wenn der GroupContext noch nicht geladen ist, behalten wir die Changes lokal
+            // und warten auf den nächsten Trigger (SceneActive / groupStore.refresh / manuell).
+            guard isRoutingReady(for: gid) else {
+                publishPendingCount(for: gid)
+                continue
+            }
 
             do {
                 try await cloudStore.modifyBatch(
@@ -238,7 +257,9 @@ final class MovieNightCloudSyncCoordinator {
         }
 
         // If new changes arrived during the flush, schedule another pass quickly.
-        if !pendingGroupIds().isEmpty {
+        // Aber nur, wenn es auch wirklich eine Gruppe gibt, die wir aktuell routen können.
+        let remainingEligible = pendingGroupIds().filter { isRoutingReady(for: $0) }
+        if !remainingEligible.isEmpty {
             scheduleFlush()
         }
     }

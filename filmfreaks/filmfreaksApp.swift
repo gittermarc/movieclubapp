@@ -66,6 +66,11 @@ struct filmfreaksApp: App {
                 // (Ohne Subscriptions ist das der einfachste Weg, damit Bewertungen/Filme anderer Geräte sichtbar werden.)
                 Task {
                     await groupStore.refresh()
+
+                    // Sobald GroupContexts geladen sind, können ausstehende Filmabend-Änderungen
+                    // sicher in die richtige DB/Zone geflusht werden (ohne Public-Fallback).
+                    movieNightStore.flushPendingCloudChanges()
+
                     await movieStore.refreshFromCloud(force: false)
                     await userStore.refreshFromCloud(force: false)
                     await movieNightStore.refreshFromCloud(groupId: movieStore.currentGroupId, force: false)
