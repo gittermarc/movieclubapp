@@ -27,6 +27,9 @@ struct ContentView: View {
     @State var filterByUser: User? = nil
     @State var selectedSort: MovieSortOption = .dateNewest
 
+    // MARK: - Derived list/grid items (off render path)
+    @StateObject var movieItemsModel = ContentMovieItemsModel()
+
     // MARK: - In-List Search (Watched/Backlog)
     @State var watchedSearchText: String = ""
     @State var backlogSearchText: String = ""
@@ -127,6 +130,22 @@ struct ContentView: View {
             // Kein TMDb-Fallback: in Listen nur echte Gruppenwerte anzeigen.
             return movie.groupAverage(for: displaySettings.ratingDisplayMode)
         }
+    }
+
+    // MARK: - Derived items update
+
+    @MainActor
+    private func updateMovieItemsModel() {
+        movieItemsModel.update(
+            watchedMovies: movieStore.movies,
+            backlogMovies: movieStore.backlogMovies,
+            watchedSearchText: watchedSearchText,
+            backlogSearchText: backlogSearchText,
+            filterByUser: filterByUser,
+            sort: selectedSort,
+            ratingDisplayMode: displaySettings.ratingDisplayMode,
+            showTMDbRatingsInLists: displaySettings.showTMDbRatingsInLists
+        )
     }
 
 
@@ -255,9 +274,34 @@ struct ContentView: View {
             .onAppear {
                 // Quick Start nur beim ersten Start – danach nicht mehr.
                 if !hasSeenQuickStart {
-	                    route = .quickStart
+                        route = .quickStart
                 }
                 updateOnboardingCompletionFlag()
+                updateMovieItemsModel()
+            }
+            .onReceive(movieStore.$movies) { _ in
+                updateMovieItemsModel()
+            }
+            .onReceive(movieStore.$backlogMovies) { _ in
+                updateMovieItemsModel()
+            }
+            .onChange(of: watchedSearchText) { _, _ in
+                updateMovieItemsModel()
+            }
+            .onChange(of: backlogSearchText) { _, _ in
+                updateMovieItemsModel()
+            }
+            .onChange(of: filterByUser?.id) { _, _ in
+                updateMovieItemsModel()
+            }
+            .onChange(of: selectedSort) { _, _ in
+                updateMovieItemsModel()
+            }
+            .onReceive(displaySettings.$ratingDisplayMode) { _ in
+                updateMovieItemsModel()
+            }
+            .onReceive(displaySettings.$showTMDbRatingsInLists) { _ in
+                updateMovieItemsModel()
             }
             .onChange(of: movieStore.currentGroupId) { _, _ in
                 updateOnboardingCompletionFlag()
