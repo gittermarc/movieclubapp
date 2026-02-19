@@ -27,6 +27,8 @@ struct filmfreaksApp: App {
 
     @StateObject var displaySettings = DisplaySettings()
 
+    @StateObject private var appRefresh = AppRefreshCoordinator()
+
     @Environment(\.scenePhase) private var scenePhase
 
     @State private var showSplash = true
@@ -64,7 +66,7 @@ struct filmfreaksApp: App {
 
                 // Wenn die App wieder aktiv wird: Cloud-Daten nachziehen.
                 // (Ohne Subscriptions ist das der einfachste Weg, damit Bewertungen/Filme anderer Geräte sichtbar werden.)
-                Task {
+                appRefresh.triggerRefresh {
                     await groupStore.refresh()
 
                     // Sobald GroupContexts geladen sind, können ausstehende Filmabend-Änderungen
