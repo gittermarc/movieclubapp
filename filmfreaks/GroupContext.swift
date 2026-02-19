@@ -7,6 +7,11 @@
 
 import Foundation
 
+extension Notification.Name {
+    static let groupContextDidUpsert = Notification.Name("GroupContextDidUpsert")
+    static let groupContextDidRemove = Notification.Name("GroupContextDidRemove")
+}
+
 enum GroupScope: String, Codable {
     case `private`
     case shared
@@ -53,17 +58,41 @@ final class GroupContextStore {
     /// Save or update a context.
     static func upsert(_ context: GroupContext) {
         var dict = loadDict()
+
+        if let existing = dict[context.id],
+           let decoded = try? JSONDecoder().decode(GroupContext.self, from: existing),
+           decoded == context {
+            return
+        }
+
         if let data = try? JSONEncoder().encode(context) {
             dict[context.id] = data
             saveDict(dict)
+
+            DispatchQueue.main.async {
+                NotificationCenter.default.post(
+                    name: .groupContextDidUpsert,
+                    object: nil,
+                    userInfo: ["groupId": context.id]
+                )
+            }
         }
     }
 
     /// Remove a context (e.g. user left a shared group).
     static func remove(groupId: String) {
         var dict = loadDict()
-        dict.removeValue(forKey: groupId)
+        let existed = dict.removeValue(forKey: groupId) != nil
         saveDict(dict)
+
+        guard existed else { return }
+        DispatchQueue.main.async {
+            NotificationCenter.default.post(
+                name: .groupContextDidRemove,
+                object: nil,
+                userInfo: ["groupId": groupId]
+            )
+        }
     }
 
     static func all() -> [GroupContext] {

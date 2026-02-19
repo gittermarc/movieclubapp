@@ -109,6 +109,15 @@ class MovieStore: ObservableObject {
     private var networkCancellable: AnyCancellable?
     private var lastNetworkConnected: Bool = true
 
+    // MARK: - GroupContext retry handling
+
+    /// When a UUID-like groupId becomes routable (GroupContext persisted), automatically:
+    /// - flush pending writes
+    /// - refresh from cloud (zone changes)
+    private var groupContextCancellable: AnyCancellable?
+    private var lastGroupContextRetryAtByGroup: [String: Date] = [:]
+    private let minGroupContextRetryInterval: TimeInterval = 2
+
     private static let knownGroupsKey = "KnownGroups"
 
     // UserDefaults base key (per group)
@@ -179,6 +188,41 @@ class MovieStore: ObservableObject {
 
         // Always listen for reconnects; flush is a no-op if Cloud sync isn't enabled.
         setupNetworkReconnectHandling()
+
+        // When routing becomes available for a Sharing/Zone group, retry flush + refresh.
+        setupGroupContextRetryHandling()
+    }
+
+    private func setupGroupContextRetryHandling() {
+        groupContextCancellable = NotificationCenter.default.publisher(for: .groupContextDidUpsert)
+            .compactMap { $0.userInfo?["groupId"] as? String }
+            .sink { [weak self] groupId in
+                guard let self else { return }
+                Task { @MainActor in
+                    self.handleGroupContextUpsert(groupId: groupId)
+                }
+            }
+    }
+
+    private func handleGroupContextUpsert(groupId: String) {
+        guard let normalized = CloudKitRouting.normalizedGroupId(groupId) else { return }
+        guard let current = CloudKitRouting.normalizedGroupId(currentGroupId) else { return }
+        guard normalized == current else { return }
+
+        // Only relevant for UUID-like groupIds.
+        guard CloudKitRouting.requiresGroupContext(for: normalized) else { return }
+        guard GroupContextStore.context(forGroupId: normalized) != nil else { return }
+
+        // Throttle duplicate upserts (group list refresh may upsert multiple times).
+        let now = Date()
+        if let last = lastGroupContextRetryAtByGroup[normalized], now.timeIntervalSince(last) < minGroupContextRetryInterval {
+            return
+        }
+        lastGroupContextRetryAtByGroup[normalized] = now
+
+        // If routing just became available, try to push pending writes and then fetch deltas.
+        flushPendingCloudChanges()
+        Task { await self.refreshFromCloud(force: true) }
     }
 
     private func setupNetworkReconnectHandling() {

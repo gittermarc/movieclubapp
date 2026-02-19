@@ -54,6 +54,15 @@ final class MovieNightStore: ObservableObject {
     private var networkCancellable: AnyCancellable?
     private var lastNetworkConnected: Bool = true
 
+    // MARK: - GroupContext retry handling
+
+    /// When a Sharing/Zone group becomes routable (GroupContext persisted), automatically:
+    /// - flush pending writes
+    /// - refresh from cloud
+    private var groupContextCancellable: AnyCancellable?
+    private var lastGroupContextRetryAtByGroup: [String: Date] = [:]
+    private let minGroupContextRetryInterval: TimeInterval = 2
+
     // UserDefaults base key (per group)
     private static let syncMetaPrefix = "MovieNightStore.SyncMeta."
 
@@ -92,6 +101,37 @@ final class MovieNightStore: ObservableObject {
         }
 
         setupNetworkReconnectHandling()
+
+        setupGroupContextRetryHandling()
+    }
+
+    private func setupGroupContextRetryHandling() {
+        groupContextCancellable = NotificationCenter.default.publisher(for: .groupContextDidUpsert)
+            .compactMap { $0.userInfo?["groupId"] as? String }
+            .sink { [weak self] groupId in
+                guard let self else { return }
+                Task { @MainActor in
+                    self.handleGroupContextUpsert(groupId: groupId)
+                }
+            }
+    }
+
+    private func handleGroupContextUpsert(groupId: String) {
+        guard let normalized = CloudKitRouting.normalizedGroupId(groupId) else { return }
+
+        // Only relevant for UUID-like groupIds.
+        guard CloudKitRouting.requiresGroupContext(for: normalized) else { return }
+        guard GroupContextStore.context(forGroupId: normalized) != nil else { return }
+
+        // Throttle duplicate upserts (group list refresh may upsert multiple times).
+        let now = Date()
+        if let last = lastGroupContextRetryAtByGroup[normalized], now.timeIntervalSince(last) < minGroupContextRetryInterval {
+            return
+        }
+        lastGroupContextRetryAtByGroup[normalized] = now
+
+        flushPendingCloudChanges()
+        Task { await self.refreshFromCloud(groupId: normalized, force: true) }
     }
 
     // MARK: - Read API
