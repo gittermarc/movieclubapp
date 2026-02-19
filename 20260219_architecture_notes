@@ -1,0 +1,94 @@
+# ARCHITECTURE_NOTES
+
+## Scope / Ground Truth
+- Dieses Dokument basiert ausschließlich auf dem Quellcode im ZIP.
+- Alles, was CloudKit-Dashboard / Prod-Schema / Server-Config betrifft, ist **UNKNOWN** und landet in „Open Questions“.
+
+---
+
+## Big Files List (Top 15 nach Zeilen)
+> Warum relevant: große Dateien korrelieren hier direkt mit „zu viel Verantwortung pro Datei“ + höherem Bug- und Merge-Risiko.
+
+| Rank | Datei | Zeilen | Grober Zweck | Warum riskant |
+|---:|---|---:|---|---|
+| 1 | `filmfreaks/MovieStore.swift` | 863 | App-State für Movies/Backlog + Sync-Meta + Cloud-Flow | Single-point-of-truth, @MainActor, Sync + Local + Migration + Queue-Integration in einem File |
+| 2 | `filmfreaks/CloudKitMovieStore.swift` | 719 | CloudKit Fetch/Merge für Movies (Zone Changes + Legacy Query) | Merge-Logik + Schema-Kopplung + Fehlerfälle + hoher Testbedarf |
+| 3 | `filmfreaks/MovieNights/MovieNightStore.swift` | 654 | MovieNight Domain + Local Snapshot + Cloud read/write queue | Viele Zustände + Sync-Transparenz + merge + pending queue |
+| 4 | `filmfreaks/CloudKitMovieNightStore.swift` | 605 | CloudKit Schema + Zone delta + snapshot + writes für MovieNights | Sehr schema-lastig, viele Keys/Types, Routing-Guards wichtig |
+| 5 | `filmfreaks/DisplaySettings.swift` | 598 | UI/Theme/Preferences + Presets | Viele AppStorage/Defaults → hoher „invalidations“ impact |
+| 6 | `filmfreaks/TMDbAPI.swift` | 591 | Netzwerk-API + Models + Endpoints | JSON-Parsing + Fehlerhandling + API-Key-Härtung |
+| 7 | `filmfreaks/Goals/CustomGoalEditorView.swift` | 545 | UI zum Erstellen/Bearbeiten Custom Goals | UI-Komplexität + Zustand + Validation |
+| 8 | `filmfreaks/SearchResultDetail/SearchResultDetailView.swift` | 522 | Detail UI für TMDb Suchresultate | Viele Subviews/States → Re-render Risiko |
+| 9 | `filmfreaks/CloudKitRatingStore.swift` | 508 | CloudKit Sync Ratings (MovieRating records) | Konflikte/UpdatedAt/IDs; Schema-Kopplung |
+| 10 | `filmfreaks/CloudKitGroupStore.swift` | 463 | Gruppen + Sharing + Zone Setup + Repair | @MainActor, viele Side-Effects, Subscriptions doppelt |
+| 11 | `filmfreaks/Stats/StatsView+Calculations.swift` | 429 | Aggregationen/Derived Data für Stats | Viele computed properties, wiederholte Filter/Reduce pro Render |
+| 12 | `filmfreaks/MovieSearch/MovieSearchView.swift` | 421 | Suche + Scan + Empfehlungen + Pagination | Viele UI-States + Tasks; Gefahr ungebremster Task-Flut |
+| 13 | `filmfreaks/MovieNights/Sheets/MovieNightDetailSheet.swift` | 410 | UI Sheet für MovieNight Details | UI heavy; potentielle Render-Kosten |
+| 14 | `filmfreaks/Content/ContentView.swift` | 402 | Root UI + Listen + Derived Model Hooks | Viele onReceive/onChange; Gefahr exzessiver invalidations |
+| 15 | `filmfreaks/UserStore.swift` | 389 | Members state + Sync status + selection persist | @MainActor + Cloud fetch + bootstrap seed logic |
+
+---
+
+## Hot Path Analyse
+
+### A) Rendering / Scrolling
+
+#### 1) Stats: wiederholte Aggregationen im Render-Pfad
+- Files:
+  - `filmfreaks/Stats/StatsView+Calculations.swift`
+- Konkreter Grund:
+  - Viele `var` computed properties bauen wiederholt `moviesForCurrentTimeRange` und `filteredMovies`.
+  - Jede property macht eigene `map/filter/reduce`-Durchläufe → multipliziert sich in `body` (Cards greifen auf mehrere KPIs zu).
+- Risiko:
+  - Bei größeren Movie-Listen: spürbare Scroll- und Interaktions-Lags.
+- Hebel:
+  - Cache/VM: einmal pro „input change“ (movies/range/location) rechnen, in Published speichern.
+
+#### 2) ContentView: Derived list rebuilds auf MainActor
+- Files:
+  - `filmfreaks/Content/ContentView.swift`
+  - `filmfreaks/Content/ContentMovieItemsModel.swift`
+- Konkreter Grund:
+  - `ContentView` triggert `movieItemsModel.update(...)` via `onReceive`/`onChange`.
+  - `ContentMovieItemsModel.update(...)` macht `filter + sorted + map` und läuft auf `@MainActor`.
+- Risiko:
+  - Jede Änderung an `movies/backlog/searchText/sort/userFilter` führt zu Full-Rebuild.
+- Hebel:
+  - Recompute in background (Task.detached) + apply results auf MainActor
+  - oder incremental updates / memoization.
+
+#### 3) CachedAsyncImage: Task pro Zelle
+- Files:
+  - `filmfreaks/CachedAsyncImage.swift`
+- Konkreter Grund:
+  - `.task(id: url)` erzeugt Task pro View-Instanz.
+  - Dedupe ist gut (`inFlight`), aber viele Zellen können trotzdem „load-start“ triggern.
+- Risiko:
+  - Bei schnellen Scrolling: viele Task-Start/Cancel-Zyklen.
+- Hebel:
+  - aggressive placeholder policy / prefetching gezielt steuern (nur für visible range; **UNKNOWN**, ob aktuell genutzt).
+
+---
+
+### B) Sync / Storage
+
+#### 1) Public-Fallback bei UUID-Gruppen (potenzieller Daten-Leak)
+- Files:
+  - `filmfreaks/MovieStore.swift` (isZoneGroup bestimmt über `GroupContextStore.context(...) != nil`)
+  - `filmfreaks/CloudKitUserStore.swift` (routing: wenn ctx nil → public)
+  - `filmfreaks/CloudKitGoalStore.swift` (routing: wenn ctx nil → public)
+- Konkreter Grund:
+  - Wenn `groupId` UUID ist (Sharing-Gruppe), aber `GroupContextStore` noch nicht gefüllt ist, droht Public-Fallback.
+  - MovieNight Store hat expliziten Guard dagegen: `requiresGroupContext` + throw (`filmfreaks/CloudKitMovieNightStore.swift`).
+- Risiko:
+  - Falscher DB Scope (public statt private/shared)
+  - Initial upload könnte Daten in public schreiben (Worst case).
+- Hebel:
+  - Konsistenter „UUID => requires context“ Guard in allen Stores (Movies, Users, Goals).
+
+#### 2) MovieStore init lädt Cloud sofort (Race mit GroupContexts)
+- Files:
+  - `filmfreaks/MovieStore.swift` (`Task { await self.loadFromCloud() }` im init)
+  - `filmfreaks/filmfreaksApp.swift` (ruft groupStore.refresh bei `.active`)
+- Konkreter Grund:
+  - MovieStore lädt Cloud bereits

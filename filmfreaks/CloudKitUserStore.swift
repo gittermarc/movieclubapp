@@ -33,13 +33,8 @@ struct CloudKitUserStore {
 
     private let container: CKContainer
 
-    private func routedDatabase(forGroupId groupId: String) -> (db: CKDatabase, zoneID: CKRecordZone.ID?) {
-        guard let ctx = GroupContextStore.context(forGroupId: groupId) else {
-            return (container.publicCloudDatabase, nil)
-        }
-        let zoneID = CKRecordZone.ID(zoneName: ctx.zoneName, ownerName: ctx.ownerName)
-        let db: CKDatabase = (ctx.scope == .shared) ? container.sharedCloudDatabase : container.privateCloudDatabase
-        return (db, zoneID)
+    private func routedDatabase(forGroupId groupId: String) throws -> (db: CKDatabase, zoneID: CKRecordZone.ID?) {
+        try CloudKitRouting.route(container: container, groupId: groupId)
     }
 
     private let recordType = "GroupMember"
@@ -68,7 +63,7 @@ struct CloudKitUserStore {
     // MARK: - Fetch
 
     func fetchMembers(forGroupId groupId: String) async throws -> [CloudMember] {
-        let route = routedDatabase(forGroupId: groupId)
+        let route = try routedDatabase(forGroupId: groupId)
         let predicate = NSPredicate(format: "%K == %@", groupIdKey, groupId)
         let query = CKQuery(recordType: recordType, predicate: predicate)
 
@@ -135,7 +130,7 @@ struct CloudKitUserStore {
     ) async throws {
         guard !members.isEmpty else { return }
 
-        let route = routedDatabase(forGroupId: groupId)
+        let route = try routedDatabase(forGroupId: groupId)
         let maxPerOp = 200
         var start = 0
 
@@ -177,7 +172,7 @@ struct CloudKitUserStore {
     }
 
     func upsertMember(id: UUID, name: String, groupId: String) async throws {
-        let route = routedDatabase(forGroupId: groupId)
+        let route = try routedDatabase(forGroupId: groupId)
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
 
@@ -233,7 +228,7 @@ struct CloudKitUserStore {
     // MARK: - Delete
 
     func deleteMember(id: UUID, groupId: String) async throws {
-        let route = routedDatabase(forGroupId: groupId)
+        let route = try routedDatabase(forGroupId: groupId)
         let newID = recordIDNew(groupId: groupId, memberId: id, zoneID: route.zoneID)
 
         do {

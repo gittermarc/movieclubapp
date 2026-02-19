@@ -222,6 +222,14 @@ class MovieStore: ObservableObject {
             // accidentally apply results to the wrong group.
             let requestedGroupId = currentGroupId
             let gid = requestedGroupId
+
+            // Safety: UUID-like groupIds are treated as Sharing/Zone groups.
+            // If the GroupContext isn't ready yet, we must not fall back to Public DB.
+            if let gid, !gid.isEmpty,
+               CloudKitRouting.requiresGroupContext(for: gid),
+               GroupContextStore.context(forGroupId: gid) == nil {
+                throw CloudKitRoutingError.groupContextNotReady(groupId: gid)
+            }
             let isZoneGroup: Bool = {
                 guard let gid, !gid.isEmpty else { return false }
                 return GroupContextStore.context(forGroupId: gid) != nil

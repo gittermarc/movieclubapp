@@ -32,14 +32,8 @@ struct CloudKitMovieStore {
 
     // MARK: - Routing (Legacy Public DB vs. Sharing Private/Shared DB)
 
-    private func routedDatabase(forGroupId groupId: String?) -> (db: CKDatabase, zoneID: CKRecordZone.ID?) {
-        guard let gid = groupId, !gid.isEmpty, let ctx = GroupContextStore.context(forGroupId: gid) else {
-            return (container.publicCloudDatabase, nil)
-        }
-
-        let zoneID = CKRecordZone.ID(zoneName: ctx.zoneName, ownerName: ctx.ownerName)
-        let db: CKDatabase = (ctx.scope == .shared) ? container.sharedCloudDatabase : container.privateCloudDatabase
-        return (db, zoneID)
+    private func routedDatabase(forGroupId groupId: String?) throws -> (db: CKDatabase, zoneID: CKRecordZone.ID?) {
+        try CloudKitRouting.route(container: container, groupId: groupId)
     }
 
     // MARK: - Laden
@@ -62,7 +56,7 @@ struct CloudKitMovieStore {
             return MovieChanges(changed: [], deletedMovieIDs: [], isInitial: false)
         }
 
-        let route = routedDatabase(forGroupId: gid)
+        let route = try routedDatabase(forGroupId: gid)
         guard let zoneID = route.zoneID else {
             return MovieChanges(changed: [], deletedMovieIDs: [], isInitial: false)
         }
@@ -99,20 +93,25 @@ struct CloudKitMovieStore {
     }
 
     func fetchMovies(forGroupId groupId: String?) async throws -> [CloudMovieEntry] {
-        if let gid = groupId, !gid.isEmpty, GroupContextStore.context(forGroupId: gid) != nil {
-            let route = routedDatabase(forGroupId: gid)
-            let predicate = NSPredicate(format: "%K == %@", groupIdKey, gid)
-            return try await fetchMovies(with: predicate, database: route.db, zoneID: route.zoneID)
-        }
+        if let gid = CloudKitRouting.normalizedGroupId(groupId) {
+            // Safety: UUID-like groupIds must not fall back to Public DB.
+            // (route(...) throws if GroupContext is missing.)
+            let route = try routedDatabase(forGroupId: gid)
 
-        if let groupId, !groupId.isEmpty {
-            let fastPredicate = NSPredicate(format: "%K == %@", groupIdKey, groupId)
+            // Zone-based group: query inside the zone.
+            if route.zoneID != nil {
+                let predicate = NSPredicate(format: "%K == %@", groupIdKey, gid)
+                return try await fetchMovies(with: predicate, database: route.db, zoneID: route.zoneID)
+            }
+
+            // Legacy/public group: query Public DB and optionally migrate legacy groupId-in-payload.
+            let fastPredicate = NSPredicate(format: "%K == %@", groupIdKey, gid)
             let fastEntries = try await fetchMovies(with: fastPredicate, database: container.publicCloudDatabase, zoneID: nil)
             if !fastEntries.isEmpty {
                 return fastEntries
             }
 
-            return try await migrateLegacyGroupIdFieldAndFetch(forGroupId: groupId)
+            return try await migrateLegacyGroupIdFieldAndFetch(forGroupId: gid)
         }
 
         let predicate = NSPredicate(format: "%K == NULL OR %K == ''", groupIdKey, groupIdKey)
@@ -349,7 +348,7 @@ struct CloudKitMovieStore {
     }
 
     func save(movie: Movie, isBacklog: Bool) async throws {
-        let route = routedDatabase(forGroupId: movie.groupId)
+        let route = try routedDatabase(forGroupId: movie.groupId)
         let recordID: CKRecord.ID
         if let zoneID = route.zoneID {
             recordID = CKRecord.ID(recordName: movie.id.uuidString, zoneID: zoneID)
@@ -475,14 +474,23 @@ struct CloudKitMovieStore {
             let ownerName: String?
         }
 
-        func routeKey(forGroupId gid: String?) -> (key: RouteKey, db: CKDatabase, zoneID: CKRecordZone.ID?) {
-            guard let gid, !gid.isEmpty, let ctx = GroupContextStore.context(forGroupId: gid) else {
-                return (RouteKey(scope: "public", zoneName: nil, ownerName: nil), container.publicCloudDatabase, nil)
+        func routeKey(forGroupId gid: String?) throws -> (key: RouteKey, db: CKDatabase, zoneID: CKRecordZone.ID?) {
+            if let normalized = CloudKitRouting.normalizedGroupId(gid),
+               let ctx = GroupContextStore.context(forGroupId: normalized) {
+                let zoneID = CKRecordZone.ID(zoneName: ctx.zoneName, ownerName: ctx.ownerName)
+                let db: CKDatabase = (ctx.scope == .shared) ? container.sharedCloudDatabase : container.privateCloudDatabase
+                let key = RouteKey(
+                    scope: (ctx.scope == .shared) ? "shared" : "private",
+                    zoneName: ctx.zoneName,
+                    ownerName: ctx.ownerName
+                )
+                return (key, db, zoneID)
             }
-            let zoneID = CKRecordZone.ID(zoneName: ctx.zoneName, ownerName: ctx.ownerName)
-            let db: CKDatabase = (ctx.scope == .shared) ? container.sharedCloudDatabase : container.privateCloudDatabase
-            let key = RouteKey(scope: (ctx.scope == .shared) ? "shared" : "private", zoneName: ctx.zoneName, ownerName: ctx.ownerName)
-            return (key, db, zoneID)
+
+            // Safety: validate that we are allowed to fall back to Public DB.
+            // (UUID-like groupIds without GroupContext will throw.)
+            _ = try CloudKitRouting.route(container: container, groupId: gid)
+            return (RouteKey(scope: "public", zoneName: nil, ownerName: nil), container.publicCloudDatabase, nil)
         }
 
         // We keep a mapping from CKRecord.ID -> (Movie,isBacklog) so that we can
@@ -497,7 +505,7 @@ struct CloudKitMovieStore {
 
         for (movie, isBacklog) in saveItems {
             let gid = movie.groupId
-            let route = routeKey(forGroupId: gid)
+            let route = try routeKey(forGroupId: gid)
             let recordID: CKRecord.ID = {
                 if let zoneID = route.zoneID {
                     return CKRecord.ID(recordName: movie.id.uuidString, zoneID: zoneID)
@@ -538,7 +546,7 @@ struct CloudKitMovieStore {
             groupedSaves[route.key] = bucket
         }
 
-        let deleteRoute = routeKey(forGroupId: groupIdForDeletes)
+        let deleteRoute = try routeKey(forGroupId: groupIdForDeletes)
         let deleteRecordIDs: [CKRecord.ID] = deleteIDs.map { id in
             if let zoneID = deleteRoute.zoneID {
                 return CKRecord.ID(recordName: id.uuidString, zoneID: zoneID)
@@ -630,7 +638,7 @@ struct CloudKitMovieStore {
     // MARK: - Löschen
 
     func delete(movieID: UUID, groupId: String?) async throws {
-        let route = routedDatabase(forGroupId: groupId)
+        let route = try routedDatabase(forGroupId: groupId)
         let recordID: CKRecord.ID
         if let zoneID = route.zoneID {
             recordID = CKRecord.ID(recordName: movieID.uuidString, zoneID: zoneID)

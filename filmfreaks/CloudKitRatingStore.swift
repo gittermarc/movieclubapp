@@ -18,14 +18,8 @@ struct CloudKitRatingStore {
 
     private let container: CKContainer
 
-    private func routedDatabase(forGroupId groupId: String?) -> (db: CKDatabase, zoneID: CKRecordZone.ID?) {
-        guard let gid = groupId, !gid.isEmpty, let ctx = GroupContextStore.context(forGroupId: gid) else {
-            return (container.publicCloudDatabase, nil)
-        }
-
-        let zoneID = CKRecordZone.ID(zoneName: ctx.zoneName, ownerName: ctx.ownerName)
-        let db: CKDatabase = (ctx.scope == .shared) ? container.sharedCloudDatabase : container.privateCloudDatabase
-        return (db, zoneID)
+    private func routedDatabase(forGroupId groupId: String?) throws -> (db: CKDatabase, zoneID: CKRecordZone.ID?) {
+        try CloudKitRouting.route(container: container, groupId: groupId)
     }
 
     init(container: CKContainer = .default()) {
@@ -114,7 +108,7 @@ struct CloudKitRatingStore {
     ) async throws {
         guard !items.isEmpty else { return }
 
-        let route = routedDatabase(forGroupId: groupId)
+        let route = try routedDatabase(forGroupId: groupId)
         let reviewerIds: [UUID] = items.map { stableReviewerId(for: $0.rating, groupId: groupId) }
 
         let maxPerOp = 200
@@ -172,7 +166,7 @@ struct CloudKitRatingStore {
             return RatingChanges(changedByMovieId: [:], deletedKeys: [], isInitial: false)
         }
 
-        let route = routedDatabase(forGroupId: gid)
+        let route = try routedDatabase(forGroupId: gid)
         guard let zoneID = route.zoneID else {
             return RatingChanges(changedByMovieId: [:], deletedKeys: [], isInitial: false)
         }
@@ -229,7 +223,7 @@ struct CloudKitRatingStore {
     }
 
     func saveRating(_ rating: Rating, movieId: UUID, groupId: String?) async throws {
-        let route = routedDatabase(forGroupId: groupId)
+        let route = try routedDatabase(forGroupId: groupId)
         let reviewerId = stableReviewerId(for: rating, groupId: groupId)
 
         let baseID = recordID(groupId: groupId, movieId: movieId, reviewerId: reviewerId)
@@ -290,7 +284,7 @@ struct CloudKitRatingStore {
     }
 
     func deleteRating(movieId: UUID, groupId: String?, reviewerId: UUID) async throws {
-        let route = routedDatabase(forGroupId: groupId)
+        let route = try routedDatabase(forGroupId: groupId)
         let baseID = recordID(groupId: groupId, movieId: movieId, reviewerId: reviewerId)
         let id = route.zoneID.map { CKRecord.ID(recordName: baseID.recordName, zoneID: $0) } ?? baseID
         _ = try await route.db.deleteRecord(withID: id)
@@ -301,7 +295,7 @@ struct CloudKitRatingStore {
     /// Lädt alle Ratings für eine Gruppe (und optional gefiltert auf Movie-IDs).
     /// Rückgabe: [movieUUID: [Rating]]
     func fetchRatings(forGroupId groupId: String?, movieIds: [UUID]? = nil) async throws -> [UUID: [Rating]] {
-        let route = routedDatabase(forGroupId: groupId)
+        let route = try routedDatabase(forGroupId: groupId)
 
         let predicate: NSPredicate
         if let gid = groupId, !gid.isEmpty {

@@ -17,18 +17,12 @@ final class CloudKitGoalStore {
 
     private let container: CKContainer
 
-    private func routedDatabase(forGroupId groupId: String?) -> (db: CKDatabase, zoneID: CKRecordZone.ID?) {
-        guard let gid = groupId, !gid.isEmpty, let ctx = GroupContextStore.context(forGroupId: gid) else {
-            return (container.publicCloudDatabase, nil)
-        }
-
-        let zoneID = CKRecordZone.ID(zoneName: ctx.zoneName, ownerName: ctx.ownerName)
-        let db: CKDatabase = (ctx.scope == .shared) ? container.sharedCloudDatabase : container.privateCloudDatabase
-        return (db, zoneID)
+    private func routedDatabase(forGroupId groupId: String?) throws -> (db: CKDatabase, zoneID: CKRecordZone.ID?) {
+        try CloudKitRouting.route(container: container, groupId: groupId)
     }
 
-    private func recordID(recordName: String, groupId: String?) -> CKRecord.ID {
-        let route = routedDatabase(forGroupId: groupId)
+    private func recordID(recordName: String, groupId: String?) throws -> CKRecord.ID {
+        let route = try routedDatabase(forGroupId: groupId)
         if let zoneID = route.zoneID {
             return CKRecord.ID(recordName: recordName, zoneID: zoneID)
         }
@@ -53,7 +47,7 @@ final class CloudKitGoalStore {
     // MARK: - Yearly goals
 
     func fetchGoals(forGroupId groupId: String?) async throws -> [Int: Int] {
-        let route = routedDatabase(forGroupId: groupId)
+        let route = try routedDatabase(forGroupId: groupId)
         let groupValue = groupId ?? ""
 
         let predicate = NSPredicate(format: "%K == %@", groupIdKey, groupValue)
@@ -74,10 +68,10 @@ final class CloudKitGoalStore {
     }
 
     func saveGoal(year: Int, target: Int, groupId: String?) async throws {
-        let route = routedDatabase(forGroupId: groupId)
+        let route = try routedDatabase(forGroupId: groupId)
         let groupValue = groupId ?? ""
         let recordName = "goal_\(groupValue)_\(year)"
-        let recordID = self.recordID(recordName: recordName, groupId: groupId)
+        let recordID = try self.recordID(recordName: recordName, groupId: groupId)
 
         func applyFields(on record: CKRecord) -> CKRecord {
             record[groupIdKey] = groupValue as CKRecordValue
@@ -113,15 +107,15 @@ final class CloudKitGoalStore {
 
     // MARK: - Custom Goals (Payload)
 
-    private func customGoalsRecordID(for groupId: String?) -> CKRecord.ID {
+    private func customGoalsRecordID(for groupId: String?) throws -> CKRecord.ID {
         let groupValue = groupId ?? ""
         let suffix = groupValue.isEmpty ? "default" : groupValue
-        return recordID(recordName: "customGoals_\(suffix)", groupId: groupId)
+        return try recordID(recordName: "customGoals_\(suffix)", groupId: groupId)
     }
 
     func fetchCustomGoals(forGroupId groupId: String?) async throws -> ViewingCustomGoalsPayload {
-        let route = routedDatabase(forGroupId: groupId)
-        let recordID = customGoalsRecordID(for: groupId)
+        let route = try routedDatabase(forGroupId: groupId)
+        let recordID = try customGoalsRecordID(for: groupId)
 
         do {
             let record = try await route.db.record(for: recordID)
@@ -145,8 +139,8 @@ final class CloudKitGoalStore {
     }
 
     func saveCustomGoals(_ payload: ViewingCustomGoalsPayload, groupId: String?) async throws {
-        let route = routedDatabase(forGroupId: groupId)
-        let recordID = customGoalsRecordID(for: groupId)
+        let route = try routedDatabase(forGroupId: groupId)
+        let recordID = try customGoalsRecordID(for: groupId)
 
         func applyFields(on record: CKRecord) throws -> CKRecord {
             record[groupIdKey] = (groupId ?? "") as CKRecordValue
