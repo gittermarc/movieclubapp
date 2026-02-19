@@ -17,6 +17,8 @@ struct StatsView: View {
     @State var selectedRange: StatsTimeRange = .all
     @State var selectedLocationFilter: String? = nil
 
+    @StateObject var viewModel = StatsViewModel()
+
     // ✅ Popularity Store (persistiert + TTL)
     @ObservedObject var popularityStore = PersonPopularityStore.shared
 
@@ -92,20 +94,30 @@ struct StatsView: View {
             .navigationTitle("Statistiken")
         }
         .onAppear {
+            refreshStatsSnapshot()
             setGenreDisplayOrderNow()
             triggerActorPopularityPreload()
         }
         .onChange(of: selectedRange) {
+            refreshStatsSnapshot()
             setGenreDisplayOrderNow()
             triggerActorPopularityPreload()
         }
         .onChange(of: selectedLocationFilter) {
+            refreshStatsSnapshot()
             setGenreDisplayOrderNow()
             triggerActorPopularityPreload()
         }
-        .onChange(of: movieStore.movies.count) {
+        .onChange(of: movieStore.movies) {
+            refreshStatsSnapshot()
             triggerGenreDisplayRecomputeDebounced()
             triggerActorPopularityPreload()
+        }
+        .onChange(of: userStore.users) {
+            refreshStatsSnapshot()
+        }
+        .onChange(of: displaySettings.ratingDisplayMode) {
+            refreshStatsSnapshot()
         }
         .onChange(of: showAllActors) {
             preloadPopularityForVisibleActors()
@@ -126,6 +138,16 @@ struct StatsView: View {
         .sheet(item: $selectedDrilldown) { drilldown in
             drilldownMoviesSheet(drilldown)
         }
+    }
+
+    private func refreshStatsSnapshot() {
+        viewModel.update(
+            movies: movieStore.movies,
+            users: userStore.users,
+            ratingDisplayMode: displaySettings.ratingDisplayMode,
+            selectedRange: selectedRange,
+            selectedLocationFilter: selectedLocationFilter
+        )
     }
 }
 
