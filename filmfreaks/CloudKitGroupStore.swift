@@ -69,14 +69,6 @@ final class CloudKitGroupStore: ObservableObject {
                 GroupContextStore.upsert(g)
             }
 
-            // P1: Ensure CloudKit subscriptions exist so group activity can trigger
-            // content-available pushes (we will translate those into user-visible
-            // notifications in a later step).
-            Task {
-                await subscriptionManager.ensureSubscriptions(forOwnedGroups: owned)
-                await subscriptionManager.ensureSubscriptions(forSharedGroups: shared)
-            }
-
             // P1: Ensure CloudKit subscriptions exist so changes can wake the app via
             // content-available pushes (later -> map to local notifications).
             Task {
