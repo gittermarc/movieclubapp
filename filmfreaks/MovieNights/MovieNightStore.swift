@@ -72,9 +72,17 @@ final class MovieNightStore: ObservableObject {
 
     let persistence = MovieNightLocalPersistence()
 
-    init(useCloud: Bool = true, cloudStore: CloudKitMovieNightStore = CloudKitMovieNightStore()) {
+    init(useCloud: Bool = true, cloudStore: CloudKitMovieNightStore? = nil) {
         self.useCloud = useCloud
-        self.cloudStore = useCloud ? cloudStore : nil
+
+        if useCloud {
+            // Avoid constructing a MainActor-isolated CloudKit store as a default argument.
+            // Default arguments are evaluated in the caller's context, which can be nonisolated.
+            let resolved = cloudStore ?? CloudKitMovieNightStore()
+            self.cloudStore = resolved
+        } else {
+            self.cloudStore = nil
+        }
 
         self.initialLoadTask = Task { @MainActor in
             let snapshot = await persistence.load()
