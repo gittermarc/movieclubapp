@@ -31,6 +31,15 @@ struct MovieSearchView: View {
     // Sortierung
     @State var selectedSort: MovieSearchSortOption = .relevance
 
+    // ✅ Task-Cancellation / Out-of-order Schutz
+    // NOTE: These are intentionally *not* `private` because the async logic lives in
+    // `MovieSearchView+Search.swift` (separate file). `private` would restrict access
+    // to extensions in the same file only.
+    @State var searchTask: Task<Void, Never>?
+    @State var paginationTask: Task<Void, Never>?
+    @State var activeSearchToken: UUID = UUID()
+    @State var activePaginationToken: UUID = UUID()
+
     // Detail-Sheet
     @State private var detailResult: TMDbMovieResult?
 
@@ -116,7 +125,7 @@ struct MovieSearchView: View {
                             recentQueries: recentQueries,
                             onTap: { term in
                                 query = term
-                                Task { await performSearch(reset: true) }
+                                startSearch(reset: true)
                             },
                             onClearHistory: {
                                 SearchHistoryManager.clear()
@@ -198,7 +207,7 @@ struct MovieSearchView: View {
                             keyboardHeight: keyboard.height,
                             keyboardAnimationDuration: keyboard.animationDuration,
                             onLoadMore: {
-                                Task { await loadMore() }
+                                startLoadMore()
                             },
                             rowContent: { result in
                                 let key = MovieSearchMapper.key(for: result)
@@ -251,6 +260,7 @@ struct MovieSearchView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Abbrechen") {
+                        cancelSearchTasks()
                         dismiss()
                     }
                 }
@@ -293,7 +303,7 @@ struct MovieSearchView: View {
                             // Wenn wir nur 1 wirklich guten Kandidaten haben: direkt suchen (nice UX)
                             if let only = ranked.first, ranked.count == 1 {
                                 query = only
-                                Task { await performSearch(reset: true) }
+                                startSearch(reset: true)
                             } else {
                                 candidatePickerItems = ranked
                                 showCandidatePicker = true
@@ -321,7 +331,7 @@ struct MovieSearchView: View {
                     onSelectCandidate: { candidate in
                         showCandidatePicker = false
                         query = candidate
-                        Task { await performSearch(reset: true) }
+                        startSearch(reset: true)
                     },
                     onManualEdit: { rawFallback in
                         query = MovieTitleCandidateRanker.cleanup(rawFallback)
@@ -375,6 +385,9 @@ struct MovieSearchView: View {
                 }
             }
         }
+        .onDisappear {
+            cancelSearchTasks()
+        }
     }
 
     // MARK: - Sticky Suchkopf
@@ -391,7 +404,7 @@ struct MovieSearchView: View {
             isSearchFieldFocused: isSearchFieldFocused,
             focusBinding: $isSearchFieldFocused,
             onSubmit: {
-                Task { await performSearch(reset: true) }
+                startSearch(reset: true)
             },
             onClear: {
                 clearSearch()
