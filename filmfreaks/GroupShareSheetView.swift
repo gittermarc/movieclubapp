@@ -223,6 +223,8 @@ private struct ShareParticipantRow: View {
             return "Nur lesen"
         case .readWrite:
             return "Lesen & Schreiben"
+        case .none:
+            return "Keine Rechte"
         case .unknown:
             return "—"
         @unknown default:
