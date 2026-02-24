@@ -98,11 +98,17 @@ enum CloudKitActivityPushFetchCoordinator {
     private static func normalizedRecordID(from incoming: CKRecord.ID?, groupContext ctx: GroupContext) -> CKRecord.ID? {
         guard let incoming else { return nil }
 
-        // Most of the time CloudKit provides zoneID already.
-        if incoming.zoneID != nil { return incoming }
+        // `CKRecord.ID.zoneID` is non-optional, but it can still point at a different zone
+        // (e.g. default zone). Ensure we fetch from the zone that belongs to the GroupContext.
+        let expectedZoneID = CKRecordZone.ID(zoneName: ctx.zoneName, ownerName: ctx.ownerName)
+        let incomingZoneID = incoming.zoneID
 
-        let zoneID = CKRecordZone.ID(zoneName: ctx.zoneName, ownerName: ctx.ownerName)
-        return CKRecord.ID(recordName: incoming.recordName, zoneID: zoneID)
+        if incomingZoneID.zoneName == expectedZoneID.zoneName,
+           incomingZoneID.ownerName == expectedZoneID.ownerName {
+            return incoming
+        }
+
+        return CKRecord.ID(recordName: incoming.recordName, zoneID: expectedZoneID)
     }
 
     // MARK: - Decode
