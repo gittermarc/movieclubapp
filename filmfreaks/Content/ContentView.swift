@@ -111,6 +111,17 @@ struct ContentView: View {
         MovieViewStyle(rawValue: viewStyleRaw) ?? .cards
     }
 
+    // MARK: - Total count (stable, not filtered)
+
+    private var selectedModeTotalCount: Int {
+        switch selectedMode {
+        case .watched:
+            return movieStore.movies.count
+        case .backlog:
+            return movieStore.backlogMovies.count
+        }
+    }
+
     // MARK: - Rating display helper
 
     /// Einheitliche Kennzahl für Anzeige/Sortierung (abhängig von Einstellungen).
@@ -194,6 +205,7 @@ struct ContentView: View {
                     ContentHeaderView(
                         groupName: movieStore.currentGroupName,
                         totalMoviesInGroup: movieStore.movies.count + movieStore.backlogMovies.count,
+                        activeListTotalCount: selectedModeTotalCount,
                         tintColor: displaySettings.tintColor,
                         activeMemberDisplayName: activeMemberDisplayName,
                         activeMemberInitials: activeMemberInitials,

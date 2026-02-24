@@ -16,6 +16,7 @@ struct ContentHeaderView: View {
 
     let groupName: String?
     let totalMoviesInGroup: Int
+    let activeListTotalCount: Int
     let tintColor: Color
 
     let activeMemberDisplayName: String
@@ -114,12 +115,23 @@ struct ContentHeaderView: View {
                 .padding(.top, 8)
             }
 
-            Picker("Liste", selection: $selectedMode) {
-                ForEach(MovieListMode.allCases) { mode in
-                    Text(mode.rawValue).tag(mode)
+            HStack(spacing: 8) {
+                Picker("Liste", selection: $selectedMode) {
+                    ForEach(MovieListMode.allCases) { mode in
+                        Text(mode.rawValue).tag(mode)
+                    }
                 }
+                .pickerStyle(.segmented)
+                // Segmented-Picker soll den verfügbaren Platz nehmen,
+                // aber den Count nicht "wegdrücken" (vor allem auf iPhone schmal).
+                .frame(maxWidth: .infinity)
+                .layoutPriority(0)
+
+                ContentListCountText(totalCount: activeListTotalCount)
+                    // Der Count muss sichtbar bleiben und nicht auf 0 Breite komprimiert werden.
+                    .fixedSize(horizontal: true, vertical: false)
+                    .layoutPriority(1)
             }
-            .pickerStyle(.segmented)
             .padding([.horizontal, .top])
             .onChange(of: selectedMode) { _, _ in
                 onModeChanged()
@@ -146,5 +158,27 @@ struct ContentHeaderView: View {
                 lastError: lastError
             )
         }
+    }
+}
+
+// MARK: - Minimal count label
+
+/// Extrem unaufdringliche Total-Anzeige (locale-formatiert, monospaced digits).
+///
+/// Hinweis: absichtlich nur **eine Zahl** (stabil, nicht gefiltert).
+/// Falls wir später "Shown vs Total" brauchen, kann das hier erweitert werden,
+/// ohne den Header-Layout-Code aufzublähen.
+private struct ContentListCountText: View {
+
+    let totalCount: Int
+
+    var body: some View {
+        Text(totalCount, format: .number)
+            .monospacedDigit()
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+            .minimumScaleFactor(0.75)
+            .allowsTightening(true)
     }
 }
