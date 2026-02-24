@@ -30,6 +30,9 @@ struct ContentView: View {
     // MARK: - Derived list/grid items (off render path)
     @StateObject var movieItemsModel = ContentMovieItemsModel()
 
+    // MARK: - Activity preview (off render path)
+    @StateObject var activityPreviewModel = ContentActivityPreviewModel()
+
     // MARK: - In-List Search (Watched/Backlog)
     @State var watchedSearchText: String = ""
     @State var backlogSearchText: String = ""
@@ -46,18 +49,7 @@ struct ContentView: View {
         (movieStore.currentGroupId ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private var activityPreviewItems: [UnifiedGroupActivityEvent] {
-        let movieItems = movieStore
-            .activityEvents(displayMode: displaySettings.ratingDisplayMode, limit: 10)
-            .map { UnifiedGroupActivityEvent(movieEvent: $0) }
-
-        let nightItems = movieNightStore
-            .activityEvents(for: currentGroupId)
-            .prefix(10)
-            .map { UnifiedGroupActivityEvent(movieNightActivity: $0) }
-
-        return Array((movieItems + nightItems).sorted(by: { $0.date > $1.date }).prefix(3))
-    }
+    // NOTE: Activity preview is computed via `activityPreviewModel`.
 
     // MARK: - Onboarding (derived state)
 
@@ -148,6 +140,16 @@ struct ContentView: View {
         )
     }
 
+    @MainActor
+    private func updateActivityPreviewModel() {
+        activityPreviewModel.update(
+            movieStore: movieStore,
+            movieNightStore: movieNightStore,
+            currentGroupId: currentGroupId,
+            ratingDisplayMode: displaySettings.ratingDisplayMode
+        )
+    }
+
 
 
 
@@ -199,7 +201,7 @@ struct ContentView: View {
                         onTapGroup: { route = .groupSettings },
                         onTapActiveMember: { route = .users },
                         showGroupActivityCard: displaySettings.showGroupActivityCard,
-                        activityPreviewItems: activityPreviewItems,
+                        activityPreviewItems: activityPreviewModel.items,
                         onTapActivity: { route = .activity },
                         shouldShowOnboardingChecklist: onboarding.shouldShowChecklist,
                         onboardingChecklistExpanded: $onboardingChecklistExpanded,
@@ -278,12 +280,18 @@ struct ContentView: View {
                 }
                 updateOnboardingCompletionFlag()
                 updateMovieItemsModel()
+                updateActivityPreviewModel()
             }
             .onReceive(movieStore.$movies) { _ in
                 updateMovieItemsModel()
+                updateActivityPreviewModel()
             }
             .onReceive(movieStore.$backlogMovies) { _ in
                 updateMovieItemsModel()
+                updateActivityPreviewModel()
+            }
+            .onReceive(movieNightStore.$activityByGroup) { _ in
+                updateActivityPreviewModel()
             }
             .onChange(of: watchedSearchText) { _, _ in
                 updateMovieItemsModel()
@@ -299,12 +307,14 @@ struct ContentView: View {
             }
             .onReceive(displaySettings.$ratingDisplayMode) { _ in
                 updateMovieItemsModel()
+                updateActivityPreviewModel()
             }
             .onReceive(displaySettings.$showTMDbRatingsInLists) { _ in
                 updateMovieItemsModel()
             }
             .onChange(of: movieStore.currentGroupId) { _, _ in
                 updateOnboardingCompletionFlag()
+                updateActivityPreviewModel()
             }
             .onChange(of: movieStore.currentGroupName) { _, _ in
                 updateOnboardingCompletionFlag()
