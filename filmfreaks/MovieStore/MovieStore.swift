@@ -73,6 +73,10 @@ class MovieStore: ObservableObject {
 
     var isApplyingCloudUpdate = false
 
+    /// When we mutate embedded `Movie.ratings`, we must NOT enqueue movie CloudKit diffs.
+    /// Ratings are synced as separate CloudKit records (MovieRating).
+    var isApplyingRatingUpdate = false
+
     // Combined sync state (fetch + upload). We use a counter to avoid flicker.
     var syncCount: Int = 0
     var isRefreshingFromCloud: Bool = false

@@ -19,7 +19,9 @@ internal extension MovieStore {
 
         PersistenceManager.shared.saveMovies(movies, groupId: currentGroupId)
 
-        if cloudStore != nil {
+        // Ratings live in separate CloudKit records (MovieRating). Rating-only edits must not
+        // trigger movie diff work (O(n) dictionaries + filters) on the MainActor.
+        if cloudStore != nil, !isApplyingRatingUpdate {
             enqueueCloudSync(newList: movies, oldList: oldValue, isBacklog: false)
         }
     }
@@ -31,7 +33,7 @@ internal extension MovieStore {
 
         PersistenceManager.shared.saveBacklogMovies(backlogMovies, groupId: currentGroupId)
 
-        if cloudStore != nil {
+        if cloudStore != nil, !isApplyingRatingUpdate {
             enqueueCloudSync(newList: backlogMovies, oldList: oldValue, isBacklog: true)
         }
     }

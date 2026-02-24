@@ -11,6 +11,14 @@ internal extension MovieStore {
 
     // MARK: - Ratings (Version B: MovieRating Records)
 
+    /// Wrap local `Movie.ratings` mutations so they do not enqueue movie diff work.
+    private func withRatingUpdateGuard(_ work: () -> Void) {
+        let previous = isApplyingRatingUpdate
+        isApplyingRatingUpdate = true
+        work()
+        isApplyingRatingUpdate = previous
+    }
+
     /// Stable reviewer identity key used to merge ratings.
     func reviewerKey(_ r: Rating) -> String {
         if let rid = r.reviewerId { return rid.uuidString.lowercased() }
@@ -51,15 +59,17 @@ internal extension MovieStore {
         stampedRating.updatedAt = Date()
 
         // 1) Lokal in die UI-Models mergen (für sofortiges Feedback + Offline)
-        if let idx = movies.firstIndex(where: { $0.id == movieId }) {
-            var m = movies[idx]
-            m.ratings = mergeRatings(existing: m.ratings, incoming: [stampedRating])
-            movies[idx] = m
-        }
-        if let idx = backlogMovies.firstIndex(where: { $0.id == movieId }) {
-            var m = backlogMovies[idx]
-            m.ratings = mergeRatings(existing: m.ratings, incoming: [stampedRating])
-            backlogMovies[idx] = m
+        withRatingUpdateGuard {
+            if let idx = movies.firstIndex(where: { $0.id == movieId }) {
+                var m = movies[idx]
+                m.ratings = mergeRatings(existing: m.ratings, incoming: [stampedRating])
+                movies[idx] = m
+            }
+            if let idx = backlogMovies.firstIndex(where: { $0.id == movieId }) {
+                var m = backlogMovies[idx]
+                m.ratings = mergeRatings(existing: m.ratings, incoming: [stampedRating])
+                backlogMovies[idx] = m
+            }
         }
 
         // 2) Cloud speichern
@@ -90,8 +100,10 @@ internal extension MovieStore {
             }
             list[idx] = m
         }
-        remove(from: &movies)
-        remove(from: &backlogMovies)
+        withRatingUpdateGuard {
+            remove(from: &movies)
+            remove(from: &backlogMovies)
+        }
 
         guard let cloudRatingStore else { return true }
         do {
@@ -120,8 +132,10 @@ internal extension MovieStore {
             m.ratings.removeAll { $0.reviewerName.lowercased() == trimmed.lowercased() }
             list[idx] = m
         }
-        remove(from: &movies)
-        remove(from: &backlogMovies)
+        withRatingUpdateGuard {
+            remove(from: &movies)
+            remove(from: &backlogMovies)
+        }
         return true
     }
 
