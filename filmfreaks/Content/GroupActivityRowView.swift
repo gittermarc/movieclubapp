@@ -55,6 +55,17 @@ struct GroupActivityRowView: View {
         return f.localizedString(for: event.date, relativeTo: Date())
     }
 
+    private var headlineAttributedText: AttributedString {
+        var result = AttributedString(actorName)
+        result.font = .subheadline.weight(.semibold)
+
+        var rest = AttributedString(" \(verbText) \(movieText)")
+        rest.font = .subheadline
+
+        result += rest
+        return result
+    }
+
     private var movieLocation: MovieLocation? {
         if let idx = movieStore.movies.firstIndex(where: { $0.id == event.movieId }) {
             return .watched(idx)
@@ -85,11 +96,8 @@ struct GroupActivityRowView: View {
             ActivityAvatarView(name: actorName, badgeSystemImage: kindBadgeSystemImage)
 
             VStack(alignment: .leading, spacing: 4) {
-                (Text(actorName).fontWeight(.semibold)
-                 + Text(" \(verbText) ")
-                 + Text(movieText))
-                .font(.subheadline)
-                .lineLimit(2)
+                Text(headlineAttributedText)
+                    .lineLimit(2)
 
                 Text(relativeTimeText)
                     .font(.caption)

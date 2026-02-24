@@ -64,16 +64,24 @@ struct MovieNightActivityRowView: View {
         return f.localizedString(for: event.createdAt, relativeTo: Date())
     }
 
+    private var headlineAttributedText: AttributedString {
+        var result = AttributedString(actorName)
+        result.font = .subheadline.weight(.semibold)
+
+        var rest = AttributedString(" \(verbText) \(eventStartText)")
+        rest.font = .subheadline
+
+        result += rest
+        return result
+    }
+
     var body: some View {
         HStack(spacing: 12) {
             ActivityAvatarView(name: actorName, badgeSystemImage: event.systemImage)
 
             VStack(alignment: .leading, spacing: 4) {
-                (Text(actorName).fontWeight(.semibold)
-                 + Text(" \(verbText) ")
-                 + Text(eventStartText))
-                .font(.subheadline)
-                .lineLimit(2)
+                Text(headlineAttributedText)
+                    .lineLimit(2)
 
                 Text(relativeTimeText)
                     .font(.caption)
