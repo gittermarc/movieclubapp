@@ -211,7 +211,7 @@ extension MovieNightStore {
     }
 
     func mergeResponses(_ changed: [MovieNightResponse], deleted: [String], groupId: String) {
-        var current = responsesByGroup[groupId] ?? []
+        let current = responsesByGroup[groupId] ?? []
         var byId: [String: MovieNightResponse] = Dictionary(uniqueKeysWithValues: current.map { ($0.id, $0) })
 
         for r in changed {

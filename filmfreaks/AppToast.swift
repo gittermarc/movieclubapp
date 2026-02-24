@@ -53,7 +53,7 @@ final class ToastCenter: ObservableObject {
             autoDismissTask = Task {
                 let ns = UInt64(max(0.2, seconds) * 1_000_000_000)
                 try? await Task.sleep(nanoseconds: ns)
-                await dismiss()
+                dismiss()
             }
         }
     }
