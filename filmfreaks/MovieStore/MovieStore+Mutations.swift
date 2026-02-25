@@ -165,6 +165,7 @@ internal extension MovieStore {
             let movieId: UUID
             let isBacklog: Bool
             let newCast: [CastMember]
+            let popularitySeeds: [PersonPopularityStore.Seed]
         }
 
         var updates: [Update] = []
@@ -186,10 +187,28 @@ internal extension MovieStore {
                 group.addTask {
                     do {
                         let credits = try await TMDbAPI.shared.fetchMovieCredits(id: tmdbId)
+
+                        let seeds: [PersonPopularityStore.Seed] = {
+                            var out: [PersonPopularityStore.Seed] = []
+                            out.reserveCapacity(credits.cast.count + credits.crew.count)
+
+                            for c in credits.cast {
+                                guard let pop = c.popularity else { continue }
+                                out.append(PersonPopularityStore.Seed(personId: c.id, popularity: pop))
+                            }
+
+                            for c in credits.crew {
+                                guard let pop = c.popularity else { continue }
+                                out.append(PersonPopularityStore.Seed(personId: c.id, popularity: pop))
+                            }
+
+                            return out
+                        }()
+
                         let cast = credits.cast
                             .prefix(30)
                             .map { CastMember(personId: $0.id, name: $0.name) }
-                        return Update(movieId: movieId, isBacklog: false, newCast: cast)
+                        return Update(movieId: movieId, isBacklog: false, newCast: cast, popularitySeeds: seeds)
                     } catch {
                         return nil
                     }
@@ -200,10 +219,28 @@ internal extension MovieStore {
                 group.addTask {
                     do {
                         let credits = try await TMDbAPI.shared.fetchMovieCredits(id: tmdbId)
+
+                        let seeds: [PersonPopularityStore.Seed] = {
+                            var out: [PersonPopularityStore.Seed] = []
+                            out.reserveCapacity(credits.cast.count + credits.crew.count)
+
+                            for c in credits.cast {
+                                guard let pop = c.popularity else { continue }
+                                out.append(PersonPopularityStore.Seed(personId: c.id, popularity: pop))
+                            }
+
+                            for c in credits.crew {
+                                guard let pop = c.popularity else { continue }
+                                out.append(PersonPopularityStore.Seed(personId: c.id, popularity: pop))
+                            }
+
+                            return out
+                        }()
+
                         let cast = credits.cast
                             .prefix(30)
                             .map { CastMember(personId: $0.id, name: $0.name) }
-                        return Update(movieId: movieId, isBacklog: true, newCast: cast)
+                        return Update(movieId: movieId, isBacklog: true, newCast: cast, popularitySeeds: seeds)
                     } catch {
                         return nil
                     }
@@ -216,6 +253,10 @@ internal extension MovieStore {
         }
 
         if updates.isEmpty { return }
+
+        // ✅ Seed popularity aus Credits (ohne /person Calls)
+        let allSeeds: [PersonPopularityStore.Seed] = updates.flatMap { $0.popularitySeeds }
+        PersonPopularityStore.shared.ingestPopularity(seeds: allSeeds)
 
         // Apply in local arrays
         for u in updates {

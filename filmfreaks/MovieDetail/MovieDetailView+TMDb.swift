@@ -35,6 +35,11 @@ extension MovieDetailView {
             await MainActor.run {
                 self.details = fetched
 
+                // ✅ Seed Popularity aus Credits/Details (ohne /person Preload).
+                if let credits = fetched.credits {
+                    PersonPopularityStore.shared.ingestPopularity(fromCredits: credits.cast, crew: credits.crew)
+                }
+
                 let genreNames = fetched.genres?
                     .map { $0.name.trimmingCharacters(in: .whitespacesAndNewlines) }
                     .filter { !$0.isEmpty }

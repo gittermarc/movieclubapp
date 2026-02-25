@@ -50,6 +50,7 @@ extension GoalsView {
             let keywordNames: [String]?
             let keywordIds: [Int]?
             let directors: [CastMember]?
+            let popularitySeeds: [PersonPopularityStore.Seed]
         }
 
         var updates: [Update] = []
@@ -63,6 +64,22 @@ extension GoalsView {
                 group.addTask {
                     do {
                         let details = try await TMDbAPI.shared.fetchMovieDetails(id: tmdbId)
+
+                        let seeds: [PersonPopularityStore.Seed] = {
+                            guard let credits = details.credits else { return [] }
+                            var out: [PersonPopularityStore.Seed] = []
+                            out.reserveCapacity(credits.cast.count + credits.crew.count)
+
+                            for c in credits.cast {
+                                guard let pop = c.popularity else { continue }
+                                out.append(PersonPopularityStore.Seed(personId: c.id, popularity: pop))
+                            }
+                            for c in credits.crew {
+                                guard let pop = c.popularity else { continue }
+                                out.append(PersonPopularityStore.Seed(personId: c.id, popularity: pop))
+                            }
+                            return out
+                        }()
 
                         let gNames = details.genres?
                             .map { $0.name.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -89,7 +106,8 @@ extension GoalsView {
                             genreIds: gIds,
                             keywordNames: kNames,
                             keywordIds: kIds,
-                            directors: directors
+                            directors: directors,
+                            popularitySeeds: seeds
                         )
                     } catch {
                         return nil
@@ -103,6 +121,10 @@ extension GoalsView {
         }
 
         guard !updates.isEmpty else { return }
+
+        // ✅ Seed Popularity aus Details-Credits (ohne /person Calls)
+        let allSeeds: [PersonPopularityStore.Seed] = updates.flatMap { $0.popularitySeeds }
+        PersonPopularityStore.shared.ingestPopularity(seeds: allSeeds)
 
         // Apply in one shot (damit Persistenz/Cloud nicht pro Movie triggert)
         var updatedList = movieStore.movies

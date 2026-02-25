@@ -23,6 +23,11 @@ final class PersonPopularityStore: ObservableObject {
         var isFailure: Bool = false
     }
 
+    struct Seed: Hashable {
+        let personId: Int
+        let popularity: Double
+    }
+
     private struct PersistedEntry: Codable {
         let personId: Int
         let record: PopularityRecord
@@ -44,8 +49,60 @@ final class PersonPopularityStore: ObservableObject {
         loadFromDisk()
     }
 
+    // MARK: - Seeding (ohne /person Calls)
+
+    /// Seeded/ingested Popularity aus Credits/Details Responses.
+    /// Keine Netzcalls, nur Cache/Store Update.
+    func seed(personId: Int, popularity: Double) {
+        guard personId > 0 else { return }
+
+        let now = Date()
+
+        if let existing = records[personId] {
+            if existing.isFailure || popularity > existing.popularity {
+                records[personId] = PopularityRecord(popularity: popularity, lastUpdated: now, isFailure: false)
+            } else {
+                // Wir haben einen brauchbaren Wert. Timestamp refreshen, damit wir
+                // keine "stale" Reloads ausloesen, wenn Credits den Wert erneut liefern.
+                records[personId] = PopularityRecord(popularity: existing.popularity, lastUpdated: now, isFailure: false)
+            }
+        } else {
+            records[personId] = PopularityRecord(popularity: popularity, lastUpdated: now, isFailure: false)
+        }
+    }
+
+    /// Convenience: ingest aus Credits/Details (cast + optional crew).
+    /// Nutzt die in Credits typischerweise mitgelieferte `popularity`.
+    func ingestPopularity(fromCredits cast: [TMDbCast], crew: [TMDbCrew]?) {
+        var seeds: [Seed] = []
+        seeds.reserveCapacity(cast.count + (crew?.count ?? 0))
+
+        for c in cast {
+            guard let pop = c.popularity else { continue }
+            seeds.append(Seed(personId: c.id, popularity: pop))
+        }
+
+        if let crew {
+            for c in crew {
+                guard let pop = c.popularity else { continue }
+                seeds.append(Seed(personId: c.id, popularity: pop))
+            }
+        }
+
+        ingestPopularity(seeds: seeds)
+    }
+
+    /// Bulk ingest für bereits extrahierte Seeds.
+    func ingestPopularity(seeds: [Seed]) {
+        if seeds.isEmpty { return }
+        for s in seeds {
+            seed(personId: s.personId, popularity: s.popularity)
+        }
+        saveToDisk()
+    }
+
     func popularityValue(for personId: Int) -> Double {
-        guard let r = records[personId], !isExpired(r) else { return 0 }
+        guard let r = records[personId] else { return 0 }
         return r.popularity
     }
 
@@ -54,15 +111,9 @@ final class PersonPopularityStore: ObservableObject {
     func popularitySnapshot() -> [Int: Double] {
         var out: [Int: Double] = [:]
         for (id, record) in records {
-            guard !isExpired(record) else { continue }
             out[id] = record.popularity
         }
         return out
-    }
-
-    func needsRefresh(personId: Int) -> Bool {
-        guard let r = records[personId] else { return true }
-        return isExpired(r)
     }
 
     func preloadPopularity(for personIds: [Int]) async {
@@ -72,7 +123,8 @@ final class PersonPopularityStore: ObservableObject {
 
         let missing = ids.filter { id in
             if inFlight.contains(id) { return false }
-            return needsRefresh(personId: id)
+            // ✅ Nur echte Misses nachladen. Keine Refreshes nur wegen TTL.
+            return records[id] == nil
         }
 
         if missing.isEmpty { return }

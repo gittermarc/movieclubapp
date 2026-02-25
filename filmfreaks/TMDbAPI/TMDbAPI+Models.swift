@@ -31,6 +31,9 @@ struct TMDbCast: Decodable {
     /// ✅ TMDb Person ID (wichtig für Persistenz & eindeutige Zuordnung)
     let id: Int
     let name: String
+    /// Popularity wird in Credits/Details Responses typischerweise mitgeliefert.
+    /// Optional & backwards-compatible (wenn ein Endpoint es nicht sendet).
+    let popularity: Double?
     let character: String?
     /// Optionales Profilbild (kommt aus /credits; kann nil sein)
     let profile_path: String?
@@ -40,6 +43,9 @@ struct TMDbCrew: Decodable {
     /// ✅ TMDb Person ID (für Director-Goals)
     let id: Int
     let name: String
+    /// Popularity wird in Credits/Details Responses typischerweise mitgeliefert.
+    /// Optional & backwards-compatible (wenn ein Endpoint es nicht sendet).
+    let popularity: Double?
     let job: String?
 }
 

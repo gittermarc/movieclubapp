@@ -64,6 +64,11 @@ extension SearchResultDetailView {
                 self.details = fetched
                 self.isLoading = false
 
+                // ✅ Seed Popularity aus Credits/Details (ohne /person Preload).
+                if let credits = fetched.credits {
+                    PersonPopularityStore.shared.ingestPopularity(fromCredits: credits.cast, crew: credits.crew)
+                }
+
                 self.watchProvidersCountry = providersCountry
                 self.watchProviders = providersCountry?.bestEffortProviders ?? []
                 if let linkString = providersCountry?.link {
