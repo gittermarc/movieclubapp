@@ -95,29 +95,28 @@ struct StatsView: View {
         }
         .onAppear {
             refreshStatsSnapshot()
-            setGenreDisplayOrderNow()
-            triggerActorPopularityPreload()
         }
         .onChange(of: selectedRange) {
             refreshStatsSnapshot()
-            setGenreDisplayOrderNow()
-            triggerActorPopularityPreload()
         }
         .onChange(of: selectedLocationFilter) {
             refreshStatsSnapshot()
-            setGenreDisplayOrderNow()
-            triggerActorPopularityPreload()
         }
         .onChange(of: movieStore.movies) {
             refreshStatsSnapshot()
-            triggerGenreDisplayRecomputeDebounced()
-            triggerActorPopularityPreload()
         }
         .onChange(of: userStore.users) {
             refreshStatsSnapshot()
         }
         .onChange(of: displaySettings.ratingDisplayMode) {
             refreshStatsSnapshot()
+        }
+        .onReceive(viewModel.$snapshot) { _ in
+            // Snapshot wird debounced/off-main gebaut. Sobald er wirklich da ist,
+            // können wir die UI-Orders darauf basieren (Genre-Order) und bei Actors
+            // die Popularity-preload + finale Sortierung triggern.
+            setGenreDisplayOrderNow()
+            triggerActorPopularityPreload()
         }
         .onChange(of: showAllActors) {
             preloadPopularityForVisibleActors()
