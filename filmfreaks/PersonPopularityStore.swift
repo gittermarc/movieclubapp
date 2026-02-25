@@ -17,6 +17,10 @@ final class PersonPopularityStore: ObservableObject {
     struct PopularityRecord: Codable {
         var popularity: Double
         var lastUpdated: Date
+
+        /// Wenn ein Fetch fehlgeschlagen ist, markieren wir das – damit die TTL
+        /// deutlich kürzer sein kann (sonst "klebt" ein Fehler 30 Tage lang).
+        var isFailure: Bool = false
     }
 
     private struct PersistedEntry: Codable {
@@ -26,6 +30,10 @@ final class PersonPopularityStore: ObservableObject {
 
     // ✅ TTL (z.B. 30 Tage). Danach wird beim nächsten Bedarf neu geladen.
     private let ttlSeconds: TimeInterval = 30 * 24 * 60 * 60
+
+    // Fehler-TTL: wir wollen bei transienten Problemen (Offline, Rate-Limit, etc.)
+    // zeitnah wieder versuchen, statt 30 Tage "0" zu cachen.
+    private let failureTtlSeconds: TimeInterval = 6 * 60 * 60
 
     private let storageKey = "FilmFreaks.personPopularity.v1"
 
@@ -39,6 +47,17 @@ final class PersonPopularityStore: ObservableObject {
     func popularityValue(for personId: Int) -> Double {
         guard let r = records[personId], !isExpired(r) else { return 0 }
         return r.popularity
+    }
+
+    /// Value-only Snapshot (nur nicht-expired Werte), damit andere Komponenten
+    /// synchron sortieren können, ohne Actor-Überquerungen.
+    func popularitySnapshot() -> [Int: Double] {
+        var out: [Int: Double] = [:]
+        for (id, record) in records {
+            guard !isExpired(record) else { continue }
+            out[id] = record.popularity
+        }
+        return out
     }
 
     func needsRefresh(personId: Int) -> Bool {
@@ -85,10 +104,19 @@ final class PersonPopularityStore: ObservableObject {
 
                 for await (id, pop) in group {
                     if let pop {
-                        records[id] = PopularityRecord(popularity: pop, lastUpdated: Date())
+                        records[id] = PopularityRecord(popularity: pop, lastUpdated: Date(), isFailure: false)
                     } else {
-                        // auch Fehler “cachen”, damit wir nicht sofort wieder spammen
-                        records[id] = PopularityRecord(popularity: 0, lastUpdated: Date())
+                        // Fehler: wenn wir bereits einen Wert haben, behalten wir ihn (besser für Sortierung)
+                        // und geben dem Fehler nur eine kurze TTL.
+                        if let existing = records[id] {
+                            records[id] = PopularityRecord(
+                                popularity: existing.popularity,
+                                lastUpdated: Date(),
+                                isFailure: true
+                            )
+                        } else {
+                            records[id] = PopularityRecord(popularity: 0, lastUpdated: Date(), isFailure: true)
+                        }
                     }
                     inFlight.remove(id)
                 }
@@ -101,7 +129,8 @@ final class PersonPopularityStore: ObservableObject {
     // MARK: - Disk
 
     private func isExpired(_ record: PopularityRecord) -> Bool {
-        Date().timeIntervalSince(record.lastUpdated) > ttlSeconds
+        let ttl = record.isFailure ? failureTtlSeconds : ttlSeconds
+        return Date().timeIntervalSince(record.lastUpdated) > ttl
     }
 
     private func loadFromDisk() {

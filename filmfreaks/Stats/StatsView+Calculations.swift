@@ -138,21 +138,7 @@ extension StatsView {
     }
 
     var actorsDisplaySource: [ActorEntry] {
-        actorDisplayOrder.isEmpty ? actorsByCountRaw : actorDisplayOrder
-    }
-
-    /// Sortierung: Häufigkeit, dann Popularität (per personId), dann Name
-    func computeActorsSortedUsingPopularity() -> [ActorEntry] {
-        let raw = actorsByCountRaw
-        return raw.sorted { a, b in
-            if a.count != b.count { return a.count > b.count }
-
-            let popA = popularityStore.popularityValue(for: a.personId)
-            let popB = popularityStore.popularityValue(for: b.personId)
-            if popA != popB { return popA > popB }
-
-            return a.name.localizedCaseInsensitiveCompare(b.name) == .orderedAscending
-        }
+        actorsByCountRaw
     }
 
     var moviesByLocation: [(location: String, count: Int)] {

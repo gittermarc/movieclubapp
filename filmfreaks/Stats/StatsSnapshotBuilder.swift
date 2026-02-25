@@ -10,6 +10,21 @@ import Foundation
 
 enum StatsSnapshotBuilder {
 
+    static func sortActors(
+        actors: [ActorEntry],
+        popularityByPersonId: [Int: Double]
+    ) -> [ActorEntry] {
+        actors.sorted { a, b in
+            if a.count != b.count { return a.count > b.count }
+
+            let popA = popularityByPersonId[a.personId] ?? 0
+            let popB = popularityByPersonId[b.personId] ?? 0
+            if popA != popB { return popA > popB }
+
+            return a.name.localizedCaseInsensitiveCompare(b.name) == .orderedAscending
+        }
+    }
+
     static func computeSnapshot(
         movies: [Movie],
         users: [User],

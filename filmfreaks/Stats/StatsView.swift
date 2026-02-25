@@ -19,14 +19,9 @@ struct StatsView: View {
 
     @StateObject var viewModel = StatsViewModel()
 
-    // ✅ Popularity Store (persistiert + TTL)
-    @ObservedObject var popularityStore = PersonPopularityStore.shared
-
     // Darsteller UI
     @State var showAllActors: Bool = false
     @State var actorsDisclosureExpanded: Bool = false
-    @State var actorDisplayOrder: [ActorEntry] = []
-    @State var actorSortGeneration: UUID = UUID()
 
     // Genres UI
     @State var genreDisplayOrder: [(genre: String, count: Int)] = []
@@ -114,18 +109,12 @@ struct StatsView: View {
         .onReceive(viewModel.$snapshot) { _ in
             // Snapshot wird debounced/off-main gebaut. Sobald er wirklich da ist,
             // können wir die UI-Orders darauf basieren (Genre-Order) und bei Actors
-            // die Popularity-preload + finale Sortierung triggern.
+            // die UI-Orders darauf basieren (Genre-Order).
             setGenreDisplayOrderNow()
-            triggerActorPopularityPreload()
-        }
-        .onChange(of: showAllActors) {
-            preloadPopularityForVisibleActors()
         }
         .onChange(of: actorsDisclosureExpanded) {
             if !actorsDisclosureExpanded {
                 showAllActors = false
-            } else {
-                preloadPopularityForVisibleActors()
             }
         }
         .sheet(isPresented: $showingActorSheet) {

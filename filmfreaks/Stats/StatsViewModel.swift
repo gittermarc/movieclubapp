@@ -87,8 +87,9 @@ final class StatsViewModel: ObservableObject {
 
     @Published private(set) var snapshot: Snapshot = .empty
 
-    private let debounceInterval: TimeInterval = 0.2
-    private var pendingWorkItem: DispatchWorkItem?
+    private let debounceNanos: UInt64 = 200_000_000
+    private let actorsPopularitySortLimit: Int = 50
+    private var updateTask: Task<Void, Never>?
     private var buildGeneration: Int = 0
 
     private struct Inputs: Equatable {
@@ -125,33 +126,66 @@ final class StatsViewModel: ObservableObject {
         buildGeneration += 1
         let generation = buildGeneration
 
-        pendingWorkItem?.cancel()
+        let debounceNanos = self.debounceNanos
+        let actorsPopularitySortLimit = self.actorsPopularitySortLimit
 
-        var workItem: DispatchWorkItem?
-        workItem = DispatchWorkItem { [inputs] in
-            guard let workItem, !workItem.isCancelled else { return }
+        updateTask?.cancel()
+        updateTask = Task { [inputs, debounceNanos, actorsPopularitySortLimit] in
+            try? await Task.sleep(nanoseconds: debounceNanos)
+            guard !Task.isCancelled else { return }
 
-            let computed = StatsSnapshotBuilder.computeSnapshot(
-                movies: inputs.movies,
-                users: inputs.users,
-                ratingDisplayMode: inputs.ratingDisplayMode,
-                selectedRange: inputs.selectedRange,
-                selectedLocationFilter: inputs.selectedLocationFilter
-            )
+            // 1) Base snapshot off-main.
+            let base = await Task.detached(priority: .userInitiated) {
+                StatsSnapshotBuilder.computeSnapshot(
+                    movies: inputs.movies,
+                    users: inputs.users,
+                    ratingDisplayMode: inputs.ratingDisplayMode,
+                    selectedRange: inputs.selectedRange,
+                    selectedLocationFilter: inputs.selectedLocationFilter
+                )
+            }.value
 
-            Task { @MainActor [weak self] in
+            guard !Task.isCancelled else { return }
+
+            // 2) Ensure popularity exists for the *final* visible top-actors BEFORE we publish.
+            //    (Wichtig: wenn viele Darsteller die gleiche Häufigkeit haben, müssen wir die
+            //    komplette "Schwellwert"-Gruppe laden – sonst ist das Top-50 Ergebnis falsch.)
+            let ids: [Int] = {
+                let actors = base.actorsByCountRaw
+                guard !actors.isEmpty else { return [] }
+
+                let limit = max(1, actorsPopularitySortLimit)
+                if actors.count <= limit {
+                    return actors.map { $0.personId }
+                }
+
+                let threshold = actors[limit - 1].count
+                return actors
+                    .filter { $0.count >= threshold }
+                    .map { $0.personId }
+            }()
+            await PersonPopularityStore.shared.preloadPopularity(for: ids)
+
+            guard !Task.isCancelled else { return }
+
+            let popularity = PersonPopularityStore.shared.popularitySnapshot()
+
+            // 3) Final actor order (count, then popularity, then name) off-main.
+            let sortedActors = await Task.detached(priority: .userInitiated) {
+                StatsSnapshotBuilder.sortActors(
+                    actors: base.actorsByCountRaw,
+                    popularityByPersonId: popularity
+                )
+            }.value
+
+            var final = base
+            final.actorsByCountRaw = sortedActors
+
+            await MainActor.run { [weak self] in
                 guard let self else { return }
                 guard self.buildGeneration == generation else { return }
-                guard !workItem.isCancelled else { return }
-                self.snapshot = computed
+                self.snapshot = final
             }
-        }
-
-        pendingWorkItem = workItem
-
-        if let workItem {
-            DispatchQueue.global(qos: .userInitiated)
-                .asyncAfter(deadline: .now() + debounceInterval, execute: workItem)
         }
     }
 }

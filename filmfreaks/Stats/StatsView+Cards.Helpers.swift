@@ -113,7 +113,7 @@ extension StatsView {
     ) -> some View {
         let share = Double(entry.count) / Double(max(totalMovies, 1))
         let impact = Double(entry.count) / Double(max(maxCount, 1))
-        let pop = popularityStore.popularityValue(for: entry.personId)
+        let pop = PersonPopularityStore.shared.popularityValue(for: entry.personId)
 
         HStack(spacing: 12) {
             Text("#\(rank)")

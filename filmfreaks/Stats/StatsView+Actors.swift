@@ -19,42 +19,6 @@ extension StatsView {
         }
     }
 
-    // MARK: - Popularity Preload (✅ nur /person/{id}, TTL-Cache)
-
-    func triggerActorPopularityPreload() {
-        let generation = UUID()
-        actorSortGeneration = generation
-
-        let base = actorsByCountRaw
-        actorDisplayOrder = base
-
-        Task {
-            let visibleLimit = showAllActors ? expandedActorsCount : collapsedActorsCount
-            let visibleIds = Array(base.prefix(visibleLimit)).map { $0.personId }
-            await popularityStore.preloadPopularity(for: visibleIds)
-
-            let allIds = base.map { $0.personId }
-            await popularityStore.preloadPopularity(for: allIds)
-
-            await MainActor.run {
-                guard actorSortGeneration == generation else { return }
-                actorDisplayOrder = computeActorsSortedUsingPopularity()
-            }
-        }
-    }
-
-    func preloadPopularityForVisibleActors() {
-        let base = actorsByCountRaw
-        if base.isEmpty { return }
-
-        let visibleLimit = showAllActors ? expandedActorsCount : collapsedActorsCount
-        let visibleIds = Array(base.prefix(visibleLimit)).map { $0.personId }
-
-        Task {
-            await popularityStore.preloadPopularity(for: visibleIds)
-        }
-    }
-
     // MARK: - Actor Interaction
 
     func actorChipTapped(_ actor: ActorEntry) {
