@@ -9,15 +9,15 @@
         "id": "DDDDDDDD-DDDD-4DDD-8DDD-DDDDDDDDDDDD",
         "reviewerId": "11111111-1111-1111-1111-111111111111",
         "reviewerName": "Marc",
-        "scores": {
-          "Action": 3,
-          "Spannung": 3,
-          "Emotion": 2,
-          "Humor": 1,
-          "Musik": 3,
-          "Anspruch": 2,
-          "Erotik": 0
-        },
+        "scores": [
+          "Action", 3,
+          "Spannung", 3,
+          "Emotion", 2,
+          "Humor", 1,
+          "Musik", 3,
+          "Anspruch", 2,
+          "Erotik", 0
+        ],
         "comment": "Stark gealtert? Nein. Immer noch top.",
         "fazitScore": 9,
         "updatedAt": 763084800
