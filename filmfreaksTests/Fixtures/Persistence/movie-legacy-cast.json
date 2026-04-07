@@ -1,0 +1,32 @@
+{
+  "id": "EEEEEEEE-EEEE-4EEE-8EEE-EEEEEEEEEEEE",
+  "title": "The Matrix",
+  "year": "1999",
+  "tmdbRating": 8.2,
+  "ratings": [],
+  "posterPath": "/matrix.jpg",
+  "watchedDate": 763171200,
+  "watchedLocation": "Zuhause",
+  "tmdbId": 603,
+  "genres": ["Action", "Science Fiction"],
+  "genreIds": [28, 878],
+  "keywords": ["simulation", "chosen one"],
+  "keywordIds": [4565, 9717],
+  "suggestedBy": "Michi",
+  "addedAt": 763084800,
+  "addedById": "22222222-2222-2222-2222-222222222222",
+  "addedByName": "Michi",
+  "cast": ["Keanu Reeves", "Carrie-Anne Moss", "Laurence Fishburne"],
+  "directors": [
+    {
+      "personId": 933,
+      "name": "Lana Wachowski"
+    },
+    {
+      "personId": 934,
+      "name": "Lilly Wachowski"
+    }
+  ],
+  "groupId": "legacy-public-group",
+  "groupName": "Wohnzimmer"
+}

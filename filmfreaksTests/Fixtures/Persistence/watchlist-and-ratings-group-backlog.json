@@ -1,0 +1,66 @@
+[
+  {
+    "id": "AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA",
+    "title": "Arrival",
+    "year": "2016",
+    "tmdbRating": 7.9,
+    "ratings": [],
+    "posterPath": "/arrival.jpg",
+    "tmdbId": 329865,
+    "genres": ["Science Fiction", "Drama"],
+    "genreIds": [878, 18],
+    "keywords": ["alien", "linguistics"],
+    "keywordIds": [9951, 10950],
+    "suggestedBy": "Marc",
+    "addedAt": 762739200,
+    "addedById": "11111111-1111-1111-1111-111111111111",
+    "addedByName": "Marc",
+    "cast": [
+      {
+        "personId": 1234,
+        "name": "Amy Adams"
+      }
+    ],
+    "directors": [
+      {
+        "personId": 5555,
+        "name": "Denis Villeneuve"
+      }
+    ],
+    "groupId": "A0B1C2D3-E4F5-4A6B-8C7D-1234567890AB",
+    "groupName": "Movie Club"
+  },
+  {
+    "id": "BBBBBBBB-BBBB-4BBB-8BBB-BBBBBBBBBBBB",
+    "title": "Heat",
+    "year": "1995",
+    "tmdbRating": 8.1,
+    "ratings": [],
+    "posterPath": "/heat.jpg",
+    "tmdbId": 949,
+    "genres": ["Crime", "Drama"],
+    "genreIds": [80, 18],
+    "suggestedBy": "Michi",
+    "addedAt": 762825600,
+    "addedById": "22222222-2222-2222-2222-222222222222",
+    "addedByName": "Michi",
+    "cast": [
+      {
+        "personId": 380,
+        "name": "Al Pacino"
+      },
+      {
+        "personId": 3801,
+        "name": "Robert De Niro"
+      }
+    ],
+    "directors": [
+      {
+        "personId": 1032,
+        "name": "Michael Mann"
+      }
+    ],
+    "groupId": "A0B1C2D3-E4F5-4A6B-8C7D-1234567890AB",
+    "groupName": "Movie Club"
+  }
+]

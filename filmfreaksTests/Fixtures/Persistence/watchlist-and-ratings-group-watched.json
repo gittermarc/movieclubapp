@@ -1,0 +1,57 @@
+[
+  {
+    "id": "CCCCCCCC-CCCC-4CCC-8CCC-CCCCCCCCCCCC",
+    "title": "The Dark Knight",
+    "year": "2008",
+    "tmdbRating": 8.5,
+    "ratings": [
+      {
+        "id": "DDDDDDDD-DDDD-4DDD-8DDD-DDDDDDDDDDDD",
+        "reviewerId": "11111111-1111-1111-1111-111111111111",
+        "reviewerName": "Marc",
+        "scores": {
+          "Action": 3,
+          "Spannung": 3,
+          "Emotion": 2,
+          "Humor": 1,
+          "Musik": 3,
+          "Anspruch": 2,
+          "Erotik": 0
+        },
+        "comment": "Stark gealtert? Nein. Immer noch top.",
+        "fazitScore": 9,
+        "updatedAt": 763084800
+      }
+    ],
+    "posterPath": "/tdk.jpg",
+    "watchedDate": 763084800,
+    "watchedLocation": "Nürnberg",
+    "tmdbId": 155,
+    "genres": ["Drama", "Action"],
+    "genreIds": [18, 28],
+    "keywords": ["hero", "joker"],
+    "keywordIds": [9715, 180547],
+    "suggestedBy": "Marc",
+    "addedAt": 762998400,
+    "addedById": "11111111-1111-1111-1111-111111111111",
+    "addedByName": "Marc",
+    "cast": [
+      {
+        "personId": 3894,
+        "name": "Christian Bale"
+      },
+      {
+        "personId": 1810,
+        "name": "Heath Ledger"
+      }
+    ],
+    "directors": [
+      {
+        "personId": 525,
+        "name": "Christopher Nolan"
+      }
+    ],
+    "groupId": "A0B1C2D3-E4F5-4A6B-8C7D-1234567890AB",
+    "groupName": "Movie Club"
+  }
+]
