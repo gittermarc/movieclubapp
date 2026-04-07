@@ -26,6 +26,10 @@ struct MovieNightLocalPersistenceTests {
         let tempDirectory = try TemporaryDirectory()
         let persistence = MovieNightLocalPersistence(baseDirectory: tempDirectory.url)
         let fileURL = await persistence.fileURLForTesting()
+        try FileManager.default.createDirectory(
+            at: fileURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
 
         try Data("{ invalid snapshot payload }".utf8).write(to: fileURL, options: [.atomic])
 
