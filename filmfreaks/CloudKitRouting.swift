@@ -44,13 +44,14 @@ enum CloudKitRouting {
     ///     - Otherwise: legacy/public group → Public DB.
     static func route(
         container: CKContainer,
-        groupId: String?
+        groupId: String?,
+        contextLookup: (String) -> GroupContext? = { GroupContextStore.context(forGroupId: $0) }
     ) throws -> (db: CKDatabase, zoneID: CKRecordZone.ID?) {
         guard let gid = normalizedGroupId(groupId) else {
             return (container.publicCloudDatabase, nil)
         }
 
-        if let ctx = GroupContextStore.context(forGroupId: gid) {
+        if let ctx = contextLookup(gid) {
             let zoneID = CKRecordZone.ID(zoneName: ctx.zoneName, ownerName: ctx.ownerName)
             let db: CKDatabase = (ctx.scope == .shared) ? container.sharedCloudDatabase : container.privateCloudDatabase
             return (db, zoneID)

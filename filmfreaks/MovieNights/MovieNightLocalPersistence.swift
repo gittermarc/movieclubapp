@@ -59,11 +59,13 @@ actor MovieNightLocalPersistence {
     private let fileURL: URL
     private let encoder: JSONEncoder
     private let decoder: JSONDecoder
+    private let fileManager: FileManager
 
-    init(fileName: String = "movieNights.json") {
-        let fm = FileManager.default
-        let appSupport = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-        let base = (appSupport ?? fm.temporaryDirectory).appendingPathComponent("filmfreaks", isDirectory: true)
+    init(fileName: String = "movieNights.json", baseDirectory: URL? = nil, fileManager: FileManager = .default) {
+        self.fileManager = fileManager
+        let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+        let base = (baseDirectory ?? appSupport ?? fileManager.temporaryDirectory)
+            .appendingPathComponent("filmfreaks", isDirectory: true)
         self.fileURL = base.appendingPathComponent(fileName)
 
         let enc = JSONEncoder()
@@ -79,7 +81,7 @@ actor MovieNightLocalPersistence {
     func load() -> Snapshot {
         do {
             try ensureDirectoryExists()
-            guard FileManager.default.fileExists(atPath: fileURL.path) else {
+            guard fileManager.fileExists(atPath: fileURL.path) else {
                 return .empty()
             }
             let data = try Data(contentsOf: fileURL)
@@ -104,8 +106,8 @@ actor MovieNightLocalPersistence {
 
     func deleteLocalFile() {
         do {
-            if FileManager.default.fileExists(atPath: fileURL.path) {
-                try FileManager.default.removeItem(at: fileURL)
+            if fileManager.fileExists(atPath: fileURL.path) {
+                try fileManager.removeItem(at: fileURL)
             }
         } catch {
             // ignore
@@ -114,6 +116,10 @@ actor MovieNightLocalPersistence {
 
     private func ensureDirectoryExists() throws {
         let dir = fileURL.deletingLastPathComponent()
-        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true, attributes: nil)
+        try fileManager.createDirectory(at: dir, withIntermediateDirectories: true, attributes: nil)
+    }
+
+    func fileURLForTesting() -> URL {
+        fileURL
     }
 }

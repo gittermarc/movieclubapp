@@ -39,25 +39,25 @@ struct GroupContext: Identifiable, Codable, Equatable {
 final class GroupContextStore {
     private static let contextsKey = "GroupContextsById"
 
-    private static func loadDict() -> [String: Data] {
-        (UserDefaults.standard.object(forKey: contextsKey) as? [String: Data]) ?? [:]
+    static func loadDict(defaults: UserDefaults = .standard) -> [String: Data] {
+        (defaults.object(forKey: contextsKey) as? [String: Data]) ?? [:]
     }
 
-    private static func saveDict(_ dict: [String: Data]) {
-        UserDefaults.standard.set(dict, forKey: contextsKey)
+    static func saveDict(_ dict: [String: Data], defaults: UserDefaults = .standard) {
+        defaults.set(dict, forKey: contextsKey)
     }
 
     /// Load a single context for a groupId.
-    static func context(forGroupId groupId: String) -> GroupContext? {
+    static func context(forGroupId groupId: String, defaults: UserDefaults = .standard) -> GroupContext? {
         guard !groupId.isEmpty else { return nil }
-        let dict = loadDict()
+        let dict = loadDict(defaults: defaults)
         guard let data = dict[groupId] else { return nil }
         return try? JSONDecoder().decode(GroupContext.self, from: data)
     }
 
     /// Save or update a context.
-    static func upsert(_ context: GroupContext) {
-        var dict = loadDict()
+    static func upsert(_ context: GroupContext, defaults: UserDefaults = .standard, notificationCenter: NotificationCenter = .default) {
+        var dict = loadDict(defaults: defaults)
 
         if let existing = dict[context.id],
            let decoded = try? JSONDecoder().decode(GroupContext.self, from: existing),
@@ -67,10 +67,10 @@ final class GroupContextStore {
 
         if let data = try? JSONEncoder().encode(context) {
             dict[context.id] = data
-            saveDict(dict)
+            saveDict(dict, defaults: defaults)
 
             DispatchQueue.main.async {
-                NotificationCenter.default.post(
+                notificationCenter.post(
                     name: .groupContextDidUpsert,
                     object: nil,
                     userInfo: ["groupId": context.id]
@@ -80,14 +80,14 @@ final class GroupContextStore {
     }
 
     /// Remove a context (e.g. user left a shared group).
-    static func remove(groupId: String) {
-        var dict = loadDict()
+    static func remove(groupId: String, defaults: UserDefaults = .standard, notificationCenter: NotificationCenter = .default) {
+        var dict = loadDict(defaults: defaults)
         let existed = dict.removeValue(forKey: groupId) != nil
-        saveDict(dict)
+        saveDict(dict, defaults: defaults)
 
         guard existed else { return }
         DispatchQueue.main.async {
-            NotificationCenter.default.post(
+            notificationCenter.post(
                 name: .groupContextDidRemove,
                 object: nil,
                 userInfo: ["groupId": groupId]
@@ -95,7 +95,7 @@ final class GroupContextStore {
         }
     }
 
-    static func all() -> [GroupContext] {
-        loadDict().values.compactMap { try? JSONDecoder().decode(GroupContext.self, from: $0) }
+    static func all(defaults: UserDefaults = .standard) -> [GroupContext] {
+        loadDict(defaults: defaults).values.compactMap { try? JSONDecoder().decode(GroupContext.self, from: $0) }
     }
 }

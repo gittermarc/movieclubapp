@@ -19,7 +19,7 @@ final class PersistenceManager {
 
     static let shared = PersistenceManager()
 
-    private enum Kind: String {
+    enum Kind: String {
         case watchedMovies = "movies_watched"
         case backlogMovies = "movies_backlog"
         case users = "users"
@@ -28,7 +28,7 @@ final class PersistenceManager {
     private let log = Logger(subsystem: "filmfreaks", category: "Persistence")
 
     /// Debounce-Zeit für Writes
-    private let debounceSeconds: TimeInterval = 0.55
+    private let debounceSeconds: TimeInterval
 
     private let queue = DispatchQueue(label: "filmfreaks.persistence", qos: .utility)
 
@@ -38,12 +38,23 @@ final class PersistenceManager {
 
     /// Base Directory: ~/Library/Application Support/FilmFreaks/
     private let baseDir: URL
+    private let userDefaults: UserDefaults
 
     /// Migration-Flag (UserDefaults bleibt für Kleinkram ok)
     private let migrationFlagKey = "FilmFreaks.diskPersistence.v2.migrated"
 
     private init() {
         self.baseDir = Self.makeBaseDir()
+        self.userDefaults = .standard
+        self.debounceSeconds = 0.55
+        ensureDirectoryExists(baseDir)
+        migrateFromUserDefaultsIfNeeded()
+    }
+
+    init(baseDir: URL, userDefaults: UserDefaults, debounceSeconds: TimeInterval = 0.55) {
+        self.baseDir = baseDir
+        self.userDefaults = userDefaults
+        self.debounceSeconds = debounceSeconds
         ensureDirectoryExists(baseDir)
         migrateFromUserDefaultsIfNeeded()
     }
@@ -111,11 +122,11 @@ final class PersistenceManager {
     private let selectedUserNameKey = "FilmFreaks.selectedUserName.v1"
 
     func saveSelectedUserName(_ name: String?) {
-        UserDefaults.standard.set(name, forKey: selectedUserNameKey)
+        userDefaults.set(name, forKey: selectedUserNameKey)
     }
 
     func loadSelectedUserName() -> String? {
-        UserDefaults.standard.string(forKey: selectedUserNameKey)
+        userDefaults.string(forKey: selectedUserNameKey)
     }
 
     // MARK: - Internals
@@ -176,6 +187,21 @@ final class PersistenceManager {
         }
     }
 
+    func fileURLForTesting(kind: Kind, groupId: String?) -> URL {
+        fileURL(kind: kind, groupId: groupId)
+    }
+
+    func flushPendingWritesForTesting() {
+        lock.lock()
+        let items = Array(pendingWrites.values)
+        pendingWrites.removeAll()
+        lock.unlock()
+
+        for item in items where item.isCancelled == false {
+            item.perform()
+        }
+    }
+
     private func writeNow<T: Encodable>(_ value: T, to url: URL) {
         do {
             ensureDirectoryExists(url.deletingLastPathComponent())
@@ -189,6 +215,11 @@ final class PersistenceManager {
     }
 
     private func scheduleWrite<T: Encodable>(_ value: T, to url: URL) {
+        if debounceSeconds <= 0 {
+            writeNow(value, to: url)
+            return
+        }
+
         lock.lock()
         pendingWrites[url]?.cancel()
 
@@ -219,7 +250,7 @@ final class PersistenceManager {
     // MARK: - Migration (UserDefaults → Files)
 
     private func migrateFromUserDefaultsIfNeeded() {
-        let defaults = UserDefaults.standard
+        let defaults = userDefaults
         guard defaults.bool(forKey: migrationFlagKey) == false else { return }
 
         // Wenn jemand frisch installiert, gibt's nichts zu migrieren.
