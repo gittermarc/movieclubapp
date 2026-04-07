@@ -4,10 +4,6 @@ import Testing
 
 struct TestFoundationSmokeTests {
 
-    @Test func fixturesRootExists() throws {
-        #expect(FileManager.default.fileExists(atPath: FixtureLoader.fixturesRootURL.path))
-    }
-
     @Test func requiredFixturesCanBeResolved() throws {
         let expectedFixtures = [
             "Persistence/empty-group-watched-movies.json",
@@ -24,8 +20,9 @@ struct TestFoundationSmokeTests {
         ]
 
         for fixture in expectedFixtures {
-            let url = try FixtureLoader.fixtureURL(named: fixture)
-            #expect(FileManager.default.fileExists(atPath: url.path))
+            #expect(FixtureLoader.availableFixtureNames.contains(fixture))
+            let data = try FixtureLoader.data(named: fixture)
+            #expect(data.isEmpty == false)
         }
     }
 }
