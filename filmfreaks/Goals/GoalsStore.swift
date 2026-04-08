@@ -34,10 +34,10 @@ final class GoalsStore: ObservableObject {
 
     init(
         userDefaults: UserDefaults = .standard,
-        cloudStore: any GoalsCloudSyncing = CloudKitGoalStore.shared
+        cloudStore: (any GoalsCloudSyncing)? = nil
     ) {
         self.userDefaults = userDefaults
-        self.cloudStore = cloudStore
+        self.cloudStore = cloudStore ?? CloudKitGoalStore.shared
     }
 
     func customGoalsStorageKey(for groupId: String?) -> String {

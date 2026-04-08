@@ -7,6 +7,7 @@ struct SettingsSyncStatusPresentation: Equatable {
     let lastSyncText: String
     let errorText: String?
 
+    @MainActor
     static func make(
         isOffline: Bool,
         isSyncingNow: Bool,
@@ -14,8 +15,9 @@ struct SettingsSyncStatusPresentation: Equatable {
         pendingCloudChangesCount: Int,
         lastCloudSyncAt: Date?,
         now: Date = Date(),
-        relativeTextProvider: (Date, Date) -> String = Self.defaultRelativeText
+        relativeTextProvider: ((Date, Date) -> String)? = nil
     ) -> SettingsSyncStatusPresentation {
+        let relativeTextProvider = relativeTextProvider ?? Self.defaultRelativeText
         let trimmedError = lastCloudSyncError?.trimmingCharacters(in: .whitespacesAndNewlines)
         let hasError = trimmedError?.isEmpty == false
 

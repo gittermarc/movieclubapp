@@ -2,6 +2,7 @@ import Foundation
 import Testing
 @testable import filmfreaks
 
+@MainActor
 struct SettingsSyncStatusPresentationTests {
 
     @Test func offlineStateWinsOverOtherStates() {

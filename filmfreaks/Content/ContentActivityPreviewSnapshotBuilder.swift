@@ -42,7 +42,12 @@ enum ContentActivityPreviewSnapshotBuilder {
             .map { UnifiedGroupActivityEvent(movieNightActivity: $0) }
 
         let combined = Array((limitedMovieItems + limitedNightItems).enumerated())
-            .sorted(by: areInDescendingActivityOrder)
+            .sorted { lhs, rhs in
+                if lhs.element.date != rhs.element.date {
+                    return lhs.element.date > rhs.element.date
+                }
+                return lhs.offset < rhs.offset
+            }
             .map(\.element)
 
         return ContentActivityPreviewSnapshot(
@@ -50,13 +55,4 @@ enum ContentActivityPreviewSnapshotBuilder {
         )
     }
 
-    private static func areInDescendingActivityOrder(
-        _ lhs: (offset: Int, element: UnifiedGroupActivityEvent),
-        _ rhs: (offset: Int, element: UnifiedGroupActivityEvent)
-    ) -> Bool {
-        if lhs.element.date != rhs.element.date {
-            return lhs.element.date > rhs.element.date
-        }
-        return lhs.offset < rhs.offset
-    }
 }
