@@ -17,10 +17,10 @@ struct ContentView: View {
     @EnvironmentObject var displaySettings: DisplaySettings
 
     // MARK: - Routing (Sheets / Navigation)
-    @State private var route: ContentRoute? = nil
+    @State var route: ContentRoute? = nil
 
     // MARK: - Onboarding / Quick Start
-    @AppStorage("Onboarding_HasSeenQuickStart") private var hasSeenQuickStart: Bool = false
+    @AppStorage("Onboarding_HasSeenQuickStart") var hasSeenQuickStart: Bool = false
     @State private var onboardingChecklistExpanded: Bool = true
 
     @State var selectedMode: MovieListMode = .watched
@@ -45,7 +45,7 @@ struct ContentView: View {
     // MARK: - UI Density Metrics
     private var m: DisplaySettings.LayoutMetrics { displaySettings.metrics }
 
-    private var currentGroupId: String {
+    var currentGroupId: String {
         (movieStore.currentGroupId ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
@@ -53,7 +53,7 @@ struct ContentView: View {
 
     // MARK: - Onboarding (derived state)
 
-    private var onboarding: ContentOnboarding.State {
+    var onboarding: ContentOnboarding.State {
         ContentOnboarding.makeState(movieStore: movieStore, userStore: userStore)
     }
 
@@ -135,31 +135,10 @@ struct ContentView: View {
         }
     }
 
-    // MARK: - Derived items update
 
-    @MainActor
-    private func updateMovieItemsModel() {
-        movieItemsModel.update(
-            watchedMovies: movieStore.movies,
-            backlogMovies: movieStore.backlogMovies,
-            watchedSearchText: watchedSearchText,
-            backlogSearchText: backlogSearchText,
-            filterByUser: filterByUser,
-            sort: selectedSort,
-            ratingDisplayMode: displaySettings.ratingDisplayMode,
-            showTMDbRatingsInLists: displaySettings.showTMDbRatingsInLists
-        )
-    }
 
-    @MainActor
-    private func updateActivityPreviewModel() {
-        activityPreviewModel.update(
-            movieStore: movieStore,
-            movieNightStore: movieNightStore,
-            currentGroupId: currentGroupId,
-            ratingDisplayMode: displaySettings.ratingDisplayMode
-        )
-    }
+    // NOTE: Derived-state updates live in ContentView+DerivedState.swift.
+
 
 
 
@@ -196,222 +175,107 @@ struct ContentView: View {
         return "\(first)\(last)".uppercased()
     }
     var body: some View {
-        NavigationStack {
-            ZStack {
-                Color(.systemGroupedBackground)
-                    .ignoresSafeArea()
+        applyingLifecycleObservers(
+            to: NavigationStack {
+                ZStack {
+                    Color(.systemGroupedBackground)
+                        .ignoresSafeArea()
 
-                VStack {
-                    ContentHeaderView(
-                        groupName: movieStore.currentGroupName,
-                        totalMoviesInGroup: movieStore.movies.count + movieStore.backlogMovies.count,
-                        activeListTotalCount: selectedModeTotalCount,
-                        tintColor: displaySettings.tintColor,
-                        activeMemberDisplayName: activeMemberDisplayName,
-                        activeMemberInitials: activeMemberInitials,
-                        hasActiveMemberSelected: hasActiveMemberSelected,
-                        onTapGroup: { route = .groupSettings },
-                        onTapActiveMember: { route = .users },
-                        showGroupActivityCard: displaySettings.showGroupActivityCard,
-                        activityPreviewItems: activityPreviewModel.items,
-                        onTapActivity: { route = .activity },
-                        shouldShowOnboardingChecklist: onboarding.shouldShowChecklist,
-                        onboardingChecklistExpanded: $onboardingChecklistExpanded,
-                        onboardingStepsCompletedCount: onboarding.stepsCompletedCount,
-                        isGroupStepComplete: onboarding.isGroupStepComplete,
-                        isMembersStepComplete: onboarding.isMembersStepComplete,
-                        isFirstMovieStepComplete: onboarding.isFirstMovieStepComplete,
-                        isFirstRatingStepComplete: onboarding.isFirstRatingStepComplete,
-                        hasAnyMoviesInCurrentGroup: hasAnyMoviesInCurrentGroup,
-                        onTapOnboardingGroups: { route = .groupSettings },
-                        onTapOnboardingMembers: { route = .users },
-                        onTapOnboardingSearch: {
-                            trackSearchOpened()
-                            route = .movieSearch
-                        },
-                        selectedMode: $selectedMode,
-                        onModeChanged: {
-                            listSearchIsFocused = false
-                        },
-                        metrics: m,
-                        selectedSort: $selectedSort,
-                        filterByUser: $filterByUser,
-                        users: userStore.users,
-                        filterLabelText: filterLabelText,
-                        filterHintText: filterHintText,
-                        viewStyleRaw: $viewStyleRaw,
-                        selectedViewStyle: selectedViewStyle,
-                        isConnected: networkMonitor.isConnected,
-                        isSyncing: movieStore.isSyncing || userStore.isSyncing,
-                        pendingChangesCount: movieStore.pendingCloudChangesCount,
-                        lastError: movieStore.lastCloudSyncError
-                    )
+                    VStack {
+                        ContentHeaderView(
+                            groupName: movieStore.currentGroupName,
+                            totalMoviesInGroup: movieStore.movies.count + movieStore.backlogMovies.count,
+                            activeListTotalCount: selectedModeTotalCount,
+                            tintColor: displaySettings.tintColor,
+                            activeMemberDisplayName: activeMemberDisplayName,
+                            activeMemberInitials: activeMemberInitials,
+                            hasActiveMemberSelected: hasActiveMemberSelected,
+                            onTapGroup: { route = .groupSettings },
+                            onTapActiveMember: { route = .users },
+                            showGroupActivityCard: displaySettings.showGroupActivityCard,
+                            activityPreviewItems: activityPreviewModel.items,
+                            onTapActivity: { route = .activity },
+                            shouldShowOnboardingChecklist: onboarding.shouldShowChecklist,
+                            onboardingChecklistExpanded: $onboardingChecklistExpanded,
+                            onboardingStepsCompletedCount: onboarding.stepsCompletedCount,
+                            isGroupStepComplete: onboarding.isGroupStepComplete,
+                            isMembersStepComplete: onboarding.isMembersStepComplete,
+                            isFirstMovieStepComplete: onboarding.isFirstMovieStepComplete,
+                            isFirstRatingStepComplete: onboarding.isFirstRatingStepComplete,
+                            hasAnyMoviesInCurrentGroup: hasAnyMoviesInCurrentGroup,
+                            onTapOnboardingGroups: { route = .groupSettings },
+                            onTapOnboardingMembers: { route = .users },
+                            onTapOnboardingSearch: {
+                                trackSearchOpened()
+                                route = .movieSearch
+                            },
+                            selectedMode: $selectedMode,
+                            onModeChanged: {
+                                listSearchIsFocused = false
+                            },
+                            metrics: m,
+                            selectedSort: $selectedSort,
+                            filterByUser: $filterByUser,
+                            users: userStore.users,
+                            filterLabelText: filterLabelText,
+                            filterHintText: filterHintText,
+                            viewStyleRaw: $viewStyleRaw,
+                            selectedViewStyle: selectedViewStyle,
+                            isConnected: networkMonitor.isConnected,
+                            isSyncing: movieStore.isSyncing || userStore.isSyncing,
+                            pendingChangesCount: movieStore.pendingCloudChangesCount,
+                            lastError: movieStore.lastCloudSyncError
+                        )
 
-                    ContentMainAreaView(
-                        hasAnyMoviesInCurrentGroup: hasAnyMoviesInCurrentGroup,
-                        selectedMode: $selectedMode,
-                        selectedViewStyle: selectedViewStyle,
-                        watchedListItems: watchedListItems,
-                        backlogListItems: backlogListItems,
-                        watchedGridItems: watchedGridItems,
-                        backlogGridItems: backlogGridItems,
-                        watchedSearchText: $watchedSearchText,
-                        backlogSearchText: $backlogSearchText,
-                        shouldShowListSearchBar: shouldShowListSearchBar,
-                        listSearchPlaceholder: listSearchPlaceholder,
-                        activeListSearchText: activeListSearchText,
-                        listSearchIsFocused: $listSearchIsFocused,
-                        metrics: m,
-                        displayScore: { movie in
-                            displayScore(for: movie)
-                        },
-                        onRefresh: {
-                            await performPullToRefresh()
-                        },
-                        onOpenSearch: {
-                            trackSearchOpened()
-                            route = .movieSearch
-                        },
-                        onOpenUsers: {
-                            route = .users
-                        },
-                        onOpenGroupSettings: {
-                            route = .groupSettings
-                        }
-                    )
-
-
+                        ContentMainAreaView(
+                            hasAnyMoviesInCurrentGroup: hasAnyMoviesInCurrentGroup,
+                            selectedMode: $selectedMode,
+                            selectedViewStyle: selectedViewStyle,
+                            watchedListItems: watchedListItems,
+                            backlogListItems: backlogListItems,
+                            watchedGridItems: watchedGridItems,
+                            backlogGridItems: backlogGridItems,
+                            watchedSearchText: $watchedSearchText,
+                            backlogSearchText: $backlogSearchText,
+                            shouldShowListSearchBar: shouldShowListSearchBar,
+                            listSearchPlaceholder: listSearchPlaceholder,
+                            activeListSearchText: activeListSearchText,
+                            listSearchIsFocused: $listSearchIsFocused,
+                            metrics: m,
+                            displayScore: { movie in
+                                displayScore(for: movie)
+                            },
+                            onRefresh: {
+                                await performPullToRefresh()
+                            },
+                            onOpenSearch: {
+                                trackSearchOpened()
+                                route = .movieSearch
+                            },
+                            onOpenUsers: {
+                                route = .users
+                            },
+                            onOpenGroupSettings: {
+                                route = .groupSettings
+                            }
+                        )
+                    }
                 }
-
-            }
-            .navigationTitle("The Movie Club")
-            .onAppear {
-                // Quick Start nur beim ersten Start – danach nicht mehr.
-                if !hasSeenQuickStart {
-                        route = .quickStart
+                .navigationTitle("The Movie Club")
+                .toolbar {
+                    ContentToolbar(
+                        route: $route,
+                        trackSearchOpened: trackSearchOpened
+                    )
                 }
-                updateOnboardingCompletionFlag()
-                updateMovieItemsModel()
-                updateActivityPreviewModel()
-            }
-            .onReceive(movieStore.$movies) { _ in
-                updateMovieItemsModel()
-                updateActivityPreviewModel()
-            }
-            .onReceive(movieStore.$backlogMovies) { _ in
-                updateMovieItemsModel()
-                updateActivityPreviewModel()
-            }
-            .onReceive(movieNightStore.$activityByGroup) { _ in
-                updateActivityPreviewModel()
-            }
-            .onChange(of: watchedSearchText) { _, _ in
-                updateMovieItemsModel()
-            }
-            .onChange(of: backlogSearchText) { _, _ in
-                updateMovieItemsModel()
-            }
-            .onChange(of: filterByUser?.id) { _, _ in
-                updateMovieItemsModel()
-            }
-            .onChange(of: selectedSort) { _, _ in
-                updateMovieItemsModel()
-            }
-            .onReceive(displaySettings.$ratingDisplayMode) { _ in
-                updateMovieItemsModel()
-                updateActivityPreviewModel()
-            }
-            .onReceive(displaySettings.$showTMDbRatingsInLists) { _ in
-                updateMovieItemsModel()
-            }
-            .onChange(of: movieStore.currentGroupId) { _, _ in
-                updateOnboardingCompletionFlag()
-                updateActivityPreviewModel()
-            }
-            .onChange(of: movieStore.currentGroupName) { _, _ in
-                updateOnboardingCompletionFlag()
-            }
-            .onChange(of: movieStore.movies.count) { _, _ in
-                updateOnboardingCompletionFlag()
-            }
-            .onChange(of: movieStore.backlogMovies.count) { _, _ in
-                updateOnboardingCompletionFlag()
-            }
-            .onChange(of: userStore.users.count) { _, _ in
-                updateOnboardingCompletionFlag()
-            }
-
-            .onReceive(NotificationCenter.default.publisher(for: .pushDeepLinkRequested)) { note in
-                handlePushDeepLink(note.userInfo)
-            }
-
-            .toolbar {
-                ContentToolbar(
+                .contentRouting(
                     route: $route,
+                    hasSeenQuickStart: $hasSeenQuickStart,
                     trackSearchOpened: trackSearchOpened
                 )
             }
-            .contentRouting(
-                route: $route,
-                hasSeenQuickStart: $hasSeenQuickStart,
-                trackSearchOpened: trackSearchOpened
-            )
-        }
+        )
     }
-
-    // MARK: - Onboarding Tracking
-
-    private func updateOnboardingCompletionFlag() {
-        ContentOnboarding.updateCompletionFlagIfNeeded(for: onboarding)
-    }
-
-    private func trackSearchOpened() {
-        ContentOnboarding.trackSearchOpened(forGroupId: onboarding.groupIdForProgress)
-    }
-
-    // MARK: - Push Deep Link (P2.4)
-
-    private func handlePushDeepLink(_ userInfo: [AnyHashable: Any]?) {
-        guard
-            let userInfo,
-            let groupId = userInfo["groupId"] as? String
-        else { return }
-
-        let trimmed = groupId.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-
-        // 1) Switch group (best effort) so Activity screen shows the right context.
-        if let ctx = GroupContextStore.context(forGroupId: trimmed) {
-            if movieStore.currentGroupId != ctx.id {
-                movieStore.activateCloudGroup(ctx)
-            } else {
-                // Ensure group name is up to date even if already active.
-                if movieStore.currentGroupName != ctx.name {
-                    movieStore.currentGroupName = ctx.name
-                }
-            }
-        } else {
-            // Fallback: switch by id only.
-            if movieStore.currentGroupId != trimmed {
-                movieStore.currentGroupId = trimmed
-            }
-        }
-
-        // 2) Keep dependent stores in sync.
-        userStore.loadUsers(forGroupId: trimmed)
-
-        Task {
-            await groupStore.refresh()
-            await movieStore.refreshFromCloud(force: true)
-            await userStore.refreshFromCloud(force: true)
-            await movieNightStore.refreshFromCloud(groupId: trimmed, force: true)
-        }
-
-        // 3) Open Activity.
-        route = .activity
-    }
-
-    
 }
 
 #Preview {
