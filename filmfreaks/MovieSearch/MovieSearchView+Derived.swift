@@ -16,36 +16,8 @@ extension MovieSearchView {
         && !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    var sortedResults: [TMDbMovieResult] {
-        switch selectedSort {
-        case .relevance:
-            // TMDb-Reihenfolge, wie geliefert
-            return results
-
-        case .titleAZ:
-            return results.sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
-
-        case .titleZA:
-            return results.sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedDescending }
-
-        case .yearNewest:
-            return results.sorted {
-                (MovieSearchMapper.yearInt(from: $0.release_date) ?? -1) >
-                (MovieSearchMapper.yearInt(from: $1.release_date) ?? -1)
-            }
-
-        case .yearOldest:
-            return results.sorted {
-                (MovieSearchMapper.yearInt(from: $0.release_date) ?? Int.max) <
-                (MovieSearchMapper.yearInt(from: $1.release_date) ?? Int.max)
-            }
-
-        case .ratingHigh:
-            return results.sorted { $0.vote_average > $1.vote_average }
-
-        case .ratingLow:
-            return results.sorted { $0.vote_average < $1.vote_average }
-        }
+    func updateResultsModel() {
+        resultsModel.update(results: results, selectedSort: selectedSort)
     }
 
     var shouldShowRecommendations: Bool {

@@ -7,7 +7,7 @@ import Foundation
 
 // MARK: - Sortierung (Search)
 
-enum MovieSearchSortOption: String, CaseIterable, Identifiable {
+enum MovieSearchSortOption: String, CaseIterable, Identifiable, Equatable {
     case relevance = "Relevanz"
     case titleAZ = "Titel A–Z"
     case titleZA = "Titel Z–A"

@@ -30,6 +30,7 @@ struct MovieSearchView: View {
 
     // Sortierung
     @State var selectedSort: MovieSearchSortOption = .relevance
+    @State var resultsModel = MovieSearchResultsModel()
 
     // ✅ Task-Cancellation / Out-of-order Schutz
     // NOTE: These are intentionally *not* `private` because the async logic lives in
@@ -198,9 +199,9 @@ struct MovieSearchView: View {
                         Text("Keine Treffer. Bitte prüfe die Schreibweise.")
                             .foregroundStyle(.secondary)
                             .padding(.top, 40)
-                    } else if !sortedResults.isEmpty {
+                    } else if !resultsModel.sortedResults.isEmpty {
                         MovieSearchResultsListView(
-                            results: sortedResults,
+                            results: resultsModel.sortedResults,
                             canLoadMore: canLoadMore,
                             isLoadingMore: isLoadingMore,
                             totalResults: totalResults,
@@ -375,6 +376,12 @@ struct MovieSearchView: View {
             if trimmed.isEmpty {
                 Task { await loadRecommendationsIfNeeded() }
             }
+        }
+        .onChange(of: results) { _, _ in
+            updateResultsModel()
+        }
+        .onChange(of: selectedSort) { _, _ in
+            updateResultsModel()
         }
         .onChange(of: isSearchFieldFocused) { _, focused in
             // Wenn der Fokus weg ist und die Suche leer ist, dürfen Inspirationen wieder auftauchen.

@@ -14,7 +14,7 @@ struct TMDbSearchResponse: Codable {
     let total_results: Int
 }
 
-struct TMDbMovieResult: Codable, Identifiable {
+struct TMDbMovieResult: Codable, Identifiable, Equatable {
     let id: Int
     let title: String
     let release_date: String?
