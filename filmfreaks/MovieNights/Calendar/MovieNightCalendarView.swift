@@ -20,6 +20,7 @@ struct MovieNightCalendarView: View {
 
     @State private var monthAnchor: Date = Calendar.current.startOfMonth(for: .now)
     @State private var selectedDay: Date = Calendar.current.startOfDay(for: .now)
+    @State private var snapshot = MovieNightCalendarSnapshot()
 
     @State private var isProposeSheetPresented: Bool = false
     @State private var selectedEvent: SelectedEvent? = nil
@@ -49,25 +50,16 @@ struct MovieNightCalendarView: View {
         return GroupContextStore.context(forGroupId: groupId) != nil
     }
 
-    private var eventsInMonth: [MovieNightEvent] {
-        let calendar = Calendar.current
-        let start = calendar.startOfMonth(for: monthAnchor)
-        let end = calendar.date(byAdding: DateComponents(month: 1), to: start) ?? start
-
-        return movieNightStore
-            .events(for: groupId)
-            .filter { $0.proposedStart >= start && $0.proposedStart < end && $0.status != .cancelled }
-    }
-
-    private var eventsForSelectedDay: [MovieNightEvent] {
-        let calendar = Calendar.current
-        return eventsInMonth
-            .filter { calendar.isDate($0.proposedStart, inSameDayAs: selectedDay) }
-            .sorted(by: { $0.proposedStart < $1.proposedStart })
-    }
-
     private var defaultProposedStart: Date {
         Calendar.current.defaultMovieNightStart(for: selectedDay)
+    }
+
+    private func updateSnapshot() {
+        snapshot = MovieNightCalendarSnapshotBuilder.build(
+            events: movieNightStore.events(for: groupId),
+            monthAnchor: monthAnchor,
+            selectedDay: selectedDay
+        )
     }
 
     var body: some View {
@@ -79,13 +71,13 @@ struct MovieNightCalendarView: View {
                     MonthGridView(
                         monthAnchor: monthAnchor,
                         selectedDay: $selectedDay,
-                        events: eventsInMonth
+                        events: snapshot.eventsInMonth
                     )
 
                     DayEventListView(
                         day: selectedDay,
                         groupId: groupId,
-                        events: eventsForSelectedDay,
+                        events: snapshot.eventsForSelectedDay,
                         onSelectEvent: { event in
                             selectedEvent = SelectedEvent(id: event.id)
                         }
@@ -99,13 +91,27 @@ struct MovieNightCalendarView: View {
             .navigationTitle("Kalender")
             .navigationBarTitleDisplayMode(.inline)
             .task(id: groupId) {
+                updateSnapshot()
                 await movieNightStore.refreshFromCloud(groupId: groupId, force: false)
+            }
+            .onAppear {
+                updateSnapshot()
+            }
+            .onChange(of: movieNightStore.eventsByGroup) { _, _ in
+                updateSnapshot()
+            }
+            .onChange(of: groupId) { _, _ in
+                updateSnapshot()
             }
             .onChange(of: monthAnchor) { _, newValue in
                 let cal = Calendar.current
                 if !cal.isDate(selectedDay, equalTo: newValue, toGranularity: .month) {
                     selectedDay = cal.startOfDay(for: cal.startOfMonth(for: newValue))
                 }
+                updateSnapshot()
+            }
+            .onChange(of: selectedDay) { _, _ in
+                updateSnapshot()
             }
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -211,7 +217,7 @@ struct MovieNightCalendarView: View {
                     .controlSize(.small)
                 }
                 .padding(.top, 6)
-            } else if eventsInMonth.isEmpty {
+            } else if snapshot.eventsInMonth.isEmpty {
                 Text("In diesem Monat sind noch keine Filmabende geplant.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
