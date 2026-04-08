@@ -10,7 +10,9 @@ import Foundation
 
 enum StatsSnapshotBuilder {
 
-    static func sortActors(
+    // The project uses SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor.
+    // These helpers are intentionally pure and must stay callable from detached tasks.
+    nonisolated static func sortActors(
         actors: [ActorEntry],
         popularityByPersonId: [Int: Double]
     ) -> [ActorEntry] {
@@ -25,13 +27,13 @@ enum StatsSnapshotBuilder {
         }
     }
 
-    static func computeSnapshot(
+    nonisolated static func computeSnapshot(
         movies: [Movie],
         users: [User],
         ratingDisplayMode: RatingDisplayMode,
         selectedRange: StatsTimeRange,
         selectedLocationFilter: String?
-    ) -> StatsViewModel.Snapshot {
+    ) -> StatsSnapshot {
         let calendar = Calendar.current
         let today = Date()
 
@@ -297,7 +299,7 @@ enum StatsSnapshotBuilder {
                 }
         }()
 
-        var userStatsByUserId: [UUID: StatsViewModel.UserStats] = [:]
+        var userStatsByUserId: [UUID: StatsUserStats] = [:]
         for user in users {
             var movieIds = Set<UUID>()
             var scores: [Double] = []
@@ -324,14 +326,14 @@ enum StatsSnapshotBuilder {
                 averageRating = scores.reduce(0, +) / Double(scores.count)
             }
 
-            userStatsByUserId[user.id] = StatsViewModel.UserStats(
+            userStatsByUserId[user.id] = StatsUserStats(
                 movieCount: movieIds.count,
                 ratingsCount: ratingsCount,
                 averageRating: averageRating
             )
         }
 
-        return StatsViewModel.Snapshot(
+        return StatsSnapshot(
             moviesForCurrentTimeRange: moviesForCurrentTimeRange,
             filteredMovies: filteredMovies,
             availableLocations: availableLocations,

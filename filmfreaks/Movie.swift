@@ -48,7 +48,7 @@ struct Rating: Identifiable, Codable, Equatable {
 
     /// Durchschnitt über alle bewerteten Kriterien in Sternen (0–3, ggf. z.B. 2.3)
     /// Hinweis: 0 zählt als „nicht bewertet“ und fließt nicht in den Durchschnitt ein.
-    var averageStars: Double {
+    nonisolated var averageStars: Double {
         let rated = scores.values.filter { $0 > 0 }
         guard !rated.isEmpty else { return 0 }
         let total = rated.reduce(0, +)
@@ -56,7 +56,7 @@ struct Rating: Identifiable, Codable, Equatable {
     }
 
     /// Normalisiert auf 0–10 Skala für Rest der App
-    var averageScoreNormalizedTo10: Double {
+    nonisolated var averageScoreNormalizedTo10: Double {
         (averageStars / 3.0) * 10.0
     }
 }
@@ -273,7 +273,7 @@ extension Movie {
     }
 
     /// Overall-Bewertung (0–10) über alle User
-    var averageRating: Double? {
+    nonisolated var averageRating: Double? {
         guard !ratings.isEmpty else { return nil }
         let all = ratings.map { $0.averageScoreNormalizedTo10 }
         let total = all.reduce(0, +)
@@ -281,7 +281,7 @@ extension Movie {
     }
 
     /// Ø Fazit (1–10) über alle User, die ein Fazit vergeben haben
-    var averageFazit: Double? {
+    nonisolated var averageFazit: Double? {
         let values = ratings.compactMap { $0.fazitScore }.map { Double($0) }
         guard !values.isEmpty else { return nil }
         let total = values.reduce(0, +)
@@ -291,7 +291,7 @@ extension Movie {
     /// Gruppen-Ø je nach Anzeige-Modus.
     /// - ratingAverage: Kriterien-Ø (wie bisher)
     /// - fazitAverage: Fazit-Ø (mit Fallback auf Kriterien-Ø für Legacy)
-    func groupAverage(for mode: RatingDisplayMode) -> Double? {
+    nonisolated func groupAverage(for mode: RatingDisplayMode) -> Double? {
         switch mode {
         case .ratingAverage:
             return averageRating
@@ -301,7 +301,7 @@ extension Movie {
     }
 
     /// Anzeige-Ø je nach Modus – fällt auf TMDb zurück, wenn die Gruppe noch nichts hat.
-    func displayAverage(for mode: RatingDisplayMode) -> Double? {
+    nonisolated func displayAverage(for mode: RatingDisplayMode) -> Double? {
         groupAverage(for: mode) ?? tmdbRating
     }
 

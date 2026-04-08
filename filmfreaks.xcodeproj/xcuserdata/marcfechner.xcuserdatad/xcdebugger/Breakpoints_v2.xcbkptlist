@@ -18,6 +18,78 @@
             endingLineNumber = "13"
             landmarkName = "StatsViewModel"
             landmarkType = "3">
+            <Locations>
+               <Location
+                  uuid = "B4CECCF5-505A-411C-9719-C066C71DC845 - b3127f4cb9497de3"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "property wrapper backing initializer of filmfreaks.StatsViewModel.snapshot : filmfreaks.StatsSnapshot"
+                  moduleName = "filmfreaks.debug.dylib"
+                  usesParentBreakpointCondition = "Yes"
+                  urlString = "file:///Users/marcfechner/Desktop/filmfreaks/filmfreaks/filmfreaks/Stats/StatsViewModel.swift"
+                  startingColumnNumber = "9223372036854775807"
+                  endingColumnNumber = "9223372036854775807"
+                  startingLineNumber = "14"
+                  endingLineNumber = "14">
+               </Location>
+               <Location
+                  uuid = "B4CECCF5-505A-411C-9719-C066C71DC845 - 47a82bd5af67abba"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "filmfreaks.StatsViewModel.snapshot.getter : filmfreaks.StatsSnapshot"
+                  moduleName = "filmfreaks.debug.dylib"
+                  usesParentBreakpointCondition = "Yes"
+                  urlString = "file:///Users/marcfechner/Desktop/filmfreaks/filmfreaks/filmfreaks/Stats/StatsViewModel.swift"
+                  startingColumnNumber = "9223372036854775807"
+                  endingColumnNumber = "9223372036854775807"
+                  startingLineNumber = "0"
+                  endingLineNumber = "0">
+               </Location>
+               <Location
+                  uuid = "B4CECCF5-505A-411C-9719-C066C71DC845 - b43d2203bbcd14a8"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "filmfreaks.StatsViewModel.snapshot.setter : filmfreaks.StatsSnapshot"
+                  moduleName = "filmfreaks.debug.dylib"
+                  usesParentBreakpointCondition = "Yes"
+                  urlString = "file:///Users/marcfechner/Desktop/filmfreaks/filmfreaks/filmfreaks/Stats/StatsViewModel.swift"
+                  startingColumnNumber = "9223372036854775807"
+                  endingColumnNumber = "9223372036854775807"
+                  startingLineNumber = "14"
+                  endingLineNumber = "14">
+               </Location>
+               <Location
+                  uuid = "B4CECCF5-505A-411C-9719-C066C71DC845 - 6775c931527e1853"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "filmfreaks.StatsViewModel.$snapshot.getter : Combine.Published&lt;filmfreaks.StatsSnapshot&gt;.Publisher"
+                  moduleName = "filmfreaks.debug.dylib"
+                  usesParentBreakpointCondition = "Yes"
+                  urlString = "file:///Users/marcfechner/Desktop/filmfreaks/filmfreaks/filmfreaks/Stats/StatsViewModel.swift"
+                  startingColumnNumber = "9223372036854775807"
+                  endingColumnNumber = "9223372036854775807"
+                  startingLineNumber = "0"
+                  endingLineNumber = "0">
+               </Location>
+               <Location
+                  uuid = "B4CECCF5-505A-411C-9719-C066C71DC845 - 11c0640666a3be1e"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "filmfreaks.StatsViewModel.$snapshot.setter : Combine.Published&lt;filmfreaks.StatsSnapshot&gt;.Publisher"
+                  moduleName = "filmfreaks.debug.dylib"
+                  usesParentBreakpointCondition = "Yes"
+                  urlString = "file:///Users/marcfechner/Desktop/filmfreaks/filmfreaks/%3Cstdin%3E"
+                  startingColumnNumber = "9223372036854775807"
+                  endingColumnNumber = "9223372036854775807"
+                  startingLineNumber = "0"
+                  endingLineNumber = "0">
+               </Location>
+            </Locations>
          </BreakpointContent>
       </BreakpointProxy>
    </Breakpoints>
