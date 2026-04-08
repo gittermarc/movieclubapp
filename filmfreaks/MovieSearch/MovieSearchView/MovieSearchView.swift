@@ -119,136 +119,40 @@ struct MovieSearchView: View {
                 .ignoresSafeArea()
 
                 VStack(spacing: 12) {
+                    MovieSearchIdleContentView(
+                        viewState: viewState,
+                        recentQueries: recentQueries,
+                        recommendations: recommendations,
+                        isLoadingRecommendations: isLoadingRecommendations,
+                        recommendationsError: recommendationsError,
+                        recommendationsSeedTitle: recommendationsSeedTitle,
+                        recommendationsLastUpdated: recommendationsLastUpdated,
+                        skeletonPulse: $skeletonPulse,
+                        membershipState: membershipState(for:),
+                        onRecentQueryTap: handleRecentQueryTap,
+                        onClearHistory: handleClearHistory,
+                        onRefreshRecommendations: handleRecommendationsRefresh,
+                        onOpenDetail: openDetail,
+                        onAddToWatched: handleAddToWatched,
+                        onAddToBacklog: handleAddToBacklog
+                    )
 
-                    // ✅ Zuletzt gesucht
-                    if query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, !recentQueries.isEmpty {
-                        MovieSearchRecentQueriesView(
-                            recentQueries: recentQueries,
-                            onTap: { term in
-                                query = term
-                                startSearch(reset: true)
-                            },
-                            onClearHistory: {
-                                SearchHistoryManager.clear()
-                                recentQueries = []
-                            }
-                        )
-                    }
-
-                    // ✅ Inspirationen nur im „Idle“-State
-                    if shouldShowRecommendations {
-                        MovieSearchRecommendationsSectionView(
-                            recommendations: recommendations,
-                            isLoading: isLoadingRecommendations,
-                            errorMessage: recommendationsError,
-                            seedTitle: recommendationsSeedTitle,
-                            lastUpdated: recommendationsLastUpdated,
-                            skeletonPulse: $skeletonPulse,
-                            onRefresh: {
-                                Task { await loadRecommendationsIfNeeded(force: true) }
-                            },
-                            cardContent: { result in
-                                let key = MovieSearchMapper.key(for: result)
-                                let isWatched = localWatchedKeys.contains(key)
-                                let isBacklog = localBacklogKeys.contains(key)
-
-                                MovieSearchRecommendationCardView(
-                                    result: result,
-                                    isInWatched: isWatched,
-                                    isInBacklog: isBacklog,
-                                    onOpenDetail: {
-                                        openDetail(result)
-                                    },
-                                    onAddToWatched: {
-                                        let movie = MovieSearchMapper.convertToMovie(result)
-                                        onAddToWatched(movie)
-                                        localWatchedKeys.insert(key)
-                                        showConfirmation("Zu „Gesehen“ hinzugefügt")
-                                    },
-                                    onAddToBacklog: {
-                                        let movie = MovieSearchMapper.convertToMovie(result)
-                                        onAddToBacklog(movie)
-                                        localBacklogKeys.insert(key)
-                                        showConfirmation("Zum Backlog hinzugefügt")
-                                    }
-                                )
-                            }
-                        )
-                    }
-
-                    // Fehleranzeige
-                    if let errorMessage {
-                        Text(errorMessage)
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal)
-                    }
-
-                    // Ergebnisse / Skeleton
-                    if isLoading && results.isEmpty {
-                        MovieSearchSkeletonResultsView(
-                            pulse: $skeletonPulse,
-                            keyboardHeight: keyboard.height,
-                            keyboardAnimationDuration: keyboard.animationDuration
-                        )
-                        .onAppear {
-                            withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) {
-                                skeletonPulse.toggle()
-                            }
-                        }
-                    } else if results.isEmpty && !isLoading && !query.isEmpty {
-                        Text("Keine Treffer. Bitte prüfe die Schreibweise.")
-                            .foregroundStyle(.secondary)
-                            .padding(.top, 40)
-                    } else if !resultsModel.sortedResults.isEmpty {
-                        MovieSearchResultsListView(
-                            results: resultsModel.sortedResults,
-                            canLoadMore: canLoadMore,
-                            isLoadingMore: isLoadingMore,
-                            totalResults: totalResults,
-                            keyboardHeight: keyboard.height,
-                            keyboardAnimationDuration: keyboard.animationDuration,
-                            onLoadMore: {
-                                startLoadMore()
-                            },
-                            rowContent: { result in
-                                let key = MovieSearchMapper.key(for: result)
-                                let isWatched = localWatchedKeys.contains(key)
-                                let isBacklog = localBacklogKeys.contains(key)
-
-                                MovieSearchResultCardView(
-                                    result: result,
-                                    isInWatched: isWatched,
-                                    isInBacklog: isBacklog,
-                                    onOpenDetail: {
-                                        openDetail(result)
-                                    },
-                                    onAddToWatched: {
-                                        let movie = MovieSearchMapper.convertToMovie(result)
-                                        onAddToWatched(movie)
-                                        localWatchedKeys.insert(key)
-                                        showConfirmation("Zu „Gesehen“ hinzugefügt")
-                                    },
-                                    onAddToBacklog: {
-                                        let movie = MovieSearchMapper.convertToMovie(result)
-                                        onAddToBacklog(movie)
-                                        localBacklogKeys.insert(key)
-                                        showConfirmation("Zum Backlog hinzugefügt")
-                                    }
-                                )
-                            }
-                        )
-                    } else if !isLoading && query.isEmpty && recentQueries.isEmpty && !isSearchFieldFocused {
-                        // Nur anzeigen, wenn wirklich gar kein Verlauf existiert
-                        VStack(spacing: 8) {
-                            Image(systemName: "magnifyingglass")
-                                .font(.largeTitle)
-                                .foregroundStyle(.secondary)
-                            Text("Suche nach Filmtiteln auf TMDb")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                        }
-                        .padding(.top, 40)
-                    }
+                    MovieSearchResultsContentView(
+                        viewState: viewState,
+                        errorMessage: errorMessage,
+                        results: resultsModel.sortedResults,
+                        canLoadMore: canLoadMore,
+                        isLoadingMore: isLoadingMore,
+                        totalResults: totalResults,
+                        keyboardHeight: keyboard.height,
+                        keyboardAnimationDuration: keyboard.animationDuration,
+                        skeletonPulse: $skeletonPulse,
+                        membershipState: membershipState(for:),
+                        onLoadMore: startLoadMore,
+                        onOpenDetail: openDetail,
+                        onAddToWatched: handleAddToWatched,
+                        onAddToBacklog: handleAddToBacklog
+                    )
 
                     Spacer(minLength: 0)
                 }
@@ -280,12 +184,10 @@ struct MovieSearchView: View {
                     isInitiallyInWatched: isWatched,
                     isInitiallyInBacklog: isBacklog,
                     onAddToWatched: { movie in
-                        onAddToWatched(movie)
-                        localWatchedKeys.insert(key)
+                        handleDetailAddToWatched(movie, key: key)
                     },
                     onAddToBacklog: { movie in
-                        onAddToBacklog(movie)
-                        localBacklogKeys.insert(key)
+                        handleDetailAddToBacklog(movie, key: key)
                     }
                 )
             }
