@@ -17,6 +17,7 @@ struct TimelineView: View {
     @State var filterMode: TimelineFilterMode = .year
     @State var selectedRange: TimelineTimeRange = .thisYear
     @State var selectedYear: Int = Calendar.current.component(.year, from: Date())
+    @State var snapshot = TimelineSnapshot()
 
     // MARK: - Tuning (hier kannst du später easy nachjustieren)
     private let cardAspectRatio: CGFloat = 2.0 / 3.0      // 👈 Poster-Format (höher)
@@ -37,19 +38,19 @@ struct TimelineView: View {
                             filterMode: $filterMode,
                             selectedRange: $selectedRange,
                             selectedYear: $selectedYear,
-                            availableYears: availableYears,
-                            movieCount: filteredMovies.count
+                            availableYears: snapshot.availableYears,
+                            movieCount: snapshot.filteredMovies.count
                         )
                         .padding(.horizontal)
                         .padding(.top)
                         .padding(.bottom, 6)
 
-                        if filteredMovies.isEmpty {
+                        if snapshot.filteredMovies.isEmpty {
                             TimelineEmptyStateView()
                                 .padding(.horizontal)
                                 .padding(.top, 12)
                         } else {
-                            ForEach(monthGroups, id: \.monthStart) { group in
+                            ForEach(snapshot.monthGroups, id: \.monthStart) { group in
                                 Section {
                                     LazyVStack(alignment: .leading, spacing: 18) {
                                         ForEach(group.movies) { movie in
@@ -84,9 +85,19 @@ struct TimelineView: View {
                 }
             }
             .onAppear {
-                if !availableYears.contains(selectedYear), let first = availableYears.first {
-                    selectedYear = first
-                }
+                updateSnapshot()
+            }
+            .onChange(of: movieStore.movies) { _, _ in
+                updateSnapshot()
+            }
+            .onChange(of: filterMode) { _, _ in
+                updateSnapshot()
+            }
+            .onChange(of: selectedRange) { _, _ in
+                updateSnapshot()
+            }
+            .onChange(of: selectedYear) { _, _ in
+                updateSnapshot()
             }
         }
     }
