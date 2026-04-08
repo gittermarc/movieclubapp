@@ -24,23 +24,15 @@ final class ContentActivityPreviewModel: ObservableObject {
         currentGroupId: String,
         ratingDisplayMode: RatingDisplayMode
     ) {
-        let movieItems = movieStore
-            .activityEvents(displayMode: ratingDisplayMode, limit: 10)
-            .map { UnifiedGroupActivityEvent(movieEvent: $0) }
+        let snapshot = ContentActivityPreviewSnapshotBuilder.build(
+            input: .init(
+                movieEvents: movieStore.activityEvents(displayMode: ratingDisplayMode),
+                movieNightEvents: currentGroupId.isEmpty
+                    ? []
+                    : movieNightStore.activityEvents(for: currentGroupId)
+            )
+        )
 
-        let nightItems: [UnifiedGroupActivityEvent]
-        if currentGroupId.isEmpty {
-            nightItems = []
-        } else {
-            nightItems = movieNightStore
-                .activityEvents(for: currentGroupId)
-                .prefix(10)
-                .map { UnifiedGroupActivityEvent(movieNightActivity: $0) }
-        }
-
-        let combined = (movieItems + nightItems)
-            .sorted(by: { $0.date > $1.date })
-
-        self.items = Array(combined.prefix(3))
+        self.items = snapshot.items
     }
 }
