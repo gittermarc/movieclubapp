@@ -22,16 +22,20 @@ extension GoalsView {
     }
 
     var customGoalsForSelectedYear: [ViewingCustomGoal] {
-        customGoals.filter { $0.isActive(in: selectedYear) }
+        goalsStore.customGoals.filter { $0.isActive(in: selectedYear) }
     }
 
     var yearlyTarget: Int {
-        goalsByYear[selectedYear] ?? defaultYearlyGoal
+        goalsStore.goalsByYear[selectedYear] ?? goalsStore.defaultYearlyGoal
     }
 
     var yearlyProgress: Double {
         guard yearlyTarget > 0 else { return 0 }
         return min(1.0, Double(moviesInSelectedYear.count) / Double(yearlyTarget))
+    }
+
+    var isSyncingGoals: Bool {
+        goalsStore.isSyncingGoals
     }
 
     var availableDecades: [Int] {

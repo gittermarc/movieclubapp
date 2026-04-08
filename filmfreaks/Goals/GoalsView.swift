@@ -10,15 +10,15 @@ internal import SwiftUI
 
 // MARK: - GoalsView
 
+@MainActor
 struct GoalsView: View {
 
     @EnvironmentObject var movieStore: MovieStore
 
     @State var selectedYear: Int = Calendar.current.component(.year, from: Date())
-    @State var goalsByYear: [Int: Int] = [:]
+    @StateObject var goalsStore = GoalsStore()
 
     // ✅ Custom Goals (v3+)
-    @State var customGoals: [ViewingCustomGoal] = []
     @State var goalBeingEdited: ViewingCustomGoal? = nil
     @State var selectedGoalForDetail: ViewingCustomGoal? = nil
 
@@ -28,18 +28,6 @@ struct GoalsView: View {
 
     // Matching-Metadaten-Enrichment (optional, nur wenn Goals es brauchen)
     @State var isEnrichingMetadata = false
-
-    // Sync handling (für Jahresziele + Custom Goals)
-    @State var syncCount: Int = 0
-    var isSyncingGoals: Bool { syncCount > 0 }
-
-    let yearlyGoalsStorageKey = "ViewingGoalsByYear.v1"
-    let defaultYearlyGoal = 50
-
-    var customGoalsStorageKey: String {
-        let gid = movieStore.currentGroupId ?? ""
-        return "ViewingCustomGoals.v3.\(gid)"
-    }
 
     // MARK: - Body
 
@@ -59,7 +47,7 @@ struct GoalsView: View {
 
                     GoalsCustomGoalsSectionView(
                         visibleGoals: sortedCustomGoals(),
-                        allGoalsCount: customGoals.count,
+                        allGoalsCount: goalsStore.customGoals.count,
                         selectedYear: selectedYear,
                         matchesProvider: { goal in
                             matchingMovies(for: goal)
