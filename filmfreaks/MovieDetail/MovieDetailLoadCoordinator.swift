@@ -2,7 +2,7 @@
 //  MovieDetailLoadCoordinator.swift
 //  filmfreaks
 //
-//  Created by OpenAI on 09.04.26.
+//  Created by Marc Fechner on 09.04.26.
 //
 
 import Foundation

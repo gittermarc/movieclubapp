@@ -2,7 +2,7 @@
 //  GoalsStore.swift
 //  filmfreaks
 //
-//  Created by OpenAI on 08.04.26.
+//  Created by Marc Fechner on 08.04.26.
 //
 
 internal import SwiftUI
