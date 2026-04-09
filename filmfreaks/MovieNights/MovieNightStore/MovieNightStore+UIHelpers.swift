@@ -2,7 +2,7 @@
 //  MovieNightStore+UIHelpers.swift
 //  filmfreaks
 //
-//  Split from MovieNightStore.swift (P0.3)
+//  Read-oriented helpers retained from MovieNightStore.swift (MOVIENIGHT-STORE-RESPONSIBILITY-SPLIT-1)
 //
 
 import Foundation

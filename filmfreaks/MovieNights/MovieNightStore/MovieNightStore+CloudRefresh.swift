@@ -1,8 +1,8 @@
 //
-//  MovieNightStore+CloudFlush.swift
+//  MovieNightStore+CloudRefresh.swift
 //  filmfreaks
 //
-//  Split from MovieNightStore.swift (P0.3)
+//  Split from MovieNightStore+CloudFlush.swift (MOVIENIGHT-STORE-RESPONSIBILITY-SPLIT-1)
 //
 
 import Foundation
@@ -33,8 +33,8 @@ extension MovieNightStore {
         }
 
         // Ensure local snapshot has been loaded, otherwise we'd overwrite cloud merges.
-        if let t = initialLoadTask {
-            await t.value
+        if let task = initialLoadTask {
+            await task.value
         }
 
         if isRefreshingFromCloud { return }
@@ -67,110 +67,6 @@ extension MovieNightStore {
         }
     }
 
-    // MARK: - Cloud write (Phase 4)
-
-    func flushPendingCloudChanges() {
-        cloudSyncCoordinator?.flushImmediately()
-    }
-
-    func queueCloudWrites(
-        groupId: String,
-        eventToSave: MovieNightEvent?,
-        responsesToSave: [MovieNightResponse],
-        activityToSave: [MovieNightActivityEvent],
-        eventIDsToDelete: [UUID],
-        responseDeletes: [(UUID, UUID)],
-        activityIDsToDelete: [UUID]
-    ) {
-        guard useCloud, cloudStore != nil, let coordinator = cloudSyncCoordinator else { return }
-
-        let gid = groupId.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !gid.isEmpty else { return }
-
-        ensureSyncMetaLoaded(forGroupId: gid)
-
-        if let eventToSave {
-            coordinator.queueEventSave(eventToSave, groupId: gid)
-        }
-
-        for id in eventIDsToDelete {
-            coordinator.queueEventDelete(eventId: id, groupId: gid)
-        }
-
-        for r in responsesToSave {
-            coordinator.queueResponseSave(r, groupId: gid)
-        }
-
-        for (eventId, userId) in responseDeletes {
-            coordinator.queueResponseDelete(eventId: eventId, userId: userId, groupId: gid)
-        }
-
-        for a in activityToSave {
-            coordinator.queueActivitySave(a, groupId: gid)
-        }
-
-        for id in activityIDsToDelete {
-            coordinator.queueActivityDelete(activityId: id, groupId: gid)
-        }
-    }
-
-    // MARK: - Sync meta
-
-    func beginSync() {
-        syncCount += 1
-        if syncCount == 1 {
-            isSyncing = true
-        }
-    }
-
-    func endSync() {
-        syncCount = max(0, syncCount - 1)
-        if syncCount == 0 {
-            isSyncing = false
-        }
-    }
-
-    func applyPendingCount(_ count: Int, forGroupId groupId: String) {
-        pendingCloudChangesByGroup[groupId] = count
-        UserDefaults.standard.set(count, forKey: syncMetaKey(groupId, "pending"))
-    }
-
-    func markCloudSyncSuccess(forGroupId groupId: String) {
-        lastCloudSyncAtByGroup[groupId] = .now
-        lastCloudSyncErrorByGroup.removeValue(forKey: groupId)
-
-        UserDefaults.standard.set(Date(), forKey: syncMetaKey(groupId, "lastAt"))
-        UserDefaults.standard.removeObject(forKey: syncMetaKey(groupId, "lastError"))
-    }
-
-    func markCloudSyncFailure(_ error: Error, forGroupId groupId: String) {
-        let msg = String(describing: error)
-        lastCloudSyncErrorByGroup[groupId] = msg
-        UserDefaults.standard.set(msg, forKey: syncMetaKey(groupId, "lastError"))
-    }
-
-    func ensureSyncMetaLoaded(forGroupId groupId: String) {
-        // Only load once per group. Pending count can legitimately be 0.
-        if pendingCloudChangesByGroup.keys.contains(groupId) {
-            return
-        }
-
-        let pending = UserDefaults.standard.integer(forKey: syncMetaKey(groupId, "pending"))
-        pendingCloudChangesByGroup[groupId] = pending
-
-        if let lastAt = UserDefaults.standard.object(forKey: syncMetaKey(groupId, "lastAt")) as? Date {
-            lastCloudSyncAtByGroup[groupId] = lastAt
-        }
-
-        if let err = UserDefaults.standard.string(forKey: syncMetaKey(groupId, "lastError")), !err.isEmpty {
-            lastCloudSyncErrorByGroup[groupId] = err
-        }
-    }
-
-    func syncMetaKey(_ groupId: String, _ suffix: String) -> String {
-        Self.syncMetaPrefix + groupId + "." + suffix
-    }
-
     // MARK: - Cloud merge helpers
 
     func applyCloudChanges(_ delta: CloudKitMovieNightStore.MovieNightChanges, groupId: String) {
@@ -191,14 +87,14 @@ extension MovieNightStore {
         var current = eventsByGroup[groupId] ?? []
         var byId: [UUID: MovieNightEvent] = Dictionary(uniqueKeysWithValues: current.map { ($0.id, $0) })
 
-        for e in changed {
-            if let local = byId[e.id] {
+        for event in changed {
+            if let local = byId[event.id] {
                 // Keep the newest version (best-effort, local can still be ahead in Phase 3).
-                if local.updatedAt >= e.updatedAt {
+                if local.updatedAt >= event.updatedAt {
                     continue
                 }
             }
-            byId[e.id] = e
+            byId[event.id] = event
         }
 
         for id in deleted {
@@ -214,14 +110,14 @@ extension MovieNightStore {
         let current = responsesByGroup[groupId] ?? []
         var byId: [String: MovieNightResponse] = Dictionary(uniqueKeysWithValues: current.map { ($0.id, $0) })
 
-        for r in changed {
-            if let local = byId[r.id] {
+        for response in changed {
+            if let local = byId[response.id] {
                 // respondedAt is our best proxy for "newer".
-                if local.respondedAt >= r.respondedAt {
+                if local.respondedAt >= response.respondedAt {
                     continue
                 }
             }
-            byId[r.id] = r
+            byId[response.id] = response
         }
 
         for id in deleted {
@@ -235,8 +131,8 @@ extension MovieNightStore {
         var current = activityByGroup[groupId] ?? []
         var byId: [UUID: MovieNightActivityEvent] = Dictionary(uniqueKeysWithValues: current.map { ($0.id, $0) })
 
-        for a in changed {
-            byId[a.id] = a
+        for activity in changed {
+            byId[activity.id] = activity
         }
 
         for id in deleted {
