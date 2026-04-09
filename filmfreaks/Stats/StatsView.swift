@@ -88,34 +88,17 @@ struct StatsView: View {
             .background(Color(.systemGroupedBackground).ignoresSafeArea())
             .navigationTitle("Statistiken")
         }
-        .onAppear {
-            refreshStatsSnapshot()
-        }
-        .onChange(of: selectedRange) {
-            refreshStatsSnapshot()
-        }
-        .onChange(of: selectedLocationFilter) {
-            refreshStatsSnapshot()
-        }
-        .onChange(of: movieStore.movies) {
-            refreshStatsSnapshot()
-        }
-        .onChange(of: userStore.users) {
-            refreshStatsSnapshot()
-        }
-        .onChange(of: displaySettings.ratingDisplayMode) {
+        .task(id: statsRefreshInputs) {
             refreshStatsSnapshot()
         }
         .onReceive(viewModel.$snapshot) { _ in
             // Snapshot wird debounced/off-main gebaut. Sobald er wirklich da ist,
             // können wir die UI-Orders darauf basieren (Genre-Order) und bei Actors
             // die UI-Orders darauf basieren (Genre-Order).
-            setGenreDisplayOrderNow()
+            handleSnapshotUpdate()
         }
         .onChange(of: actorsDisclosureExpanded) {
-            if !actorsDisclosureExpanded {
-                showAllActors = false
-            }
+            handleActorsDisclosureExpandedChange()
         }
         .sheet(isPresented: $showingActorSheet) {
             actorDetailSheet()
@@ -126,16 +109,6 @@ struct StatsView: View {
         .sheet(item: $selectedDrilldown) { drilldown in
             drilldownMoviesSheet(drilldown)
         }
-    }
-
-    private func refreshStatsSnapshot() {
-        viewModel.update(
-            movies: movieStore.movies,
-            users: userStore.users,
-            ratingDisplayMode: displaySettings.ratingDisplayMode,
-            selectedRange: selectedRange,
-            selectedLocationFilter: selectedLocationFilter
-        )
     }
 }
 
