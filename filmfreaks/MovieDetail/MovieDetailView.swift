@@ -8,6 +8,7 @@
 internal import SwiftUI
 internal import UIKit
 
+@MainActor
 struct MovieDetailView: View {
 
     @Binding var movie: Movie
@@ -29,20 +30,13 @@ struct MovieDetailView: View {
     @State var localComment: String = ""
     @State var localFazitScore: Int? = nil
 
-    // TMDb Details
-    @State var details: TMDbMovieDetails?
-    @State var isLoadingDetails = false
-    @State var detailsError: String?
+    @StateObject var loadCoordinator = MovieDetailLoadCoordinator()
 
     // Streaming-Anbieter (Watch Providers)
-    @State var watchProvidersCountry: TMDbWatchProvidersCountry? = nil
-    @State var watchProvidersLink: URL? = nil
-    @State var isLoadingWatchProviders: Bool = false
-    @State var didLoadWatchProviders: Bool = false
     @State var showWatchProvidersRegionPicker: Bool = false
 
     /// Effektives Land für Watch Providers (leer == automatisch/Device)
-    private var effectiveWatchProvidersRegionCode: String {
+    var effectiveWatchProvidersRegionCode: String {
         WatchProvidersRegionSettings.effectiveRegionCode(from: watchProvidersRegionCode)
         ?? WatchProvidersRegionSettings.deviceRegionCode()
     }
@@ -109,10 +103,10 @@ struct MovieDetailView: View {
 
                     // Watch Providers
                     MovieDetailWatchProvidersSectionView(
-                        isLoading: isLoadingWatchProviders,
-                        didLoad: didLoadWatchProviders,
-                        country: watchProvidersCountry,
-                        link: watchProvidersLink,
+                        isLoading: loadCoordinator.isLoadingWatchProviders,
+                        didLoad: loadCoordinator.didLoadWatchProviders,
+                        country: loadCoordinator.watchProvidersCountry,
+                        link: loadCoordinator.watchProvidersLink,
                         regionCode: effectiveWatchProvidersRegionCode,
                         isAutomatic: isWatchProvidersRegionAutomatic
                     ) {
@@ -140,7 +134,7 @@ struct MovieDetailView: View {
                     }
 
                     // TMDb Loading/Error
-                    if isLoadingDetails {
+                    if loadCoordinator.isLoadingDetails {
                         MovieDetailSectionCard {
                             HStack {
                                 ProgressView()
@@ -150,7 +144,7 @@ struct MovieDetailView: View {
                         }
                     }
 
-                    if let error = detailsError {
+                    if let error = loadCoordinator.detailsError {
                         MovieDetailSectionCard {
                             Text(error)
                                 .font(.caption)

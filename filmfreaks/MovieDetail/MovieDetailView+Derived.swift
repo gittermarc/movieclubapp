@@ -12,28 +12,28 @@ extension MovieDetailView {
     // MARK: - Metadaten aus TMDb
 
     var director: String? {
-        details?.credits?.crew.first(where: { ($0.job ?? "").lowercased() == "director" })?.name
+        loadCoordinator.details?.credits?.crew.first(where: { ($0.job ?? "").lowercased() == "director" })?.name
     }
 
     var castList: [TMDbCast] {
-        Array(details?.credits?.cast.prefix(12) ?? [])
+        Array(loadCoordinator.details?.credits?.cast.prefix(12) ?? [])
     }
 
     var keywordsText: String? {
-        guard let all = details?.keywords?.allKeywords, !all.isEmpty else { return nil }
+        guard let all = loadCoordinator.details?.keywords?.allKeywords, !all.isEmpty else { return nil }
         let names = all.map { $0.name }
         return names.joined(separator: ", ")
     }
 
     var genreNames: [String] {
-        details?.genres?
+        loadCoordinator.details?.genres?
             .map { $0.name }
             .filter { !$0.isEmpty }
         ?? []
     }
 
     private var trailerVideo: TMDbVideo? {
-        guard let videos = details?.videos?.results else { return nil }
+        guard let videos = loadCoordinator.details?.videos?.results else { return nil }
         let youtube = videos.filter { $0.site.lowercased() == "youtube" }
 
         if let trailer = youtube.first(where: { $0.type.lowercased() == "trailer" }) { return trailer }
@@ -51,24 +51,24 @@ extension MovieDetailView {
     }
 
     var runtimeText: String? {
-        if let runtime = details?.runtime {
+        if let runtime = loadCoordinator.details?.runtime {
             return "\(runtime) Minuten"
         }
         return nil
     }
 
     var taglineText: String? {
-        let t = (details?.tagline ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let t = (loadCoordinator.details?.tagline ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         return t.isEmpty ? nil : t
     }
 
     var overviewText: String? {
-        let t = (details?.overview ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let t = (loadCoordinator.details?.overview ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         return t.isEmpty ? nil : t
     }
 
     var releaseDateText: String? {
-        guard let raw = details?.release_date, !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        guard let raw = loadCoordinator.details?.release_date, !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
         let inFmt = DateFormatter()
         inFmt.locale = Locale(identifier: "en_US_POSIX")
         inFmt.dateFormat = "yyyy-MM-dd"
@@ -85,15 +85,15 @@ extension MovieDetailView {
     }
 
     var originalTitleText: String? {
-        let o = (details?.original_title ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let o = (loadCoordinator.details?.original_title ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         guard !o.isEmpty else { return nil }
-        if o.caseInsensitiveCompare(details?.title ?? "") == .orderedSame { return nil }
+        if o.caseInsensitiveCompare(loadCoordinator.details?.title ?? "") == .orderedSame { return nil }
         if o.caseInsensitiveCompare(movie.title) == .orderedSame { return nil }
         return o
     }
 
     var originalLanguageText: String? {
-        let code = (details?.original_language ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let code = (loadCoordinator.details?.original_language ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         guard !code.isEmpty else { return nil }
         let locale = Locale(identifier: "de_DE")
         return locale.localizedString(forLanguageCode: code)?.capitalized ?? code.uppercased()
