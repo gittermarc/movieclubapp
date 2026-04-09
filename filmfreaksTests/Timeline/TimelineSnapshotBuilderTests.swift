@@ -99,6 +99,27 @@ struct TimelineSnapshotBuilderTests {
         #expect(snapshot.filteredMovies.map(\.title) == ["Inside Window", "Boundary Day"])
     }
 
+
+    @Test func rangeAllReturnsAllWatchedMoviesSortedNewestFirst() {
+        let calendar = makeCalendar()
+        let today = makeDate(year: 2026, month: 4, day: 8, calendar: calendar)
+
+        let snapshot = TimelineSnapshotBuilder.build(
+            movies: [
+                makeMovie(title: "Latest", watchedDate: makeDate(year: 2026, month: 4, day: 8, calendar: calendar)),
+                makeMovie(title: "Older", watchedDate: makeDate(year: 2025, month: 12, day: 31, calendar: calendar)),
+                makeMovie(title: "No Watch Date", watchedDate: nil)
+            ],
+            filterMode: .range,
+            selectedRange: .all,
+            selectedYear: 2026,
+            today: today,
+            calendar: calendar
+        )
+
+        #expect(snapshot.filteredMovies.map(\.title) == ["Latest", "Older"])
+    }
+
     @Test func monthGroupsAreSortedNewestFirstAndKeepMoviesSortedWithinMonth() {
         let calendar = makeCalendar()
         let today = makeDate(year: 2026, month: 4, day: 8, calendar: calendar)

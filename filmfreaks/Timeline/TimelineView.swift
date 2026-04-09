@@ -14,10 +14,7 @@ struct TimelineView: View {
     @EnvironmentObject var displaySettings: DisplaySettings
     @Environment(\.dismiss) private var dismiss
 
-    @State var filterMode: TimelineFilterMode = .year
-    @State var selectedRange: TimelineTimeRange = .thisYear
-    @State var selectedYear: Int = Calendar.current.component(.year, from: Date())
-    @State var snapshot = TimelineSnapshot()
+    @StateObject var viewModel = TimelineViewModel()
 
     // MARK: - Tuning (hier kannst du später easy nachjustieren)
     private let cardAspectRatio: CGFloat = 2.0 / 3.0      // 👈 Poster-Format (höher)
@@ -35,22 +32,22 @@ struct TimelineView: View {
 
                         TimelineHeaderView(
                             groupName: movieStore.currentGroupName,
-                            filterMode: $filterMode,
-                            selectedRange: $selectedRange,
-                            selectedYear: $selectedYear,
-                            availableYears: snapshot.availableYears,
-                            movieCount: snapshot.filteredMovies.count
+                            filterMode: filterModeBinding,
+                            selectedRange: selectedRangeBinding,
+                            selectedYear: selectedYearBinding,
+                            availableYears: viewModel.snapshot.availableYears,
+                            movieCount: viewModel.snapshot.filteredMovies.count
                         )
                         .padding(.horizontal)
                         .padding(.top)
                         .padding(.bottom, 6)
 
-                        if snapshot.filteredMovies.isEmpty {
+                        if viewModel.snapshot.filteredMovies.isEmpty {
                             TimelineEmptyStateView()
                                 .padding(.horizontal)
                                 .padding(.top, 12)
                         } else {
-                            ForEach(snapshot.monthGroups, id: \.monthStart) { group in
+                            ForEach(viewModel.snapshot.monthGroups, id: \.monthStart) { group in
                                 Section {
                                     LazyVStack(alignment: .leading, spacing: 18) {
                                         ForEach(group.movies) { movie in
@@ -85,19 +82,10 @@ struct TimelineView: View {
                 }
             }
             .onAppear {
-                updateSnapshot()
+                viewModel.updateMovies(movieStore.movies)
             }
-            .onChange(of: movieStore.movies) { _, _ in
-                updateSnapshot()
-            }
-            .onChange(of: filterMode) { _, _ in
-                updateSnapshot()
-            }
-            .onChange(of: selectedRange) { _, _ in
-                updateSnapshot()
-            }
-            .onChange(of: selectedYear) { _, _ in
-                updateSnapshot()
+            .onChange(of: movieStore.movies) { _, newMovies in
+                viewModel.updateMovies(newMovies)
             }
         }
     }

@@ -14,25 +14,25 @@ extension TimelineView {
         return df
     }
 
-    func updateSnapshot() {
-        var nextSnapshot = TimelineSnapshotBuilder.build(
-            movies: movieStore.movies,
-            filterMode: filterMode,
-            selectedRange: selectedRange,
-            selectedYear: selectedYear
+    var filterModeBinding: Binding<TimelineFilterMode> {
+        Binding(
+            get: { viewModel.filterMode },
+            set: { viewModel.setFilterMode($0) }
         )
+    }
 
-        if filterMode == .year, !nextSnapshot.availableYears.contains(selectedYear), let firstYear = nextSnapshot.availableYears.first {
-            selectedYear = firstYear
-            nextSnapshot = TimelineSnapshotBuilder.build(
-                movies: movieStore.movies,
-                filterMode: filterMode,
-                selectedRange: selectedRange,
-                selectedYear: firstYear
-            )
-        }
+    var selectedRangeBinding: Binding<TimelineTimeRange> {
+        Binding(
+            get: { viewModel.selectedRange },
+            set: { viewModel.setSelectedRange($0) }
+        )
+    }
 
-        snapshot = nextSnapshot
+    var selectedYearBinding: Binding<Int> {
+        Binding(
+            get: { viewModel.selectedYear },
+            set: { viewModel.setSelectedYear($0) }
+        )
     }
 
     func binding(for movie: Movie) -> Binding<Movie>? {

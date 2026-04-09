@@ -1,471 +1,462 @@
 # PROJECT_CONTEXT.md
 
 ## TL;DR
-**filmfreaks** ist eine iPhone-/iPad-App mit sichtbarem Produktnamen **„The Movie Club“** (`filmfreaks/Content/ContentView.swift`), Deployment Target **iOS 26.0** (`filmfreaks.xcodeproj/project.pbxproj`). Die App verwaltet gruppenspezifische Film-Listen, Bewertungen, Filmabende, Statistiken und Ziele. **Wichtig:** Das Projekt nutzt **kein SwiftData/CoreData**. Persistenz und Sync basieren auf **JSON-Dateien in Application Support**, **UserDefaults** für kleine State-/Meta-Daten, **CloudKit** für Gruppen-/Sharing-Daten sowie mehrere lokale Caches (`filmfreaks/PersistenceManager.swift`, `filmfreaks/MovieNights/MovieNightLocalPersistence.swift`, `filmfreaks/CloudKitRouting.swift`).
+`filmfreaks` ist eine iOS/iPadOS-App für gemeinsame Film-Listen, Bewertungen, Gruppen-Sharing, Ziele, Timeline, Statistiken und Filmabend-Planung. Produktname/Binary ist `filmfreaks`, die Haupt-UI nennt sich in `filmfreaks/Content/ContentView.swift` aber „The Movie Club“. Deployment Target ist iOS 26.0, Gerätetypen sind iPhone + iPad (`filmfreaks.xcodeproj/project.pbxproj`). Persistenz ist **nicht** SwiftData/CoreData, sondern eine Mischung aus JSON-Dateien in Application Support, `UserDefaults` für kleine Metadaten/Settings und CloudKit für Sync/Sharing (`filmfreaks/PersistenceManager.swift`, `filmfreaks/MovieNights/MovieNightLocalPersistence.swift`, `filmfreaks/CloudKitRouting.swift`).
+
+---
 
 ## Key Concepts / Domänenbegriffe
-- **Movie**: Zentrales Domain-Objekt für beobachtete Filme oder Backlog-Einträge (`filmfreaks/Movie.swift`).
-- **Rating**: Nutzerbewertung pro Film, lokal im `Movie.ratings` eingebettet, in CloudKit aber als eigener Record-Typ `MovieRating` gespeichert (`filmfreaks/Movie.swift`, `filmfreaks/CloudKitRatingStore/CloudKitRatingStore+Schema.swift`).
-- **Group / GroupContext**: Routing-Metadaten für eine Filmgruppe. Enthält `groupId`, `scope`, `zoneName`, `ownerName` und entscheidet, ob Daten in private/shared DB + Zone oder legacy/public liegen (`filmfreaks/GroupContext.swift`, `filmfreaks/CloudKitRouting.swift`).
-- **Owned Group / Shared Group**: CloudKit-Record-Sharing-Modell. Owned = private Zone des Erstellers, Shared = angenommene Share-Zone (`filmfreaks/CloudKitGroupStore/CloudKitGroupStore.swift`).
-- **Default / Local Group**: Gruppe ohne `groupId` bzw. ohne routbaren `GroupContext`; nutzt lokale Dateien und legacy/public-Fallback für einzelne Cloud-Pfade (`filmfreaks/PersistenceManager.swift`, `filmfreaks/CloudKitRouting.swift`).
-- **Movie Night**: Gruppenspezifische Terminplanung für Filmabende mit Event, Antwort und Activity-Stream (`filmfreaks/MovieNights/MovieNightEvent.swift`, `filmfreaks/MovieNights/MovieNightResponse.swift`, `filmfreaks/MovieNights/MovieNightActivityEvent.swift`).
-- **Viewing Goal / Custom Goal**: Jahresziele und regelbasierte Sammelziele (Dekade, Person, Director, Genre, Keyword) (`filmfreaks/CloudKitGoalStore.swift`, `filmfreaks/ViewingCustomGoal.swift`, `filmfreaks/ViewingCustomGoalsPayload.swift`).
-- **Content Route**: Zentrale Sheet-Routing-Enum für die Hauptoberfläche (`filmfreaks/Content/ContentRouting.swift`).
-- **Push Deep Link**: Notification-getriebener Gruppenwechsel + Öffnen der Activity-Ansicht (`filmfreaks/Notifications/PushDeepLinkRouter.swift`, `filmfreaks/Content/ContentView.swift`).
+
+- **Movie**: Zentrales Domänenobjekt für gesehenen Film oder Backlog-Eintrag. Enthält Titel, Jahr, Ratings, TMDb-Metadaten, Cast/Directors, Gruppenbezug und Activity-Metadaten (`filmfreaks/Movie.swift`).
+- **Rating**: Nutzerbewertung pro Film mit Kriterien-Scores, optionalem Fazit-Score und stabiler Reviewer-Identität (`filmfreaks/Movie.swift`).
+- **Group / GroupContext**: Routing-Metadaten für CloudKit-Zonen und DB-Scope (private/shared). Der eigentliche Persistenzanker für Sharing (`filmfreaks/GroupContext.swift`).
+- **MovieStore**: Hauptstore für gesehene Filme, Backlog, aktuelle Gruppe und Cloud-Sync-Status (`filmfreaks/MovieStore/MovieStore.swift`).
+- **UserStore**: Gruppen-Mitglieder und aktive Nutzerselektion pro Gruppe (`filmfreaks/Users+Store/UserStore.swift`).
+- **Goals**: Jahresziele und flexible Custom Goals für Jahrzehnt, Person, Regie, Genre oder Keyword (`filmfreaks/Goals/GoalsStore.swift`, `filmfreaks/ViewingCustomGoal.swift`).
+- **Movie Night**: Vorschläge/Antworten/Aktivitäten für gemeinsame Filmabende, lokal persistent und optional via CloudKit synchronisiert (`filmfreaks/MovieNights/*`).
+- **Activity**: Aus Movies, Ratings und Movie-Night-Aktivitäten abgeleitete Gruppenereignisse für Header/Feed/Notifications (`filmfreaks/Content/UnifiedGroupActivityEvent.swift`, `filmfreaks/Notifications/*`).
+- **DisplaySettings**: Lokale UI- und Dichte-Einstellungen, komplett in `UserDefaults` abgelegt (`filmfreaks/Settings/DisplaySettings/*`).
+- **TMDbAPI**: Externe Datenquelle für Suche, Details, Personen, Genres und Watch Provider (`filmfreaks/TMDbAPI/*`).
+
+---
 
 ## Architecture Map
-### High-level Layering
 
-1. **UI / Feature Views**
-   - `filmfreaks/Content/*`
-   - `filmfreaks/MovieSearch/*`
-   - `filmfreaks/MovieDetail/*`
-   - `filmfreaks/SearchResultDetail/*`
-   - `filmfreaks/MovieNights/*`
-   - `filmfreaks/Goals/*`
-   - `filmfreaks/Stats/*`
-   - `filmfreaks/Timeline/*`
-   - `filmfreaks/SettingsView.swift`, `filmfreaks/GroupSettingsView.swift`, `filmfreaks/UsersView.swift`
+### 1) App / Entry
+- `filmfreaks/filmfreaksApp.swift`
+  - erstellt zentrale `@StateObject`s: `MovieStore`, `MovieNightStore`, `UserStore`, `CloudKitGroupStore`, `NetworkMonitor`, `DisplaySettings`, `AppRefreshCoordinator`
+  - setzt globalen `URLCache`
+  - stößt beim Wechsel auf `.active` eine Refresh-Kaskade an
+- `filmfreaks/CloudKitShareAppDelegate.swift`
+  - registriert Notifications
+  - verarbeitet CloudKit-Remote-Notifications
+  - verdrahtet `CloudKitShareSceneDelegate`
+- `filmfreaks/CloudKitShareSceneDelegate.swift`
+  - nimmt CloudKit-Share-Invites und Push-Deep-Links im Scene-Lifecycle entgegen
 
-2. **App Shell / Composition Root**
-   - `filmfreaks/filmfreaksApp.swift`
-   - `filmfreaks/CloudKitShareAppDelegate.swift`
-   - `filmfreaks/CloudKitShareSceneDelegate.swift`
-   - `filmfreaks/AppRefreshCoordinator.swift`
+### 2) Presentation / Screens
+- `filmfreaks/Content/*`
+  - Root-Screen, Routing, Header, Listen/Grid, Activity-Preview, Onboarding
+- `filmfreaks/MovieDetail/*`
+  - Detailansicht für lokale Filme
+- `filmfreaks/SearchResultDetail/*`
+  - Detailansicht für TMDb-Suchergebnisse
+- `filmfreaks/MovieSearch/*`
+  - TMDb-Suche, Empfehlungen, OCR/Scanner-Helfer, Result-Sorting
+- `filmfreaks/Goals/*`
+  - Ziele-UI, Editor, Matching, Persistenz-Brücken
+- `filmfreaks/Stats/*`
+  - Statistikscreen, Snapshot/ViewModel, Drilldowns
+- `filmfreaks/Timeline/*`
+  - chronologische Darstellung gesehener Filme
+- `filmfreaks/MovieNights/*`
+  - Kalender, Sheets, Planungsflows
+- `filmfreaks/Settings/*`
+  - Darstellung, Cache, Gruppenverwaltung, Sync-Präsentation
+- `filmfreaks/Users+Store/UsersView.swift`
+  - Mitgliederverwaltung
 
-3. **State / Stores**
-   - `filmfreaks/MovieStore/*`
-   - `filmfreaks/UserStore.swift`
-   - `filmfreaks/MovieNights/MovieNightStore*.swift`
-   - `filmfreaks/CloudKitGroupStore/*`
-   - `filmfreaks/DisplaySettings/*`
+### 3) App State / Stores
+- `filmfreaks/MovieStore/*`
+  - lokaler Cache, Gruppenauswahl, Cloud-Sync, Rating-Sync, Pending-State
+- `filmfreaks/Users+Store/*`
+  - Mitglieder, Auswahl des aktiven Users, Sync-Status
+- `filmfreaks/Goals/GoalsStore.swift`
+  - Zielzustand + lokaler/Cloud-Sync
+- `filmfreaks/MovieNights/MovieNightStore.swift`
+  - Movie-Night-Zustand + Upload/Refresh + lokale Persistenz
+- `filmfreaks/CloudKitGroupStore/*`
+  - Gruppen anlegen, laden, teilen, verlassen, löschen
+- `filmfreaks/Settings/DisplaySettings/*`
+  - rein lokaler UI-Zustand
 
-4. **Persistence / Sync / Infrastructure**
-   - `filmfreaks/PersistenceManager.swift`
-   - `filmfreaks/MovieNights/MovieNightLocalPersistence.swift`
-   - `filmfreaks/CloudKitRouting.swift`
-   - `filmfreaks/CloudKitZoneChangeTokenStore.swift`
-   - `filmfreaks/CloudKitZoneChanges.swift`
-   - `filmfreaks/CloudKitMovieStore/*`
-   - `filmfreaks/CloudKitRatingStore/*`
-   - `filmfreaks/CloudKitMovieNightStore/*`
-   - `filmfreaks/CloudKitUserStore.swift`
-   - `filmfreaks/CloudKitGoalStore.swift`
-   - `filmfreaks/CloudKit/*`
-   - `filmfreaks/Notifications/*`
+### 4) Persistence / Integration
+- `filmfreaks/PersistenceManager.swift`
+  - JSON-Dateien in Application Support, gruppenspezifisch, debounced writes
+- `filmfreaks/MovieNights/MovieNightLocalPersistence.swift`
+  - eigener JSON-Snapshot für Movie Nights
+- `filmfreaks/GroupContext.swift`
+  - `UserDefaults`-Persistenz für CloudKit-Routing-Metadaten
+- `filmfreaks/SelectedUserSelectionStore.swift`
+  - aktive Userwahl pro Gruppe in `UserDefaults`
+- `filmfreaks/Notifications/*`
+  - Notification-Dedupe, Current-User-Identität, Deep-Link-Routing
+- `filmfreaks/TMDbAPI/*`
+  - HTTP-Layer und Decoding für TMDb
 
-5. **External API / Caches / Utility**
-   - `filmfreaks/TMDbAPI/*`
-   - `filmfreaks/CachedAsyncImage.swift`
-   - `filmfreaks/RecommendationsCacheManager.swift`
-   - `filmfreaks/SearchHistoryManager.swift`
-   - `filmfreaks/PersonPopularityStore.swift`
-   - `filmfreaks/SelectedUserSelectionStore.swift`
+### 5) Cloud Sync Layer
+- `filmfreaks/CloudKitRouting.swift`
+  - zentrale Entscheidung Public vs Private vs Shared DB + Zone
+- `filmfreaks/CloudKitMovieStore/*`
+  - Movie-Records
+- `filmfreaks/CloudKitRatingStore/*`
+  - getrennte Rating-Records
+- `filmfreaks/CloudKitMovieNightStore/*`
+  - Movie-Night Event/Response/Activity Records
+- `filmfreaks/CloudKitUserStore.swift`
+  - GroupMember-Records
+- `filmfreaks/CloudKitGoalStore.swift`
+  - ViewingGoal + ViewingCustomGoals Records
+- `filmfreaks/CloudKitZoneChanges.swift`
+  - inkrementelle Zone-Change-Reads
+- `filmfreaks/CloudKitZoneChangeTokenStore.swift`
+  - Change-Token-Speicherung in `UserDefaults`
 
-### Dependency Shape
-- `filmfreaksApp` erzeugt die globalen `EnvironmentObject`s und steckt sie in `ContentView` (`filmfreaks/filmfreaksApp.swift`).
-- Feature-Views hängen stark an `@EnvironmentObject` statt expliziter DI.
-- `MovieStore`, `UserStore`, `MovieNightStore` hängen lokal an `PersistenceManager`/`MovieNightLocalPersistence` und optional an ihren jeweiligen CloudKit-Stores.
-- Alle CloudKit-Stores hängen an `CloudKitRouting`, `GroupContextStore` und teilweise `CloudKitZoneChangeTokenStore`.
-- `TMDbAPI.shared` ist ein globaler Service ohne sichtbare abstrakte Interface-Schicht (`filmfreaks/TMDbAPI/TMDbAPI.swift`).
-- `DisplaySettings` ist ein lokaler UI-State-Store auf Basis von `UserDefaults` (`filmfreaks/DisplaySettings/DisplaySettings+Persistence.swift`).
+### Abhängigkeitsrichtung
+- Views hängen an Stores/Models, nicht direkt an CloudKit-Stores.
+- Stores hängen an lokaler Persistenz + CloudKit-Stores.
+- CloudKit-Stores hängen an `CloudKitRouting` + `GroupContextStore`.
+- Notification-Flows hängen an CloudKit-Push → Summary-Decoding → Local Notification → Deep-Link-NotificationCenter.
 
-### Architektur-Stil
-- Pragmatischer **View + Store + Service**-Stil.
-- Keine klare Repository-/UseCase-Schicht.
-- Teilweise saubere File-Splits per Extension (`MovieStore+CloudSync.swift`, `GoalsView+Persistence.swift`, `ContentView+Toolbar.swift`), aber kein durchgängig einheitlicher Standard.
-- Viel **MainActor-zentrierter Zustand** in den Stores.
+---
 
 ## Folder Map
-- `filmfreaks/Content/` → Home-Screen, Routing, Activity Preview, Toolbar, Listen/Grid-UI.
-- `filmfreaks/MovieStore/` → zentrales Movie-State-Management, lokale Persistenz, Cloud-Sync, Mutationen, Group-Selektion.
-- `filmfreaks/MovieSearch/` → Suche gegen TMDb, Empfehlungen, Scanner, Sortierung, Such-UI.
-- `filmfreaks/MovieDetail/` → Detailansicht für bestehende Filme inklusive Ratings, Trailer, Watch Providers.
-- `filmfreaks/SearchResultDetail/` → Detailansicht für TMDb-Suchergebnisse vor Übernahme in Listen.
-- `filmfreaks/MovieNights/` → Domänenmodell, Store, Local Persistence, Cloud-Sync, Kalender-UI, Sheets.
-- `filmfreaks/Goals/` → Ziele-Feature, Persistenz, Enrichment, Matching, Editor-UI.
-- `filmfreaks/Stats/` → Statistik-UI, Snapshot-Building, Drilldowns.
-- `filmfreaks/Timeline/` → chronologische Filmanzeige auf Basis `movieStore.movies`.
-- `filmfreaks/CloudKitGroupStore/` → Gruppenliste, Zone-Lifecycle, Share-Erzeugung, Share-Hierarchy-Repair, Subscriptions.
-- `filmfreaks/CloudKitMovieStore/` → CloudKit-Persistenz für Filme inkl. Merge, Modify, Zone Changes.
-- `filmfreaks/CloudKitRatingStore/` → CloudKit-Persistenz für Bewertungen.
-- `filmfreaks/CloudKitMovieNightStore/` → CloudKit-Persistenz für Movie-Night-Events/Responses/Activity.
-- `filmfreaks/CloudKit/` → Push-Fetch, Subscription-Management, Debugging für Remote Notifications.
-- `filmfreaks/Notifications/` → Local Notification Routing, Dedupe, Identity, Notification Summary.
-- `filmfreaks/DisplaySettings/` → UI-Präferenzen, Layout-Metriken, Tint, Presets.
-- `filmfreaks/TMDbAPI/` → HTTP-Fassade, Modelle, Search/Details/People/Meta-Endpunkte.
-- `filmfreaksTests/` → Fokus auf Routing/Persistenz-Funktions-Tests.
-- `filmfreaksUITests/` → nur Template-/Smoke-Tests.
+
+### Root-Dateien in `filmfreaks/`
+- `filmfreaks/filmfreaksApp.swift`: App-Einstieg und globale Dependency-Wiring
+- `filmfreaks/PersistenceManager.swift`: JSON-Persistenz für Movies/Backlog/Users
+- `filmfreaks/Movie.swift`: Kernmodell Film + Rating + CastMember
+- `filmfreaks/ViewingCustomGoal.swift`: Custom-Goal-Domäne
+- `filmfreaks/GroupContext.swift`: CloudKit-Gruppenrouting
+- `filmfreaks/AppRefreshCoordinator.swift`: Debounced App-Resume-Refresh
+- `filmfreaks/SelectedUserSelectionStore.swift`: aktive Userwahl pro Gruppe
+
+### Unterordner
+- `filmfreaks/Content/`: Root-UI, Header, Listen, Activity-Preview, Routing
+- `filmfreaks/MovieStore/`: Filmstore nach Verantwortung gesplittet
+- `filmfreaks/Users+Store/`: Userstore, Views, Fehlerformatierung
+- `filmfreaks/Goals/`: Ziele-UI + Store + Editoren
+- `filmfreaks/Stats/`: Snapshot/ViewModel/Card-UI
+- `filmfreaks/Timeline/`: Timeline-Snapshot + Views
+- `filmfreaks/MovieSearch/`: Suche, Empfehlungen, Kandidatenhilfe
+- `filmfreaks/MovieDetail/`: lokale Film-Detailansicht
+- `filmfreaks/SearchResultDetail/`: TMDb-Detailansicht vor dem Hinzufügen
+- `filmfreaks/MovieNights/`: Planung, Kalender, Persistenz, Sync
+- `filmfreaks/Settings/`: App-Settings + Gruppenverwaltung + Sync-Anzeige
+- `filmfreaks/TMDbAPI/`: API-Client und Modelle
+- `filmfreaks/CloudKit*/`: pro Domäne getrennte CloudKit-Zugriffsschicht
+- `filmfreaks/Notifications/`: lokale Notification-Verarbeitung
+- `filmfreaks/CloudKit/`: Push-Fetch, Subscription-Management, Debugging
+
+### Tests
+- `filmfreaksTests/Persistence/*`: Persistenz und Legacy-Fixture-Decoding
+- `filmfreaksTests/Content/*`: Snapshot-Builder-Tests für Listen/Activity
+- `filmfreaksTests/Goals/*`: GoalsStore
+- `filmfreaksTests/Timeline/*`: Timeline-Snapshot
+- `filmfreaksTests/MovieSearch/*`: Suchzustand/Sorting
+- `filmfreaksTests/CloudRouting/*`: Routing, Tokens, GroupContext
+- `filmfreaksTests/UserStore/*`: Fehlerformatierung
+
+---
 
 ## Data Model Map
-### Core Entities
 
-#### `Movie` (`filmfreaks/Movie.swift`)
-- Schlüssel: `id: UUID`
-- Wichtige Felder:
-  - `title`, `year`
-  - `tmdbId`, `tmdbRating`, `posterPath`
-  - `watchedDate`, `watchedLocation`
-  - `ratings: [Rating]`
-  - `genres`, `genreIds`
-  - `keywords`, `keywordIds`
-  - `suggestedBy`
-  - `addedAt`, `addedById`, `addedByName`
-  - `cast`, `directors`
-  - `groupId`, `groupName`
-- Nutzung:
-  - Watched- und Backlog-Listen lokal als JSON.
-  - CloudKit Record-Typ `Movie` plus separates `MovieRating`.
+### `Movie` (`filmfreaks/Movie.swift`)
+Wichtige Felder:
+- `id: UUID`
+- `title: String`
+- `year: String`
+- `tmdbId: Int?`
+- `tmdbRating: Double?`
+- `ratings: [Rating]`
+- `posterPath: String?`
+- `watchedDate: Date?`
+- `watchedLocation: String?`
+- `genres: [String]?`, `genreIds: [Int]?`
+- `keywords: [String]?`, `keywordIds: [Int]?`
+- `cast: [CastMember]?`
+- `directors: [CastMember]?`
+- `suggestedBy: String?`
+- `addedAt`, `addedById`, `addedByName`
+- `groupId`, `groupName`
 
-#### `Rating` (`filmfreaks/Movie.swift`)
-- Schlüssel: `id: UUID`
-- Wichtige Felder:
-  - `reviewerId`, `reviewerName`
-  - `scores: [RatingCriterion: Int]`
-  - `comment`, `fazitScore`, `updatedAt`
-- Beziehung:
-  - Lokal eingebettet in `Movie.ratings`
-  - Cloud-seitig eigenständiger Record mit `movieId`-Bezug.
+Beziehungen:
+- 1 `Movie` → n `Rating`
+- 1 `Movie` → n `CastMember` (Cast)
+- 1 `Movie` → n `CastMember` (Directors)
+- Gruppenbezug nur logisch per `groupId`, nicht als ORM-Relationship
 
-#### `User` (`filmfreaks/User.swift`)
-- Schlüssel: `id: UUID`
-- Feld: `name`
-- Verwendung:
-  - Gruppenmitglieder, Filter, Bewertungsidentität, Notification-Suppression.
+Migrationen:
+- Legacy-`cast: [String]` wird in `CastMember` migriert
+- Legacy-Ratings ohne `reviewerId` bleiben toleriert
 
-#### `GroupContext` (`filmfreaks/GroupContext.swift`)
-- Schlüssel: `id: String`
-- Felder:
-  - `name`
-  - `scope: private/shared`
-  - `zoneName`
-  - `ownerName`
-- Kritisch für sicheres Routing. UUID-artige `groupId`s ohne Context dürfen **nicht** in Public DB fallen (`filmfreaks/CloudKitRouting.swift`).
+### `Rating` (`filmfreaks/Movie.swift`)
+Wichtige Felder:
+- `id: UUID`
+- `reviewerId: UUID?`
+- `reviewerName: String`
+- `scores: [RatingCriterion: Int]`
+- `comment: String?`
+- `fazitScore: Int?`
+- `updatedAt: Date?`
 
-#### `MovieNightEvent` (`filmfreaks/MovieNights/MovieNightEvent.swift`)
-- Schlüssel: `id: UUID`
-- Felder:
-  - `groupId`
-  - `proposedStart`
-  - `createdAt`, `updatedAt`
-  - `proposerUserId`, `proposerName`
-  - `suggestedMovie`, `note`, `status`
+Hinweis:
+- lokal eingebettet in `Movie.ratings`
+- in CloudKit separat als `MovieRating` gespeichert (`filmfreaks/CloudKitRatingStore/CloudKitRatingStore+Schema.swift`)
 
-#### `MovieNightResponse` (`filmfreaks/MovieNights/MovieNightResponse.swift`)
-- Schlüssel: zusammengesetzt aus `eventId + userId` (`id` als computed String)
-- Felder:
-  - `eventId`, `userId`, `userName`
-  - `decision`, `respondedAt`
+### `User` (`filmfreaks/Users+Store/User.swift`)
+- `id: UUID`
+- `name: String`
 
-#### `MovieNightActivityEvent` (`filmfreaks/MovieNights/MovieNightActivityEvent.swift`)
-- Schlüssel: `id: UUID`
-- Felder:
-  - `groupId`
-  - `kind`
-  - `createdAt`
-  - `eventId`, `eventStart`
-  - `actorUserId`, `actorName`
-  - `decision`, `newStatus`, `note`
+### `GroupContext` (`filmfreaks/GroupContext.swift`)
+- `id: String`
+- `name: String`
+- `scope: GroupScope` (`private`/`shared`)
+- `zoneName: String`
+- `ownerName: String`
 
-#### `ViewingCustomGoal` (`filmfreaks/ViewingCustomGoal.swift`)
-- Schlüssel: `id: UUID`
-- Felder:
-  - `type`
-  - `rule`
-  - `target`
-  - `createdAt`
-  - `startYear`, `durationYears`
-  - `uniqueKey` (semantischer Dedupe-Key)
+### `ViewingCustomGoal` (`filmfreaks/ViewingCustomGoal.swift`)
+- `id: UUID`
+- `type: ViewingCustomGoalType`
+- `rule: ViewingCustomGoalRule`
+- `target: Int`
+- `createdAt: Date`
+- `startYear: Int`
+- `durationYears: Int`
 
-### Relationships / Ownership
-- `Movie` → viele `Rating` (embedded lokal, separat in CloudKit).
-- `Movie` → optionale Cast-/Director-Listen als Value Objects (`CastMember`).
-- `GroupContext` → bestimmt Routing für `Movie`, `Rating`, `User`, `Goals`, `MovieNight*`.
-- `MovieNightEvent` → viele `MovieNightResponse` und viele `MovieNightActivityEvent`.
-- `Goals` sind gruppenspezifisch, aber lokal über `UserDefaults` und cloud über `ViewingGoal`/`ViewingCustomGoals` gespeichert.
+Beziehungen:
+- referenziert Personen/Genres/Keywords indirekt über IDs im `rule`
+- keine harte DB-Referenz auf `Movie`
 
-### Migrationen im Datenmodell
-- Legacy `Movie.cast: [String]` wird beim Decode nach `[CastMember]` migriert (`filmfreaks/Movie.swift`).
-- `ViewingCustomGoalsPayload` migriert ältere Goal-Strukturen in eine versionierte Payload (`filmfreaks/ViewingCustomGoalsPayload.swift`).
-- `MovieNightLocalPersistence.Snapshot` unterstützt v1 ohne `activityByGroup` und hebt auf `schemaVersion = 2` an (`filmfreaks/MovieNights/MovieNightLocalPersistence.swift`).
+### `MovieNightEvent` (`filmfreaks/MovieNights/MovieNightEvent.swift`)
+- `id: UUID`
+- `groupId: String`
+- `proposedStart: Date`
+- `createdAt`, `updatedAt`
+- `proposerUserId`, `proposerName`
+- `suggestedMovie: MovieNightMovieRef?`
+- `note`, `status`
+
+### `MovieNightResponse` (`filmfreaks/MovieNights/MovieNightResponse.swift`)
+- `eventId: UUID`
+- `userId: UUID`
+- `userName: String`
+- `decision`
+- `respondedAt`
+- zusammengesetzte ID über `eventId + userId`
+
+### `MovieNightActivityEvent` (`filmfreaks/MovieNights/MovieNightActivityEvent.swift`)
+- `id: UUID`
+- `groupId: String`
+- `kind`
+- `createdAt`
+- `eventId`, `eventStart`
+- `actorUserId`, `actorName`
+- optional `decision`, `newStatus`, `note`
+
+### Weitere strukturprägende Typen
+- `GroupInfo` in `filmfreaks/MovieStore/MovieStore.swift`: lokale Merkliste bekannter Gruppen
+- `StatsSnapshot` in `filmfreaks/Stats/StatsSnapshot.swift`: rein abgeleiteter Read-Model-Snapshot
+- `TimelineSnapshot` in `filmfreaks/Timeline/TimelineSnapshotBuilder.swift`: rein abgeleiteter Read-Model-Snapshot
+
+---
 
 ## Sync / Storage
-### Was wird verwendet?
-
-- **Kein SwiftData**: nicht vorhanden.
-- **Kein Core Data**: nicht vorhanden.
-- **Dateibasierte JSON-Persistenz**:
-  - `PersistenceManager` für Filme, Backlog, Nutzer (`filmfreaks/PersistenceManager.swift`).
-  - `MovieNightLocalPersistence` für kompletten Movie-Night-Snapshot (`filmfreaks/MovieNights/MovieNightLocalPersistence.swift`).
-- **UserDefaults** für:
-  - kleinere Settings / UI-Status / Onboarding / Sync-Meta / GroupContexts / Change Tokens / Suchhistorie / Cache-Meta.
-- **CloudKit** für gruppenspezifische Daten inkl. Sharing.
-- **URLCache + Image Disk Cache** für Netzwerkbilder (`filmfreaks/filmfreaksApp.swift`, `filmfreaks/CachedAsyncImage.swift`).
 
 ### Lokale Persistenz
-#### `PersistenceManager` (`filmfreaks/PersistenceManager.swift`)
-- Speicherort: `Application Support/FilmFreaks/groups/<group>/...`
-- Dateien:
-  - `movies_watched.json`
-  - `movies_backlog.json`
-  - `users.json`
-- Eigenschaften:
-  - Debounced writes (`0.55s`)
-  - atomare Writes
-  - pro Gruppe eigener Ordner
-  - Migrationslogik von alten `UserDefaults`-Keys
+- **Movies / Backlog / Users**
+  - JSON-Dateien unter Application Support, gruppenspezifisch in `groups/<groupId>/...`
+  - Implementierung: `filmfreaks/PersistenceManager.swift`
+  - Features:
+    - debounced writes
+    - atomic writes
+    - Migration aus alten `UserDefaults`-Keys
+- **Movie Nights**
+  - eigener Snapshot `movieNights.json` unter Application Support
+  - Implementierung: `filmfreaks/MovieNights/MovieNightLocalPersistence.swift`
+- **Kleine Zustände in `UserDefaults`**
+  - `CurrentGroupId`, `CurrentGroupName`, bekannte Gruppen, Sync-Metadaten, selektierter User, DisplaySettings, Notification-Dedupe, GroupContexts, Goal-Payloads
 
-#### `MovieNightLocalPersistence` (`filmfreaks/MovieNights/MovieNightLocalPersistence.swift`)
-- Speicherort: `Application Support/filmfreaks/movieNights.json`
-- Eigenschaften:
-  - actor-isoliert
-  - ein Snapshot für alle Gruppen
-  - best-effort Load/Save
-  - bei Fehlern Fallback auf leeren Snapshot
+### Cloud-Sync
+- **CloudKit ist aktiv**
+  - Entitlement: `filmfreaks/filmfreaks.entitlements`
+  - Container: `iCloud.de.marcfechner.filmfreaks`
+- **Routing-Modell**
+  - kein `groupId` → Public DB
+  - `GroupContext` vorhanden → Private oder Shared DB + Zone
+  - UUID-artige `groupId` ohne `GroupContext` → harter Fehler statt unsicherem Public-Fallback
+  - Implementierung: `filmfreaks/CloudKitRouting.swift`
+- **Domänenspezifische CloudStores**
+  - Movie: `filmfreaks/CloudKitMovieStore/*`
+  - Rating: `filmfreaks/CloudKitRatingStore/*`
+  - User: `filmfreaks/CloudKitUserStore.swift`
+  - Goals: `filmfreaks/CloudKitGoalStore.swift`
+  - Movie Nights: `filmfreaks/CloudKitMovieNightStore/*`
+  - Groups: `filmfreaks/CloudKitGroupStore/*`
+- **Inkrementelle Sync-Strategie**
+  - Zone-Change-Tokens in `UserDefaults` (`filmfreaks/CloudKitZoneChangeTokenStore.swift`)
+  - Zone-Deltas via `filmfreaks/CloudKitZoneChanges.swift`
+- **Write-Verhalten**
+  - Movies und Movie Nights nutzen debounced/batched Coordinators (`filmfreaks/MovieCloudSyncCoordinator.swift`, `filmfreaks/MovieNights/MovieNightCloudSyncCoordinator.swift`)
+  - bei Offline→Online wird Flush getriggert
+- **Push / Background-Verhalten**
+  - `UIBackgroundModes = remote-notification` in `filmfreaks/Info.plist`
+  - Push-Fetch-Handling in `filmfreaks/CloudKitShareAppDelegate.swift` und `filmfreaks/CloudKit/CloudKitActivityPushFetchCoordinator.swift`
+  - BGTaskScheduler / BackgroundTasks-Code wurde **nicht** gefunden
 
-### CloudKit-Modell
-#### Routing (`filmfreaks/CloudKitRouting.swift`)
-- `groupId == nil/leer` → `publicCloudDatabase`, keine Zone.
-- vorhandener `GroupContext` → `privateCloudDatabase` oder `sharedCloudDatabase` + `zoneID`.
-- UUID-artige `groupId` ohne `GroupContext` → `throw groupContextNotReady`.
-- Nicht-UUID-`groupId` ohne Context → legacy/public-Fallback.
-
-#### Gruppen (`filmfreaks/CloudKitGroupStore/*`)
-- Record-Typ: `FFGroup`
-- Zone-Namensschema: `group.<GROUP_ID>`
-- Root-Record-Name: `<GROUP_ID>`
-- Listing erfolgt **über Zonen + Root-Record-Fetch**, nicht über FFGroup-Query (`filmfreaks/CloudKitGroupStore/CloudKitGroupStore+Fetch.swift`).
-- Beim Refresh werden `GroupContext`s lokal persistiert.
-- Owned-Gruppen werden auf Share-Hierarchy repariert, damit Children in Shares sichtbar/schreibbar sind (`filmfreaks/CloudKitGroupStore/CloudKitGroupStore+Sharing.swift`).
-
-#### Filme (`filmfreaks/CloudKitMovieStore/*`)
-- Record-Typ: `Movie`
-- Zone-Changes-Pfad für Gruppen mit `GroupContext`
-- Full-query-Pfad für legacy/public-Gruppen
-- Merge-Logik bei `serverRecordChanged`
-- `MovieCloudSyncCoordinator` bündelt Writes debounced (`filmfreaks/MovieCloudSyncCoordinator.swift`)
-
-#### Ratings (`filmfreaks/CloudKitRatingStore/*`)
-- Record-Typ: `MovieRating`
-- getrennt von `Movie`, damit Rating-Änderungen nicht das komplette Movie-Payload überschreiben
-- ebenfalls mit Zone-Changes für moderne Gruppenzonen
-
-#### Users (`filmfreaks/CloudKitUserStore.swift`)
-- Record-Typ: `GroupMember`
-- `UserStore` seeded Cloud, wenn Gruppe leer ist und lokal bereits Nutzer existieren (`filmfreaks/UserStore.swift`)
-
-#### Goals (`filmfreaks/CloudKitGoalStore.swift`)
-- Record-Typen:
-  - `ViewingGoal`
-  - `ViewingCustomGoals`
-- Custom Goals liegen als versioniertes Payload in **einem** Record pro Gruppe
-
-#### Movie Nights (`filmfreaks/CloudKitMovieNightStore/*`)
-- Record-Typen:
-  - `MovieNightEvent`
-  - `MovieNightResponse`
-  - `MovieNightActivity`
-- Snapshot-/Zone-Changes-Mix analog Movies
+### Migration / Backwards Compatibility
+- `PersistenceManager` migriert alte UserDefaults-basierte Arrays nach Disk (`filmfreaks/PersistenceManager.swift`)
+- `Movie` migriert Legacy-`cast` von `[String]` nach `[CastMember]` (`filmfreaks/Movie.swift`)
+- `ViewingCustomGoal` toleriert fehlende `startYear`/`durationYears` (`filmfreaks/ViewingCustomGoal.swift`)
+- `MovieNightLocalPersistence.Snapshot` toleriert ältere Payloads ohne `activityByGroup` (`filmfreaks/MovieNights/MovieNightLocalPersistence.swift`)
 
 ### Offline-Verhalten
-- Stores laden zunächst lokale Daten, dann Cloud nach (`filmfreaks/MovieStore/MovieStore.swift`, `filmfreaks/UserStore.swift`, `filmfreaks/MovieNights/MovieNightStore.swift`).
-- Pending Cloud Writes bleiben bei Fehlern erhalten und werden bei Reconnect geflusht.
-- UUID-Gruppen ohne geladenen `GroupContext` bleiben lokal pending; kein unsicherer Public-Fallback.
-- App-Resume löst coalesced Refresh aus (`filmfreaks/AppRefreshCoordinator.swift`, `filmfreaks/filmfreaksApp.swift`).
+- App startet aus lokalem Cache
+- Cloud-Sync ist best effort und throttled
+- Standard-/Lokalkontext ohne `groupId` bleibt lokal/Public-DB-orientiert
+- Notification-Suppression und User-Selektion bleiben lokal erhalten
 
-### Change Tokens / Incremental Sync
-- Tokens liegen in `UserDefaults` über `CloudKitZoneChangeTokenStore` (`filmfreaks/CloudKitZoneChangeTokenStore.swift`).
-- Inkrementelles Fetching nutzt `CKFetchRecordZoneChangesOperation` via `CloudKitZoneChanges.fetchAllChanges(...)` (`filmfreaks/CloudKitZoneChanges.swift`).
-
-### Caches
-- `URLCache.shared` global in App-Init (`filmfreaks/filmfreaksApp.swift`).
-- `ImageCacheStore` mit NSCache + Disk Cache (`filmfreaks/CachedAsyncImage.swift`).
-- Empfehlungen in `RecommendationsCacheManager` (`filmfreaks/RecommendationsCacheManager.swift`).
-- Suchhistorie in `SearchHistoryManager` (`filmfreaks/SearchHistoryManager.swift`).
-- Person-Popularity in `PersonPopularityStore` (`filmfreaks/PersonPopularityStore.swift`).
+---
 
 ## UI Map
-### App Entry / Root
 
-- Einstieg: `filmfreaks/filmfreaksApp.swift`
-- Root-View: `ContentView()` in einem `ZStack` mit:
-  - `ToastHost()`
-  - `SplashView`
-- Global State via `EnvironmentObject`:
-  - `MovieStore`
-  - `MovieNightStore`
-  - `UserStore`
-  - `CloudKitGroupStore`
-  - `NetworkMonitor`
-  - `DisplaySettings`
+### Root
+- `filmfreaks/Content/ContentView.swift`
+  - Hauptscreen mit Header, Gruppenstatus, Aktivitätskarte, Modusumschaltung (`watched`/`backlog`), Sortierung, Nutzerfilter, Listen/Grid
+  - Routing über Sheets in `filmfreaks/Content/ContentRouting.swift`
 
-### Hauptnavigation
-- Hauptshell: **ein** `NavigationStack` in `ContentView` (`filmfreaks/Content/ContentView.swift`)
-- Kein `TabView` als App-Hauptnavigation.
-- Zentrale Sheet-Navigation via `ContentRoute` (`filmfreaks/Content/ContentRouting.swift`):
-  - `settings`
-  - `quickStart`
-  - `movieSearch`
-  - `users`
-  - `stats`
-  - `timeline`
-  - `calendar`
-  - `activity`
-  - `goals`
-  - `groupSettings`
+### Hauptflows aus `ContentRoute` (`filmfreaks/Content/ContentRouting.swift`)
+- `.settings` → `filmfreaks/Settings/SettingsView.swift`
+- `.quickStart` → `filmfreaks/QuickStartView.swift`
+- `.movieSearch` → `filmfreaks/MovieSearch/MovieSearchView/MovieSearchView.swift`
+- `.users` → `filmfreaks/Users+Store/UsersView.swift`
+- `.stats` → `filmfreaks/Stats/StatsView.swift`
+- `.timeline` → `filmfreaks/Timeline/TimelineView.swift`
+- `.calendar` → `filmfreaks/MovieNights/Calendar/MovieNightCalendarView.swift`
+- `.activity` → `filmfreaks/Content/GroupActivityListView.swift`
+- `.goals` → `filmfreaks/Goals/GoalsView.swift`
+- `.groupSettings` → `filmfreaks/Settings/GroupSettingsView.swift`
 
-### Hauptscreens
-- `ContentView` → Home für Watched/Backlog, Activity Preview, Onboarding, Toolbar.
-- `MovieSearchView` → Suche und Hinzufügen von Filmen.
-- `MovieDetailView` → Detailansicht für bestehende Filme.
-- `SearchResultDetailView` → Detailansicht für Suchresultate vor Übernahme.
-- `UsersView` → Gruppenmitglieder / aktive Person.
-- `StatsView` → Statistiken.
-- `TimelineView` → chronologische Liste.
-- `MovieNightCalendarView` → Kalenderansicht für Filmabende.
-- `GoalsView` → Zielverwaltung.
-- `SettingsView` → Sync/Cache/Appearance/Info.
-- `GroupSettingsView` → Cloud-Gruppen erstellen, aktivieren, teilen, löschen, verlassen.
-- `GroupActivityListView` → Gruppenaktivitäten.
+### Detailflows
+- Movie-Liste → `NavigationLink` → `filmfreaks/MovieDetail/MovieDetailView.swift` (`filmfreaks/Content/ContentMoviesListSection.swift`)
+- Search-Result → Sheet → `filmfreaks/SearchResultDetail/SearchResultDetailView.swift` (`filmfreaks/MovieSearch/MovieSearchView/MovieSearchView.swift`)
+- Stats → Actor/Genre/Drilldown-Sheets (`filmfreaks/Stats/StatsView.swift`)
+- Group Settings → Share-Sheet `filmfreaks/GroupShareSheetView.swift`
 
-### Wichtige Flows
-- **App Resume** → `groupStore.refresh()` + Cloud-Refresh auf Movies, Users, MovieNights (`filmfreaks/filmfreaksApp.swift`).
-- **Push Tap** → `PushDeepLinkRouter` → Notification → `ContentView.handlePushDeepLink(...)` → Gruppenwechsel + Activity-Sheet (`filmfreaks/Notifications/PushDeepLinkRouter.swift`, `filmfreaks/Content/ContentView.swift`).
-- **Quick Start** → Onboarding-Sheet mit Folgeaktionen in Gruppen, Users, Search (`filmfreaks/QuickStartView.swift`, `filmfreaks/Content/ContentRouting.swift`).
-- **Group Create/Activate** → `GroupSettingsView` → `CloudKitGroupStore.createGroup` → `MovieStore.activateCloudGroup` → Refresh-Kaskade (`filmfreaks/GroupSettingsView.swift`).
-- **Pull to Refresh** → paralleler Refresh von Movies, Users, MovieNights (`filmfreaks/Content/ContentView+Refresh.swift`).
+### Onboarding
+- First-run/undismissed Quick Start über `@AppStorage("Onboarding_HasSeenQuickStart")` in `filmfreaks/Content/ContentView.swift`
+- inhaltlich ausgelagert in `filmfreaks/QuickStartView.swift`
+
+---
 
 ## Build & Configuration
-### Targets
 
-- App: `filmfreaks`
-- Tests: `filmfreaksTests`
-- UI Tests: `filmfreaksUITests`
+### Targets
+- `filmfreaks` (App)
+- `filmfreaksTests` (Unit Tests)
+- `filmfreaksUITests` (UI Tests)
 - Quelle: `filmfreaks.xcodeproj/project.pbxproj`
 
 ### Plattform / Deployment
-- iOS Deployment Target: **26.0** (`filmfreaks.xcodeproj/project.pbxproj`)
-- Device Family: `1,2` = iPhone + iPad (`filmfreaks.xcodeproj/project.pbxproj`)
+- `SDKROOT = iphoneos`
+- `SUPPORTED_PLATFORMS = iphoneos iphonesimulator`
+- `TARGETED_DEVICE_FAMILY = 1,2` → iPhone + iPad
+- `IPHONEOS_DEPLOYMENT_TARGET = 26.0`
+- `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`
+- `SWIFT_APPROACHABLE_CONCURRENCY = YES`
+- Quelle: `filmfreaks.xcodeproj/project.pbxproj`
 
 ### Info.plist / Entitlements
-- `CKSharingSupported = YES` (`filmfreaks/Info.plist`)
-- `TMDB_API_KEY = $(TMDB_API_KEY)` (`filmfreaks/Info.plist`)
-- `UIBackgroundModes = [remote-notification]` (`filmfreaks/Info.plist`)
-- iCloud Container: `iCloud.de.marcfechner.filmfreaks` (`filmfreaks/filmfreaks.entitlements`)
-- `aps-environment = development` (`filmfreaks/filmfreaks.entitlements`)
+- `filmfreaks/Info.plist`
+  - `CKSharingSupported = true`
+  - `TMDB_API_KEY = $(TMDB_API_KEY)`
+  - `UIBackgroundModes = [remote-notification]`
+- `filmfreaks/filmfreaks.entitlements`
+  - `aps-environment = development`
+  - iCloud Container + CloudKit aktiviert
 
-### Build Config
-- `Debug.xcconfig` und `Release.xcconfig` inkludieren beide `Secrets.xcconfig` (`filmfreaks/Debug.xcconfig`, `filmfreaks/Release.xcconfig`).
-- `Secrets.xcconfig` ist **im Projekt enthalten** und definiert `TMDB_API_KEY`.
-- Das widerspricht teilweise dem Kommentar in `TMDbAPI.loadAPIKey()` („nicht offen im Git“) (`filmfreaks/TMDbAPI/TMDbAPI.swift`).
-- **Empfehlung:** Secret aus VCS entfernen und nur Placeholder-Datei committen.
+### xcconfig / Secrets
+- `filmfreaks/Debug.xcconfig` und `filmfreaks/Release.xcconfig` includen `filmfreaks/Secrets.xcconfig`
+- `filmfreaks/Secrets.xcconfig` enthält aktuell einen konkreten `TMDB_API_KEY`
+- Technische Bewertung:
+  - Laufzeit-Verkabelung über `Info.plist` ist sauber (`filmfreaks/TMDbAPI/TMDbAPI.swift`)
+  - **aber** der Schlüssel liegt in dieser Projektkopie im Repo/Projektbaum und ist damit nicht wirklich secret
 
-### SPM / Dependencies
-- Keine Swift Package Dependencies im `.pbxproj` gefunden.
-- Externe Abhängigkeiten laufen über Apple Frameworks + direkte HTTP-Nutzung gegen TMDb.
+### Package Management
+- Keine Swift Package Manager Dependencies gefunden
+- `packageProductDependencies` in `project.pbxproj` sind leer
 
-### Secrets Handling
-- Aktueller Stand: Secret wird zur Build-Zeit über `Secrets.xcconfig` in `Info.plist` durchgereicht.
-- Risiko: Secret liegt im Repository, falls diese Datei committed bleibt.
+### Project File Handling
+- Das Xcode-Projekt nutzt `fileSystemSynchronizedGroups`; neue Dateien unter den synchronisierten Root-Gruppen werden von Xcode 15+ typischerweise automatisch mitgeführt (`filmfreaks.xcodeproj/project.pbxproj`)
 
-### CI / Release Pipeline
-- **UNKNOWN**: Keine eindeutige CI-Konfiguration (z. B. GitHub Actions, Fastlane) im bereitgestellten ZIP gefunden.
+---
 
 ## Conventions
-### Naming / Struktur
 
-- Feature-Ordner statt technisch rein geschichteter Ordnerstruktur.
-- Größere Typen werden oft per Extensions gesplittet:
+### Wiederkehrende Muster
+- große Typen werden per `+`-Dateien nach Verantwortung gesplittet, z. B.
   - `MovieStore+CloudSync.swift`
-  - `GoalsView+Persistence.swift`
-  - `ContentView+Toolbar.swift`
-  - `TMDbAPI+Search.swift`
-- Englisch in Typ-/Dateinamen, gemischt mit deutschen Kommentaren und UI-Strings.
-
-### Architektur-Patterns
-- `@MainActor` auf zentralen Stores (`MovieStore`, `UserStore`, `MovieNightStore`, `CloudKitGroupStore`).
-- Breiter Einsatz von `@EnvironmentObject`.
-- Singletons/Globals:
-  - `TMDbAPI.shared`
-  - `NetworkMonitor.shared`
-  - `PersistenceManager.shared`
-  - `CloudKitGoalStore.shared`
-  - `NotificationsPermissionManager.shared`
-  - `GroupActivityLocalNotifier.shared`
-- Debounced/Batched Cloud-Sync über dedizierte Coordinatoren.
+  - `UserStore+CloudRefresh.swift`
+  - `DisplaySettings+*.swift`
+  - `ContentView+Lifecycle.swift`
+- teure UI-Ableitungen werden aus dem Renderpfad gezogen in Snapshot-/Model-Typen:
+  - `ContentMovieItemsModel` + `ContentMovieItemsSnapshotBuilder`
+  - `ContentActivityPreviewModel` + `ContentActivityPreviewSnapshotBuilder`
+  - `StatsViewModel` + `StatsSnapshotBuilder`
+  - `TimelineSnapshotBuilder`
+- Stores sind meist `@MainActor`
+- reine Hilfsfunktionen müssen unter `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` explizit `nonisolated`/pure gehalten werden, sonst drohen Swift-6-artige Isolationswarnungen
 
 ### Do
-- Gruppenspezifische Daten immer über `groupId` + `CloudKitRouting` denken.
-- UUID-artige `groupId`s ohne `GroupContext` als Fehler behandeln, nicht stillschweigend in Public DB speichern.
-- Teure Filter-/Sortier-Logik aus `body` herausziehen.
-- Lokale Daten zuerst laden, Cloud anschließend darüberlegen.
-- Migrationskompatibilität bei JSON-/Payload-Änderungen mitdenken.
+- neue Logik zuerst in Builder/Store/Helper, nicht direkt in `body`
+- gruppenspezifische Daten immer über `groupId` oder `GroupContext` denken
+- CloudKit-Routing zentral über `CloudKitRouting` lassen
+- lokale Caches vor UI-Zugriff laden, dann Cloud überschreiben lassen
+- bei Performance-Themen zuerst Renderpfad prüfen: `onChange`, `onReceive`, Sorts, Array-Kopien
 
 ### Don’t
-- Keine großen Arrays in `UserDefaults` ablegen, wenn `PersistenceManager` oder Datei-Snapshots besser passen.
-- Keine CloudKit-Queries über FFGroup erzwingen; das Projekt verlässt sich auf Zone-Listing (`filmfreaks/CloudKitGroupStore/CloudKitGroupStore+Fetch.swift`).
-- Keine Ratings als Movie-Gesamtpayload syncen, wenn eigentlich nur `MovieRating` angepasst wird.
-- Keine renderpfadnahen `filter/sort/group`-Berechnungen in großen Views lassen.
+- keine direkte CloudKit-Logik in SwiftUI-Views mischen
+- keine Annahme „UUID groupId = public group“; genau das verhindert `CloudKitRouting`
+- keine geheimen Schlüssel in committed `Secrets.xcconfig` lassen
+- keine schweren Sort/Filter/Map-Pipelines in großen `body`-Blöcken neu aufbauen
+
+---
 
 ## How to work on this project
-### Setup Steps
 
-1. ZIP entpacken und `filmfreaks.xcodeproj` öffnen.
-2. Prüfen, ob `Secrets.xcconfig` vorhanden ist und `TMDB_API_KEY` aufgelöst wird.
-3. iCloud-/Push-Entitlements im Signing prüfen, falls CloudKit-Flows getestet werden sollen.
-4. App starten und mindestens folgende Flows testen:
-   - Home / Search / Add Movie
-   - Group wechseln / Group anlegen
-   - Mitglieder laden
-   - Movie Nights Kalender
-   - Goals / Stats
-5. Tests aus `filmfreaksTests` laufen lassen; Fokus liegt auf Routing/Persistenz.
+### Setup
+1. `filmfreaks.xcodeproj` in Xcode öffnen.
+2. Signing/iCloud/Push korrekt für dein Team konfigurieren.
+3. `TMDB_API_KEY` über `Secrets.xcconfig` oder Environment bereitstellen (`filmfreaks/TMDbAPI/TMDbAPI.swift`).
+4. App-Target `filmfreaks` bauen.
+5. Unit Tests in `filmfreaksTests` ausführen.
 
-### Wo neue Entwickler anfangen sollten
-- Zuerst `filmfreaks/filmfreaksApp.swift` lesen.
-- Dann `filmfreaks/Content/ContentView.swift` + `filmfreaks/Content/ContentRouting.swift`.
-- Danach die drei Hauptstores:
-  - `filmfreaks/MovieStore/MovieStore.swift`
-  - `filmfreaks/UserStore.swift`
-  - `filmfreaks/MovieNights/MovieNightStore.swift`
-- Anschließend Routing-/CloudKit-Basis:
-  - `filmfreaks/GroupContext.swift`
-  - `filmfreaks/CloudKitRouting.swift`
-  - `filmfreaks/CloudKitGroupStore/CloudKitGroupStore.swift`
+### Wo neue Entwickler zuerst lesen sollten
+- `filmfreaks/filmfreaksApp.swift`
+- `filmfreaks/Content/ContentView.swift`
+- `filmfreaks/MovieStore/MovieStore.swift`
+- `filmfreaks/MovieStore/MovieStore+CloudSync.swift`
+- `filmfreaks/Users+Store/UserStore.swift`
+- `filmfreaks/GroupContext.swift`
+- `filmfreaks/CloudKitRouting.swift`
+- `filmfreaks/PersistenceManager.swift`
 
-### Vorgehen für ein neues Feature
-1. **Scope klären**
-   - rein lokal?
-   - gruppenspezifisch?
-   - CloudKit-shared?
-2. **Domain-Modell erweitern**
-   - z. B. `Movie`, `MovieNightEvent`, `ViewingCustomGoal`
-3. **Lokale Persistenz anpassen**
-   - `PersistenceManager` oder `MovieNightLocalPersistence`
-4. **CloudKit nur falls nötig erweitern**
-   - Schema-Datei
-   - Modify/Fetch/ZoneChanges
-   - ggf. Share-Hierarchy-Reparenting
-5. **UI/Store anschließen**
-   - EnvironmentObject-Flow prüfen
-   - Refresh-/Sync-Transparenz aktualisieren
-6. **Tests ergänzen**
-   - JSON-Fixtures / Routing / Token-Store / Migrationen
+### Feature hinzufügen – empfohlener Ablauf
+- **Neues UI-Feature auf Movie-Liste**
+  - erst prüfen, ob es nur abgeleitete Darstellung ist → dann Snapshot/Model erweitern
+  - ansonsten Store/API anpassen und View nur binden
+- **Neues gruppenspezifisches Cloud-Datum**
+  - Domain-Typ definieren
+  - lokalen Persistenzort entscheiden
+  - CloudKit-Store mit klaren Keys/RecordType bauen
+  - Routing über `CloudKitRouting` / `GroupContext`
+  - Tests in passendem Testordner ergänzen
+- **Neue Settings**
+  - in `DisplaySettings` oder eigener Settings-Präsentation ablegen
+  - Persistence in `UserDefaults`
+  - keine UI-seitigen magischen String-Keys verstreuen
+
+---
 
 ## Quick Wins
-1. `ContentView`-Orchestrierung weiter zerlegen; die View reagiert auf sehr viele Trigger (`filmfreaks/Content/ContentView.swift`).
-2. Sortierung in `MovieSearchView+Derived.sortedResults` aus dem Renderpfad in einen ViewModel-/Memoization-Pfad ziehen (`filmfreaks/MovieSearch/MovieSearchView+Derived.swift`).
-3. `TimelineView`-Filter/Grouping cachen statt on-demand zu berechnen (`filmfreaks/Timeline/timelineview+data.swift`).
-4. `UserStore`-Cloud-Writes bündeln statt pro User Task + Refresh zu fahren (`filmfreaks/UserStore.swift`).
-5. `MovieNightStore.persist()` auf inkrementellere Persistenz umstellen; aktuell wird das gesamte Snapshot-JSON neu geschrieben (`filmfreaks/MovieNights/MovieNightStore+Persistence.swift`).
-6. Secret-Handling härten: `Secrets.xcconfig` nicht committed halten (`filmfreaks/Secrets.xcconfig`).
-7. Push-Fetch-Pipeline für Release prüfen; aktuell ist die Fetch-Logik DEBUG-gated (`filmfreaks/CloudKit/CloudKitActivityPushFetchCoordinator.swift`).
-8. Mehr Unit Tests für `MovieStore+CloudSync` und `MovieNightCloudSyncCoordinator` ergänzen; dort steckt viel kritische Orchestrierung.
-9. Gemeinsames Pattern für lokale Persistenz + Sync-Meta über Stores vereinheitlichen (`MovieStore`, `UserStore`, `MovieNightStore`, `GoalsView+Persistence`).
-10. Observability verbessern: strukturierte Logs statt verstreuter `print(...)`-Statements in Cloud-/Sync-Pfaden.
 
-## Open Questions / UNKNOWN
-- **UNKNOWN:** Soll der legacy/public-Fallback langfristig bestehen bleiben oder ist er nur Migrationskompatibilität? (`filmfreaks/CloudKitRouting.swift`)
-- **UNKNOWN:** Ist die DEBUG-Gating in `CloudKitActivityPushFetchCoordinator.fetchAndHandle(...)` absichtlich temporär oder versehentlich produktionskritisch? (`filmfreaks/CloudKit/CloudKitActivityPushFetchCoordinator.swift`)
-- **UNKNOWN:** Gibt es außerhalb des ZIPs Build-/Release-Automation oder weitere Geheimnisquellen?
+1. `filmfreaks/Secrets.xcconfig`: echten TMDb-Key aus der Projektkopie entfernen und nur Template committen.
+2. `filmfreaks/Settings/GroupSettingsView.swift`: aktive Group-Aktionen weiter auslagern; die View enthält noch viel Ablaufsteuerung.
+3. `filmfreaks/MovieDetail/MovieDetailView.swift`: weiter in Subsections/Action-Handler splitten; Datei ist groß und multifunktional.
+4. `filmfreaks/MovieSearch/MovieSearchView/MovieSearchView.swift`: State-Menge reduzieren, Such- und Empfehlungslogik weiter isolieren.
+5. `filmfreaks/MovieNights/MovieNightStore.swift`: Read-API, Write-API, Retry-Handling und Sync-Status trennen.
+6. `filmfreaks/Stats/StatsView.swift`: viele `onChange`-Trigger in eine konsolidierte Input-Beobachtung überführen.
+7. `filmfreaks/Timeline/TimelineView.swift`: Snapshot ebenfalls in eigenes Model verlagern, analog zu Stats/Content.
+8. `filmfreaks/PersistenceManager.swift`: Fehler-/Metrik-Observability ergänzen; aktuell nur Logging, aber keine sichtbare Diagnose.
+9. `filmfreaks/CloudKitGroupStore/CloudKitGroupStore+Sharing.swift`: Share-Hierarchy-Repair testen und instrumentieren; potenziell teurer Pfad.
+10. `filmfreaks/Notifications/*`: Push/Notification-Flows per Integrationstest oder manueller Repro-Checkliste absichern.
