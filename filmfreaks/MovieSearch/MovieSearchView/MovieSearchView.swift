@@ -18,28 +18,11 @@ struct MovieSearchView: View {
 
     // Suche
     @State var query: String = ""
-    @State var isLoading: Bool = false
-    @State var errorMessage: String?
-    @State var results: [TMDbMovieResult] = []
-
-    // Pagination
-    @State var currentPage: Int = 1
-    @State var totalPages: Int = 1
-    @State var totalResults: Int = 0
-    @State var isLoadingMore: Bool = false
+    @StateObject var viewModel: MovieSearchViewModel
 
     // Sortierung
     @State var selectedSort: MovieSearchSortOption = .relevance
     @State var resultsModel = MovieSearchResultsModel()
-
-    // ✅ Task-Cancellation / Out-of-order Schutz
-    // NOTE: These are intentionally *not* `private` because the async logic lives in
-    // `MovieSearchView+Search.swift` (separate file). `private` would restrict access
-    // to extensions in the same file only.
-    @State var searchTask: Task<Void, Never>?
-    @State var paginationTask: Task<Void, Never>?
-    @State var activeSearchToken: UUID = UUID()
-    @State var activePaginationToken: UUID = UUID()
 
     // Detail-Sheet
     @State private var detailResult: TMDbMovieResult?
@@ -51,9 +34,6 @@ struct MovieSearchView: View {
     // Markierung: schon in Listen
     @State var localWatchedKeys: Set<String>
     @State var localBacklogKeys: Set<String>
-
-    // NEU: Such-Historie
-    @State var recentQueries: [String] = SearchHistoryManager.load()
 
     // Skeleton-Pulsing
     @State private var skeletonPulse: Bool = false
@@ -71,16 +51,6 @@ struct MovieSearchView: View {
 
     // Optional: Focus fürs Suchfeld (bei „Manuell bearbeiten“)
     @FocusState var isSearchFieldFocused: Bool
-
-    // ✅ NEU: Empfehlungen (Inspiration)
-    @State var recommendations: [TMDbMovieResult] = []
-    @State var isLoadingRecommendations: Bool = false
-    @State var recommendationsError: String?
-    @State var recommendationsSeedTitle: String?
-    @State var recommendationsLastUpdated: Date?
-
-    let recommendationsCacheMaxAge: TimeInterval = 60 * 60 * 24 // 24h
-    let recommendationsFallbackToPopularIfNoSeeds: Bool = true
 
     let existingWatched: [Movie]
     let existingBacklog: [Movie]
@@ -106,7 +76,9 @@ struct MovieSearchView: View {
         _localBacklogKeys = State(
             initialValue: Set(existingBacklog.map { MovieSearchMapper.key(for: $0) })
         )
-        // recentQueries kommt über den Default-Initializer (s.o.)
+        _viewModel = StateObject(
+            wrappedValue: MovieSearchViewModel(existingWatched: existingWatched)
+        )
     }
     var body: some View {
         NavigationStack {
@@ -121,12 +93,12 @@ struct MovieSearchView: View {
                 VStack(spacing: 12) {
                     MovieSearchIdleContentView(
                         viewState: viewState,
-                        recentQueries: recentQueries,
-                        recommendations: recommendations,
-                        isLoadingRecommendations: isLoadingRecommendations,
-                        recommendationsError: recommendationsError,
-                        recommendationsSeedTitle: recommendationsSeedTitle,
-                        recommendationsLastUpdated: recommendationsLastUpdated,
+                        recentQueries: viewModel.recentQueries,
+                        recommendations: viewModel.recommendations,
+                        isLoadingRecommendations: viewModel.isLoadingRecommendations,
+                        recommendationsError: viewModel.recommendationsError,
+                        recommendationsSeedTitle: viewModel.recommendationsSeedTitle,
+                        recommendationsLastUpdated: viewModel.recommendationsLastUpdated,
                         skeletonPulse: $skeletonPulse,
                         membershipState: membershipState(for:),
                         onRecentQueryTap: handleRecentQueryTap,
@@ -142,8 +114,8 @@ struct MovieSearchView: View {
                         errorMessage: errorMessage,
                         results: resultsModel.sortedResults,
                         canLoadMore: canLoadMore,
-                        isLoadingMore: isLoadingMore,
-                        totalResults: totalResults,
+                        isLoadingMore: viewModel.isLoadingMore,
+                        totalResults: viewModel.totalResults,
                         keyboardHeight: keyboard.height,
                         keyboardAnimationDuration: keyboard.animationDuration,
                         skeletonPulse: $skeletonPulse,
@@ -269,7 +241,6 @@ struct MovieSearchView: View {
         }
         .ignoresSafeArea(.keyboard, edges: .bottom)
         .task {
-            // ✅ Empfehlungen laden, sobald die View da ist (nur wenn Suchfeld leer)
             await loadRecommendationsIfNeeded()
         }
         .onChange(of: query) { _, newValue in
@@ -279,7 +250,7 @@ struct MovieSearchView: View {
                 Task { await loadRecommendationsIfNeeded() }
             }
         }
-        .onChange(of: results) { _, _ in
+        .onChange(of: viewModel.results) { _, _ in
             updateResultsModel()
         }
         .onChange(of: selectedSort) { _, _ in
@@ -306,9 +277,9 @@ struct MovieSearchView: View {
             query: $query,
             selectedSort: $selectedSort,
             headerTopSpacer: headerTopSpacer,
-            isLoading: isLoading,
-            resultsCount: results.count,
-            totalResults: totalResults,
+            isLoading: viewModel.isLoading,
+            resultsCount: viewModel.results.count,
+            totalResults: viewModel.totalResults,
             keyboardAnimationDuration: keyboard.animationDuration,
             isSearchFieldFocused: isSearchFieldFocused,
             focusBinding: $isSearchFieldFocused,

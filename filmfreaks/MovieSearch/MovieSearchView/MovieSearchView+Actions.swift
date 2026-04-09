@@ -5,8 +5,8 @@ extension MovieSearchView {
     var viewState: MovieSearchViewState {
         MovieSearchViewState.resolve(
             query: query,
-            recentQueries: recentQueries,
-            isLoading: isLoading,
+            recentQueries: viewModel.recentQueries,
+            isLoading: viewModel.isLoading,
             hasResults: !resultsModel.sortedResults.isEmpty,
             isSearchFieldFocused: isSearchFieldFocused,
             shouldShowRecommendations: shouldShowRecommendations
@@ -27,8 +27,7 @@ extension MovieSearchView {
     }
 
     func handleClearHistory() {
-        SearchHistoryManager.clear()
-        recentQueries = []
+        viewModel.clearRecentQueries()
     }
 
     func handleRecommendationsRefresh() {
