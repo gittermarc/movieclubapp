@@ -8,14 +8,14 @@
 import Foundation
 
 /// Lightweight movie candidate derived from the current group's backlog.
-struct MovieRouletteCandidate: Identifiable, Equatable, Hashable {
+nonisolated struct MovieRouletteCandidate: Identifiable, Equatable, Hashable {
     let movieRef: MovieNightMovieRef
     let addedAt: Date?
 
-    var id: UUID { movieRef.movieId }
-    var title: String { movieRef.title }
-    var year: String { movieRef.year }
-    var posterURL: URL? { movieRef.posterURL }
+    nonisolated var id: UUID { movieRef.movieId }
+    nonisolated var title: String { movieRef.title }
+    nonisolated var year: String { movieRef.year }
+    nonisolated var posterURL: URL? { movieRef.posterURL }
 
     init(movieRef: MovieNightMovieRef, addedAt: Date?) {
         self.movieRef = movieRef
@@ -29,11 +29,12 @@ struct MovieRouletteCandidate: Identifiable, Equatable, Hashable {
 
 extension MovieRouletteCandidate {
 
-    static func buildPresetCandidates(from preset: MovieRoulettePreset?) -> [MovieRouletteCandidate] {
+    nonisolated static func buildPresetCandidates(from preset: MovieRoulettePreset?) -> [MovieRouletteCandidate] {
         guard let preset else { return [] }
         return preset.movieRefs.map { MovieRouletteCandidate(movieRef: $0, addedAt: nil) }
     }
-    static func buildBacklogCandidates(from movies: [Movie], activeGroupId rawGroupId: String?) -> [MovieRouletteCandidate] {
+
+    nonisolated static func buildBacklogCandidates(from movies: [Movie], activeGroupId rawGroupId: String?) -> [MovieRouletteCandidate] {
         let activeGroupId = normalizedGroupId(rawGroupId)
         guard !activeGroupId.isEmpty else { return [] }
 
@@ -49,7 +50,7 @@ extension MovieRouletteCandidate {
             .sorted(by: sortOrder)
     }
 
-    static func sortOrder(lhs: MovieRouletteCandidate, rhs: MovieRouletteCandidate) -> Bool {
+    nonisolated static func sortOrder(lhs: MovieRouletteCandidate, rhs: MovieRouletteCandidate) -> Bool {
         let lhsAddedAt = lhs.addedAt ?? .distantPast
         let rhsAddedAt = rhs.addedAt ?? .distantPast
         if lhsAddedAt != rhsAddedAt {
@@ -64,7 +65,7 @@ extension MovieRouletteCandidate {
         return lhs.year.localizedCaseInsensitiveCompare(rhs.year) == .orderedAscending
     }
 
-    private static func normalizedGroupId(_ value: String?) -> String {
+    nonisolated private static func normalizedGroupId(_ value: String?) -> String {
         (value ?? "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }

@@ -11,7 +11,7 @@ import Foundation
 ///
 /// We store a snapshot (title/year/poster) so proposals still look good even
 /// when the original movie is removed from the backlog later.
-struct MovieNightMovieRef: Codable, Hashable {
+nonisolated struct MovieNightMovieRef: Codable, Hashable {
     var movieId: UUID
     var title: String
     var year: String
@@ -36,7 +36,7 @@ struct MovieNightMovieRef: Codable, Hashable {
 }
 
 extension MovieNightMovieRef {
-    var posterURL: URL? {
+    nonisolated var posterURL: URL? {
         guard let posterPath else { return nil }
         return URL(string: "https://image.tmdb.org/t/p/w500\(posterPath)")
     }

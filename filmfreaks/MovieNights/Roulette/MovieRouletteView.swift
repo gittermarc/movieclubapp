@@ -363,7 +363,7 @@ struct MovieRouletteView: View {
         let previewTitles = candidates.prefix(4).map(\.title)
         guard previewTitles.isEmpty == false else { return "" }
 
-        let joined = ListFormatter.localizedString(byJoining: previewTitles) ?? previewTitles.joined(separator: ", ")
+        let joined = ListFormatter.localizedString(byJoining: previewTitles)
         let remainingCount = candidates.count - previewTitles.count
         if remainingCount > 0 {
             return "Zum Beispiel: \(joined) und \(remainingCount) weitere."

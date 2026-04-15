@@ -7,7 +7,7 @@
 
 import Foundation
 
-struct MovieRoulettePreset: Identifiable, Codable, Equatable, Hashable {
+nonisolated struct MovieRoulettePreset: Identifiable, Codable, Equatable, Hashable {
     var id: UUID
     var groupId: String
     var name: String
@@ -31,22 +31,22 @@ struct MovieRoulettePreset: Identifiable, Codable, Equatable, Hashable {
         self.updatedAt = updatedAt
     }
 
-    var trimmedName: String {
+    nonisolated var trimmedName: String {
         name.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    var displayName: String {
+    nonisolated var displayName: String {
         let trimmed = trimmedName
         return trimmed.isEmpty ? "Neue Auswahl" : trimmed
     }
 
-    var movieCount: Int {
+    nonisolated var movieCount: Int {
         movieRefs.count
     }
 }
 
 extension MovieRoulettePreset {
-    static func == (lhs: MovieRoulettePreset, rhs: MovieRoulettePreset) -> Bool {
+    nonisolated static func == (lhs: MovieRoulettePreset, rhs: MovieRoulettePreset) -> Bool {
         lhs.id == rhs.id &&
         lhs.groupId == rhs.groupId &&
         lhs.name == rhs.name &&
@@ -55,7 +55,7 @@ extension MovieRoulettePreset {
         normalizedUpdatedAt(lhs.updatedAt) == normalizedUpdatedAt(rhs.updatedAt)
     }
 
-    func hash(into hasher: inout Hasher) {
+    nonisolated func hash(into hasher: inout Hasher) {
         hasher.combine(id)
         hasher.combine(groupId)
         hasher.combine(name)
@@ -64,14 +64,14 @@ extension MovieRoulettePreset {
         hasher.combine(Self.normalizedUpdatedAt(updatedAt))
     }
 
-    private static func normalizedUpdatedAt(_ date: Date) -> Double {
+    nonisolated private static func normalizedUpdatedAt(_ date: Date) -> Double {
         let milliseconds = (date.timeIntervalSince1970 * 1000).rounded(.toNearestOrAwayFromZero)
         return milliseconds / 1000
     }
 }
 
 extension MovieRoulettePreset {
-    static func sortOrder(lhs: MovieRoulettePreset, rhs: MovieRoulettePreset) -> Bool {
+    nonisolated static func sortOrder(lhs: MovieRoulettePreset, rhs: MovieRoulettePreset) -> Bool {
         if lhs.sortIndex != rhs.sortIndex {
             return lhs.sortIndex < rhs.sortIndex
         }
@@ -81,7 +81,7 @@ extension MovieRoulettePreset {
         return lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName) == .orderedAscending
     }
 
-    static func normalized(_ presets: [MovieRoulettePreset], groupId: String) -> [MovieRoulettePreset] {
+    nonisolated static func normalized(_ presets: [MovieRoulettePreset], groupId: String) -> [MovieRoulettePreset] {
         presets
             .sorted(by: sortOrder)
             .enumerated()
@@ -93,7 +93,7 @@ extension MovieRoulettePreset {
             }
     }
 
-    static func deduplicatedMovieRefs(_ refs: [MovieNightMovieRef]) -> [MovieNightMovieRef] {
+    nonisolated static func deduplicatedMovieRefs(_ refs: [MovieNightMovieRef]) -> [MovieNightMovieRef] {
         var seen: Set<UUID> = []
         var result: [MovieNightMovieRef] = []
         result.reserveCapacity(refs.count)
