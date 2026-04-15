@@ -23,7 +23,9 @@ final class MovieRouletteViewModel: ObservableObject {
 
     private var activeGroupId: String = ""
     private var backlogCandidates: [MovieRouletteCandidate] = []
+    private var excludedCandidateIds: Set<UUID> = []
     private var lastCandidateIds: [UUID] = []
+    private var lastSourceCandidateIds: [UUID] = []
     private var lastPresetIds: [UUID] = []
     private var spinKickoffTask: Task<Void, Never>?
     private var spinCompletionTask: Task<Void, Never>?
@@ -35,6 +37,45 @@ final class MovieRouletteViewModel: ObservableObject {
     var selectedPreset: MovieRoulettePreset? {
         guard let selectedPresetId else { return nil }
         return availablePresets.first(where: { $0.id == selectedPresetId })
+    }
+
+    var resultSourceTitle: String {
+        switch selectedSource {
+        case .backlog:
+            return "Backlog"
+        case .preset:
+            return selectedPreset?.displayName ?? "Auswahl"
+        }
+    }
+
+    var resultMessage: String {
+        switch selectedSource {
+        case .backlog:
+            return "Das Roulette hat für \(groupName) einen Film aus eurem Backlog ausgewählt."
+        case .preset:
+            if let preset = selectedPreset {
+                return "Das Roulette hat für \(groupName) einen Film aus der Auswahl „\(preset.displayName)“ ausgewählt."
+            }
+            return "Das Roulette hat für \(groupName) einen Film aus eurer Auswahl ausgewählt."
+        }
+    }
+
+    var stageDescription: String {
+        if isSpinning {
+            return "Das Roulette läuft gerade aus. Sobald der Strip stoppt, steht der Gewinner fest."
+        }
+        if winningCandidate != nil {
+            return "Der Gewinner steht fest. Du kannst ihn direkt als Filmabend übernehmen oder noch einmal drehen."
+        }
+        return "Der leuchtende Marker zeigt am Ende den Gewinnerfilm an."
+    }
+
+    var canSuggestMovieNight: Bool {
+        winningCandidate != nil && activeGroupId.isEmpty == false
+    }
+
+    var canRemoveWinnerAndSpinAgain: Bool {
+        winningCandidate != nil && candidates.count > 1 && isSpinning == false
     }
 
     var candidateCountText: String {
@@ -129,6 +170,8 @@ final class MovieRouletteViewModel: ObservableObject {
         let normalizedPresets = MovieRoulettePreset.normalized(presets, groupId: normalizedGroupId)
         let nextPresetIds = normalizedPresets.map(\.id)
         let previousGroupId = activeGroupId
+        let previousSelectedPresetId = selectedPresetId
+
         backlogCandidates = MovieRouletteCandidate.buildBacklogCandidates(from: backlogMovies, activeGroupId: normalizedGroupId)
 
         if normalizedGroupId != activeGroupId {
@@ -144,22 +187,23 @@ final class MovieRouletteViewModel: ObservableObject {
         groupName = resolvedGroupName
         availablePresets = normalizedPresets
 
-        let nextCandidates: [MovieRouletteCandidate]
-        switch selectedSource {
-        case .backlog:
-            nextCandidates = backlogCandidates
-        case .preset:
-            nextCandidates = MovieRouletteCandidate.buildPresetCandidates(from: selectedPreset)
+        let sourceCandidates = currentSourceCandidates()
+        let sourceCandidateIds = sourceCandidates.map(\.id)
+        let shouldResetSession = normalizedGroupId != previousGroupId || sourceCandidateIds != lastSourceCandidateIds || nextPresetIds != lastPresetIds || previousSelectedPresetId != selectedPresetId
+
+        if shouldResetSession {
+            excludedCandidateIds.removeAll()
         }
 
+        let nextCandidates = applyExclusions(to: sourceCandidates)
         let nextCandidateIds = nextCandidates.map(\.id)
-        let shouldReset = normalizedGroupId != previousGroupId || nextCandidateIds != lastCandidateIds || nextPresetIds != lastPresetIds
 
         candidates = nextCandidates
         lastCandidateIds = nextCandidateIds
+        lastSourceCandidateIds = sourceCandidateIds
         lastPresetIds = nextPresetIds
 
-        if shouldReset {
+        if shouldResetSession {
             resetState(clearWinner: true)
         } else if displayCandidates.isEmpty && nextCandidates.isEmpty == false {
             resetStrip(with: nextCandidates)
@@ -169,12 +213,14 @@ final class MovieRouletteViewModel: ObservableObject {
     func selectSource(_ source: MovieRouletteSource) {
         guard selectedSource != source else { return }
         selectedSource = source
+        excludedCandidateIds.removeAll()
         recalculateCandidates(clearWinner: true)
     }
 
     func selectPreset(_ presetId: UUID) {
         guard selectedPresetId != presetId else { return }
         selectedPresetId = presetId
+        excludedCandidateIds.removeAll()
         recalculateCandidates(clearWinner: true)
     }
 
@@ -205,22 +251,48 @@ final class MovieRouletteViewModel: ObservableObject {
         }
     }
 
-    private func recalculateCandidates(clearWinner: Bool) {
-        let nextCandidates: [MovieRouletteCandidate]
-        switch selectedSource {
-        case .backlog:
-            nextCandidates = candidatesForBacklog()
-        case .preset:
-            nextCandidates = MovieRouletteCandidate.buildPresetCandidates(from: selectedPreset)
+    func removeWinningCandidateAndSpinAgain() {
+        guard let winningCandidate, canRemoveWinnerAndSpinAgain else { return }
+        guard removeCandidateFromCurrentSession(candidateId: winningCandidate.id) else { return }
+        if candidates.isEmpty == false {
+            spin()
         }
+    }
 
+    @discardableResult
+    func removeCandidateFromCurrentSession(candidateId: UUID) -> Bool {
+        let sourceCandidateIds = currentSourceCandidates().map(\.id)
+        guard sourceCandidateIds.contains(candidateId) else { return false }
+
+        excludedCandidateIds.insert(candidateId)
+        let nextCandidates = applyExclusions(to: currentSourceCandidates())
         candidates = nextCandidates
         lastCandidateIds = nextCandidates.map(\.id)
+        lastSourceCandidateIds = sourceCandidateIds
+        resetState(clearWinner: true)
+        return true
+    }
+
+    private func recalculateCandidates(clearWinner: Bool) {
+        let sourceCandidates = currentSourceCandidates()
+        candidates = applyExclusions(to: sourceCandidates)
+        lastCandidateIds = candidates.map(\.id)
+        lastSourceCandidateIds = sourceCandidates.map(\.id)
         resetState(clearWinner: clearWinner)
     }
 
-    private func candidatesForBacklog() -> [MovieRouletteCandidate] {
-        backlogCandidates
+    private func currentSourceCandidates() -> [MovieRouletteCandidate] {
+        switch selectedSource {
+        case .backlog:
+            return backlogCandidates
+        case .preset:
+            return MovieRouletteCandidate.buildPresetCandidates(from: selectedPreset)
+        }
+    }
+
+    private func applyExclusions(to sourceCandidates: [MovieRouletteCandidate]) -> [MovieRouletteCandidate] {
+        guard excludedCandidateIds.isEmpty == false else { return sourceCandidates }
+        return sourceCandidates.filter { excludedCandidateIds.contains($0.id) == false }
     }
 
     private func resetState(clearWinner: Bool) {

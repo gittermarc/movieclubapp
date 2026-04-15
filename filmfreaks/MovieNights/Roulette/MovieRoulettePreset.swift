@@ -46,6 +46,31 @@ struct MovieRoulettePreset: Identifiable, Codable, Equatable, Hashable {
 }
 
 extension MovieRoulettePreset {
+    static func == (lhs: MovieRoulettePreset, rhs: MovieRoulettePreset) -> Bool {
+        lhs.id == rhs.id &&
+        lhs.groupId == rhs.groupId &&
+        lhs.name == rhs.name &&
+        lhs.sortIndex == rhs.sortIndex &&
+        lhs.movieRefs == rhs.movieRefs &&
+        normalizedUpdatedAt(lhs.updatedAt) == normalizedUpdatedAt(rhs.updatedAt)
+    }
+
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+        hasher.combine(groupId)
+        hasher.combine(name)
+        hasher.combine(sortIndex)
+        hasher.combine(movieRefs)
+        hasher.combine(Self.normalizedUpdatedAt(updatedAt))
+    }
+
+    private static func normalizedUpdatedAt(_ date: Date) -> Double {
+        let milliseconds = (date.timeIntervalSince1970 * 1000).rounded(.toNearestOrAwayFromZero)
+        return milliseconds / 1000
+    }
+}
+
+extension MovieRoulettePreset {
     static func sortOrder(lhs: MovieRoulettePreset, rhs: MovieRoulettePreset) -> Bool {
         if lhs.sortIndex != rhs.sortIndex {
             return lhs.sortIndex < rhs.sortIndex

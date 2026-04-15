@@ -37,3 +37,32 @@ struct MovieRoulettePresetTests {
         return calendar.date(from: components) ?? .distantPast
     }
 }
+
+
+extension MovieRoulettePresetTests {
+    @Test func equalityIgnoresSubMillisecondUpdatedAtDifferences() {
+        let base = Date(timeIntervalSince1970: 1_765_712_871.1234)
+        let near = Date(timeIntervalSince1970: 1_765_712_871.1234004)
+        let movieRef = MovieNightMovieRef(movieId: UUID(), title: "Arrival", year: "2016", posterPath: nil, tmdbId: nil)
+
+        let lhs = MovieRoulettePreset(
+            id: UUID(uuidString: "11111111-1111-1111-1111-111111111111") ?? UUID(),
+            groupId: "group-1",
+            name: "Sci-Fi",
+            sortIndex: 0,
+            movieRefs: [movieRef],
+            updatedAt: base
+        )
+        let rhs = MovieRoulettePreset(
+            id: lhs.id,
+            groupId: "group-1",
+            name: "Sci-Fi",
+            sortIndex: 0,
+            movieRefs: [movieRef],
+            updatedAt: near
+        )
+
+        #expect(lhs == rhs)
+        #expect(lhs.hashValue == rhs.hashValue)
+    }
+}

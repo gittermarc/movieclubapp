@@ -11,10 +11,12 @@ struct MovieRouletteView: View {
 
     @EnvironmentObject private var movieStore: MovieStore
     @EnvironmentObject private var movieNightStore: MovieNightStore
+    @EnvironmentObject private var userStore: UserStore
     @EnvironmentObject private var displaySettings: DisplaySettings
 
     @StateObject private var viewModel = MovieRouletteViewModel()
     @State private var isPresetManagerPresented: Bool = false
+    @State private var proposalContext: ProposalContext?
 
     private var m: DisplaySettings.LayoutMetrics { displaySettings.metrics }
 
@@ -43,9 +45,17 @@ struct MovieRouletteView: View {
                 if let winningCandidate = viewModel.winningCandidate {
                     MovieRouletteResultCard(
                         candidate: winningCandidate,
-                        groupName: viewModel.groupName,
-                        onSpinAgain: viewModel.spin
+                        sourceTitle: viewModel.resultSourceTitle,
+                        message: viewModel.resultMessage,
+                        onSuggestMovieNight: {
+                            proposalContext = ProposalContext(movieRef: winningCandidate.movieRef)
+                        },
+                        onSpinAgain: {
+                            viewModel.spin()
+                        },
+                        onRemoveWinnerAndSpinAgain: removeWinnerAndSpinAgainAction
                     )
+                    .transition(.asymmetric(insertion: .scale(scale: 0.96).combined(with: .opacity), removal: .opacity))
                 }
             }
             .padding(.horizontal, 16)
@@ -53,6 +63,8 @@ struct MovieRouletteView: View {
             .padding(.bottom, 20)
         }
         .background(Color(.systemGroupedBackground))
+        .animation(.spring(response: 0.46, dampingFraction: 0.86), value: viewModel.winningCandidate?.id)
+        .sensoryFeedback(.success, trigger: viewModel.winningCandidate?.id)
         .onAppear {
             syncFromStores()
             Task {
@@ -70,6 +82,17 @@ struct MovieRouletteView: View {
         }
         .onChange(of: movieStore.currentGroupName) { _, _ in
             syncFromStores()
+        }
+        .sheet(item: $proposalContext) { proposalContext in
+            ProposeMovieNightSheet(
+                groupId: currentGroupId,
+                initialDate: defaultProposedStart,
+                initialSuggestedMovie: proposalContext.movieRef
+            )
+            .environmentObject(movieNightStore)
+            .environmentObject(movieStore)
+            .environmentObject(userStore)
+            .environmentObject(displaySettings)
         }
         .sheet(isPresented: $isPresetManagerPresented) {
             MovieRoulettePresetManagementView(
@@ -195,7 +218,7 @@ struct MovieRouletteView: View {
             Text("Marker entscheidet")
                 .font(.headline)
 
-            Text(viewModel.isSpinning ? "Das Roulette läuft gerade aus. Sobald der Strip stoppt, steht der Gewinner fest." : "Der leuchtende Marker zeigt am Ende den Gewinnerfilm an.")
+            Text(viewModel.stageDescription)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -204,7 +227,8 @@ struct MovieRouletteView: View {
                 displayCandidates: viewModel.displayCandidates,
                 activeDisplayIndex: viewModel.activeDisplayIndex,
                 isSpinning: viewModel.isSpinning,
-                winningCandidateId: viewModel.winningCandidate?.id
+                winningCandidateId: viewModel.winningCandidate?.id,
+                sourceTitle: viewModel.selectedSource.title
             )
             .environmentObject(displaySettings)
 
@@ -347,6 +371,23 @@ struct MovieRouletteView: View {
         return "Im Rennen: \(joined)."
     }
 
+    private var defaultProposedStart: Date {
+        Calendar.current.defaultMovieNightStart(for: .now)
+    }
+
+    private var removeWinnerAndSpinAgainAction: (() -> Void)? {
+        guard viewModel.canRemoveWinnerAndSpinAgain else { return nil }
+        return {
+            viewModel.removeWinningCandidateAndSpinAgain()
+        }
+    }
+
+    private struct ProposalContext: Identifiable {
+        let movieRef: MovieNightMovieRef
+
+        var id: UUID { movieRef.movieId }
+    }
+
     private func syncFromStores() {
         viewModel.update(
             backlogMovies: movieStore.backlogMovies,
@@ -389,5 +430,17 @@ struct MovieRouletteView: View {
     }
     .environmentObject(movieStore)
     .environmentObject(movieNightStore)
+    .environmentObject(UserStore())
     .environmentObject(DisplaySettings())
+}
+
+
+private extension Calendar {
+    func defaultMovieNightStart(for day: Date) -> Date {
+        let base = startOfDay(for: day)
+        if let candidate = date(bySettingHour: 20, minute: 0, second: 0, of: base) {
+            return candidate
+        }
+        return day
+    }
 }

@@ -13,6 +13,7 @@ struct MovieRouletteSpinStripView: View {
     let activeDisplayIndex: Int
     let isSpinning: Bool
     let winningCandidateId: UUID?
+    let sourceTitle: String
 
     @EnvironmentObject private var displaySettings: DisplaySettings
 
@@ -163,7 +164,7 @@ struct MovieRouletteSpinStripView: View {
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
 
-                Text(isWinner ? "Gewinner" : "Backlog")
+                Text(isWinner ? "Gewinner" : sourceTitle)
                     .font(.caption)
                     .foregroundStyle(isWinner ? displaySettings.tintColor : .secondary)
             }

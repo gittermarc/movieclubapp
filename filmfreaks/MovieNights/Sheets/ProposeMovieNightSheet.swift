@@ -22,7 +22,7 @@ struct ProposeMovieNightSheet: View {
 
     @State private var proposedStart: Date
     @State private var note: String
-    @State private var suggestedMovie: MovieNightMovieRef? = nil
+    @State private var suggestedMovie: MovieNightMovieRef?
     @State private var showNoUserAlert: Bool = false
 
     private var isGroupContextReady: Bool {
@@ -33,11 +33,12 @@ struct ProposeMovieNightSheet: View {
         return GroupContextStore.context(forGroupId: gid) != nil
     }
 
-    init(groupId: String, initialDate: Date) {
+    init(groupId: String, initialDate: Date, initialSuggestedMovie: MovieNightMovieRef? = nil) {
         self.groupId = groupId
         self.initialDate = initialDate
         _proposedStart = State(initialValue: initialDate)
         _note = State(initialValue: "")
+        _suggestedMovie = State(initialValue: initialSuggestedMovie)
     }
 
     var body: some View {
