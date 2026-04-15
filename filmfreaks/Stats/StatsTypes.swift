@@ -197,6 +197,40 @@ nonisolated struct StatsPickInsightsSnapshot {
     )
 }
 
+
+nonisolated struct StatsSuggestionQualityInsight {
+    let suggesterName: String
+    let ratedSuggestionsCount: Int
+    let averageGroupRating: Double
+    let crowdPleaserCount: Int
+    let crowdPleaserRate: Double
+    let controversialCount: Int
+    let controversialRate: Double
+}
+
+nonisolated struct StatsSuggestionWatchTimingInsight {
+    let suggesterName: String
+    let datedSuggestionsCount: Int
+    let averageDaysToWatch: Double
+    let averageGroupRating: Double
+    let ratedSuggestionsCount: Int
+    let ratingDisplayMode: RatingDisplayMode
+}
+
+nonisolated struct StatsSuggestionQualitySnapshot {
+    let bestAverageRatingSuggester: StatsSuggestionQualityInsight?
+    let bestHitRateSuggester: StatsSuggestionQualityInsight?
+    let mostControversialSuggester: StatsSuggestionQualityInsight?
+    let fastestToWatchSuggester: StatsSuggestionWatchTimingInsight?
+
+    static let empty = StatsSuggestionQualitySnapshot(
+        bestAverageRatingSuggester: nil,
+        bestHitRateSuggester: nil,
+        mostControversialSuggester: nil,
+        fastestToWatchSuggester: nil
+    )
+}
+
 struct CriticGapEntry: Identifiable {
     let movie: Movie
     let groupAverage: Double

@@ -85,6 +85,7 @@ struct StatsView: View {
                     actorsCard
                     locationsCard
                     suggestionsCard
+                    suggestionQualityCard
                     ratingsPerPersonCard
                 }
                 .padding(.horizontal)

@@ -194,6 +194,148 @@ struct StatsSnapshotBuilderTests {
     }
 
 
+    @Test func computeSnapshotBuildsSuggestionQualityInsights() {
+        let alice = User(id: UUID(uuidString: "00000000-0000-0000-0000-000000000071")!, name: "Alice")
+        let bob = User(id: UUID(uuidString: "00000000-0000-0000-0000-000000000072")!, name: "Bob")
+        let clara = User(id: UUID(uuidString: "00000000-0000-0000-0000-000000000073")!, name: "Clara")
+        let dan = User(id: UUID(uuidString: "00000000-0000-0000-0000-000000000074")!, name: "Dan")
+
+        let movies = [
+            makeMovie(
+                title: "Alice Crowd One",
+                watchedDate: makeDate(year: 2026, month: 8, day: 4),
+                ratings: [
+                    makeRating(user: alice, fazit: 8),
+                    makeRating(user: bob, fazit: 8),
+                    makeRating(user: clara, fazit: 8),
+                    makeRating(user: dan, fazit: 8)
+                ],
+                suggestedBy: "Alice",
+                addedAt: makeDate(year: 2026, month: 8, day: 1)
+            ),
+            makeMovie(
+                title: "Alice Crowd Two",
+                watchedDate: makeDate(year: 2026, month: 8, day: 9),
+                ratings: [
+                    makeRating(user: alice, fazit: 9),
+                    makeRating(user: bob, fazit: 9),
+                    makeRating(user: clara, fazit: 8),
+                    makeRating(user: dan, fazit: 8)
+                ],
+                suggestedBy: "Alice",
+                addedAt: makeDate(year: 2026, month: 8, day: 5)
+            ),
+            makeMovie(
+                title: "Alice Split",
+                watchedDate: makeDate(year: 2026, month: 8, day: 16),
+                ratings: [
+                    makeRating(user: alice, fazit: 10),
+                    makeRating(user: bob, fazit: 10),
+                    makeRating(user: clara, fazit: 5),
+                    makeRating(user: dan, fazit: 5)
+                ],
+                suggestedBy: "Alice",
+                addedAt: makeDate(year: 2026, month: 8, day: 12)
+            ),
+            makeMovie(
+                title: "Bob Split One",
+                watchedDate: makeDate(year: 2026, month: 8, day: 11),
+                ratings: [
+                    makeRating(user: alice, fazit: 10),
+                    makeRating(user: bob, fazit: 10),
+                    makeRating(user: clara, fazit: 5),
+                    makeRating(user: dan, fazit: 5)
+                ],
+                suggestedBy: "Bob",
+                addedAt: makeDate(year: 2026, month: 8, day: 1)
+            ),
+            makeMovie(
+                title: "Bob Split Two",
+                watchedDate: makeDate(year: 2026, month: 8, day: 22),
+                ratings: [
+                    makeRating(user: alice, fazit: 10),
+                    makeRating(user: bob, fazit: 10),
+                    makeRating(user: clara, fazit: 5),
+                    makeRating(user: dan, fazit: 5)
+                ],
+                suggestedBy: "Bob",
+                addedAt: makeDate(year: 2026, month: 8, day: 2)
+            ),
+            makeMovie(
+                title: "Bob Calm",
+                watchedDate: makeDate(year: 2026, month: 8, day: 30),
+                ratings: [
+                    makeRating(user: alice, fazit: 6),
+                    makeRating(user: bob, fazit: 6),
+                    makeRating(user: clara, fazit: 6),
+                    makeRating(user: dan, fazit: 6)
+                ],
+                suggestedBy: "Bob",
+                addedAt: makeDate(year: 2026, month: 8, day: 5)
+            ),
+            makeMovie(
+                title: "Clara Crowd One",
+                watchedDate: makeDate(year: 2026, month: 8, day: 3),
+                ratings: [
+                    makeRating(user: alice, fazit: 9),
+                    makeRating(user: bob, fazit: 9),
+                    makeRating(user: clara, fazit: 9),
+                    makeRating(user: dan, fazit: 9)
+                ],
+                suggestedBy: "Clara",
+                addedAt: makeDate(year: 2026, month: 8, day: 2)
+            ),
+            makeMovie(
+                title: "Clara Crowd Two",
+                watchedDate: makeDate(year: 2026, month: 8, day: 7),
+                ratings: [
+                    makeRating(user: alice, fazit: 8),
+                    makeRating(user: bob, fazit: 8),
+                    makeRating(user: clara, fazit: 8),
+                    makeRating(user: dan, fazit: 8)
+                ],
+                suggestedBy: "Clara",
+                addedAt: makeDate(year: 2026, month: 8, day: 5)
+            ),
+            makeMovie(
+                title: "Clara Crowd Three",
+                watchedDate: makeDate(year: 2026, month: 8, day: 12),
+                ratings: [
+                    makeRating(user: alice, fazit: 8),
+                    makeRating(user: bob, fazit: 8),
+                    makeRating(user: clara, fazit: 8),
+                    makeRating(user: dan, fazit: 7)
+                ],
+                suggestedBy: "Clara",
+                addedAt: makeDate(year: 2026, month: 8, day: 10)
+            )
+        ]
+
+        let snapshot = StatsSnapshotBuilder.computeSnapshot(
+            movies: movies,
+            users: [alice, bob, clara, dan],
+            ratingDisplayMode: .fazitAverage,
+            selectedRange: .all,
+            selectedLocationFilter: nil
+        )
+
+        #expect(snapshot.bestAverageRatingSuggester?.suggesterName == "Clara")
+        #expect(snapshot.bestAverageRatingSuggester?.ratedSuggestionsCount == 3)
+        #expect(abs((snapshot.bestAverageRatingSuggester?.averageGroupRating ?? 0.0) - 8.25) < 0.0001)
+
+        #expect(snapshot.bestHitRateSuggester?.suggesterName == "Clara")
+        #expect(snapshot.bestHitRateSuggester?.crowdPleaserCount == 3)
+        #expect(abs((snapshot.bestHitRateSuggester?.crowdPleaserRate ?? 0.0) - 1.0) < 0.0001)
+
+        #expect(snapshot.mostControversialSuggester?.suggesterName == "Bob")
+        #expect(snapshot.mostControversialSuggester?.controversialCount == 2)
+        #expect(abs((snapshot.mostControversialSuggester?.controversialRate ?? 0.0) - (2.0 / 3.0)) < 0.0001)
+
+        #expect(snapshot.fastestToWatchSuggester?.suggesterName == "Clara")
+        #expect(snapshot.fastestToWatchSuggester?.datedSuggestionsCount == 3)
+        #expect(abs((snapshot.fastestToWatchSuggester?.averageDaysToWatch ?? 0.0) - (5.0 / 3.0)) < 0.0001)
+    }
+
     @Test func computeSnapshotBuildsRatingDimensionInsights() {
         let alice = User(id: UUID(uuidString: "00000000-0000-0000-0000-000000000031")!, name: "Alice")
         let bob = User(id: UUID(uuidString: "00000000-0000-0000-0000-000000000032")!, name: "Bob")
@@ -320,6 +462,61 @@ struct StatsSnapshotBuilderTests {
         #expect(snapshot.hotTakeReviewer == nil)
     }
 
+    @Test func computeSnapshotSuppressesSuggestionQualityInsightsForThinData() {
+        let alice = User(id: UUID(uuidString: "00000000-0000-0000-0000-000000000081")!, name: "Alice")
+        let bob = User(id: UUID(uuidString: "00000000-0000-0000-0000-000000000082")!, name: "Bob")
+        let clara = User(id: UUID(uuidString: "00000000-0000-0000-0000-000000000083")!, name: "Clara")
+
+        let movies = [
+            makeMovie(
+                title: "One",
+                watchedDate: makeDate(year: 2026, month: 9, day: 3),
+                ratings: [
+                    makeRating(user: alice, fazit: 8),
+                    makeRating(user: bob, fazit: 8),
+                    makeRating(user: clara, fazit: 8)
+                ],
+                suggestedBy: "Alice",
+                addedAt: makeDate(year: 2026, month: 9, day: 1)
+            ),
+            makeMovie(
+                title: "Two",
+                watchedDate: makeDate(year: 2026, month: 9, day: 6),
+                ratings: [
+                    makeRating(user: alice, fazit: 8),
+                    makeRating(user: bob, fazit: 8),
+                    makeRating(user: clara, fazit: 8)
+                ],
+                suggestedBy: "Alice",
+                addedAt: makeDate(year: 2026, month: 9, day: 5)
+            ),
+            makeMovie(
+                title: "Three",
+                watchedDate: makeDate(year: 2026, month: 9, day: 8),
+                ratings: [
+                    makeRating(user: alice, fazit: 10),
+                    makeRating(user: bob, fazit: 1),
+                    makeRating(user: clara, fazit: 10)
+                ],
+                suggestedBy: "Bob",
+                addedAt: makeDate(year: 2026, month: 9, day: 1)
+            )
+        ]
+
+        let snapshot = StatsSnapshotBuilder.computeSnapshot(
+            movies: movies,
+            users: [alice, bob, clara],
+            ratingDisplayMode: .fazitAverage,
+            selectedRange: .all,
+            selectedLocationFilter: nil
+        )
+
+        #expect(snapshot.bestAverageRatingSuggester == nil)
+        #expect(snapshot.bestHitRateSuggester == nil)
+        #expect(snapshot.mostControversialSuggester == nil)
+        #expect(snapshot.fastestToWatchSuggester == nil)
+    }
+
     @Test func computeSnapshotSuppressesPickInsightsForThinData() {
         let alice = User(id: UUID(uuidString: "00000000-0000-0000-0000-000000000061")!, name: "Alice")
         let bob = User(id: UUID(uuidString: "00000000-0000-0000-0000-000000000062")!, name: "Bob")
@@ -355,14 +552,18 @@ struct StatsSnapshotBuilderTests {
         title: String,
         watchedDate: Date?,
         watchedLocation: String? = nil,
-        ratings: [Rating] = []
+        ratings: [Rating] = [],
+        suggestedBy: String? = nil,
+        addedAt: Date? = nil
     ) -> Movie {
         Movie(
             title: title,
             year: watchedDate == nil ? "2026" : String(Calendar(identifier: .gregorian).component(.year, from: watchedDate!)),
             ratings: ratings,
             watchedDate: watchedDate,
-            watchedLocation: watchedLocation
+            watchedLocation: watchedLocation,
+            suggestedBy: suggestedBy,
+            addedAt: addedAt
         )
     }
 

@@ -64,6 +64,11 @@ struct StatsSnapshot {
     var daringPick: StatsPickInsight?
     var crowdPleaser: StatsPickInsight?
 
+    var bestAverageRatingSuggester: StatsSuggestionQualityInsight?
+    var bestHitRateSuggester: StatsSuggestionQualityInsight?
+    var mostControversialSuggester: StatsSuggestionQualityInsight?
+    var fastestToWatchSuggester: StatsSuggestionWatchTimingInsight?
+
     var userStatsByUserId: [UUID: StatsUserStats]
 
     static let empty = StatsSnapshot(
@@ -104,6 +109,10 @@ struct StatsSnapshot {
         safePick: nil,
         daringPick: nil,
         crowdPleaser: nil,
+        bestAverageRatingSuggester: nil,
+        bestHitRateSuggester: nil,
+        mostControversialSuggester: nil,
+        fastestToWatchSuggester: nil,
         userStatsByUserId: [:]
     )
 }

@@ -197,6 +197,22 @@ extension StatsView {
         viewModel.snapshot.crowdPleaser
     }
 
+    var bestAverageRatingSuggester: StatsSuggestionQualityInsight? {
+        viewModel.snapshot.bestAverageRatingSuggester
+    }
+
+    var bestHitRateSuggester: StatsSuggestionQualityInsight? {
+        viewModel.snapshot.bestHitRateSuggester
+    }
+
+    var mostControversialSuggester: StatsSuggestionQualityInsight? {
+        viewModel.snapshot.mostControversialSuggester
+    }
+
+    var fastestToWatchSuggester: StatsSuggestionWatchTimingInsight? {
+        viewModel.snapshot.fastestToWatchSuggester
+    }
+
     func statsForUser(_ user: User) -> (movieCount: Int, ratingsCount: Int, averageRating: Double?) {
         guard let s = viewModel.snapshot.userStatsByUserId[user.id] else {
             return (0, 0, nil)

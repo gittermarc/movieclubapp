@@ -317,6 +317,12 @@ enum StatsSnapshotBuilder {
             displayedScore: displayedScore(for:)
         )
 
+        let suggestionQuality = computeSuggestionQuality(
+            movies: filteredMovies,
+            ratingDisplayMode: ratingDisplayMode,
+            displayedScore: displayedScore(for:)
+        )
+
         var userStatsByUserId: [UUID: StatsUserStats] = [:]
         for user in users {
             var movieIds = Set<UUID>()
@@ -389,6 +395,10 @@ enum StatsSnapshotBuilder {
             safePick: pickInsights.safePick,
             daringPick: pickInsights.daringPick,
             crowdPleaser: pickInsights.crowdPleaser,
+            bestAverageRatingSuggester: suggestionQuality.bestAverageRatingSuggester,
+            bestHitRateSuggester: suggestionQuality.bestHitRateSuggester,
+            mostControversialSuggester: suggestionQuality.mostControversialSuggester,
+            fastestToWatchSuggester: suggestionQuality.fastestToWatchSuggester,
             userStatsByUserId: userStatsByUserId
         )
     }
