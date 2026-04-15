@@ -136,7 +136,18 @@ private struct ContentRoutingModifier: ViewModifier {
             )
 
         case .groupSettings:
-            themed(GroupSettingsView())
+            themed(
+                NavigationStack {
+                    GroupSettingsView()
+                        .toolbar {
+                            ToolbarItem(placement: .topBarTrailing) {
+                                Button("Fertig") {
+                                    self.route = nil
+                                }
+                            }
+                        }
+                }
+            )
         }
     }
 
