@@ -49,6 +49,12 @@ struct StatsSnapshot {
     var moviesByLocation: [(location: String, count: Int)]
     var suggestionsByUser: [(name: String, count: Int)]
 
+    var tasteTwins: StatsTastePairInsight?
+    var frictionPair: StatsTastePairInsight?
+    var strictestReviewer: StatsReviewerBiasInsight?
+    var mostGenerousReviewer: StatsReviewerBiasInsight?
+    var hotTakeReviewer: StatsHotTakeInsight?
+
     var userStatsByUserId: [UUID: StatsUserStats]
 
     static let empty = StatsSnapshot(
@@ -77,6 +83,11 @@ struct StatsSnapshot {
         actorsByCountRaw: [],
         moviesByLocation: [],
         suggestionsByUser: [],
+        tasteTwins: nil,
+        frictionPair: nil,
+        strictestReviewer: nil,
+        mostGenerousReviewer: nil,
+        hotTakeReviewer: nil,
         userStatsByUserId: [:]
     )
 }

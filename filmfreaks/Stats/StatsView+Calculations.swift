@@ -149,6 +149,26 @@ extension StatsView {
         viewModel.snapshot.suggestionsByUser
     }
 
+    var tasteTwins: StatsTastePairInsight? {
+        viewModel.snapshot.tasteTwins
+    }
+
+    var frictionPair: StatsTastePairInsight? {
+        viewModel.snapshot.frictionPair
+    }
+
+    var strictestReviewer: StatsReviewerBiasInsight? {
+        viewModel.snapshot.strictestReviewer
+    }
+
+    var mostGenerousReviewer: StatsReviewerBiasInsight? {
+        viewModel.snapshot.mostGenerousReviewer
+    }
+
+    var hotTakeReviewer: StatsHotTakeInsight? {
+        viewModel.snapshot.hotTakeReviewer
+    }
+
     func statsForUser(_ user: User) -> (movieCount: Int, ratingsCount: Int, averageRating: Double?) {
         guard let s = viewModel.snapshot.userStatsByUserId[user.id] else {
             return (0, 0, nil)

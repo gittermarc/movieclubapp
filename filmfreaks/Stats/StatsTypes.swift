@@ -102,6 +102,44 @@ struct MovieHighlight: Identifiable {
     var id: UUID { movie.id }
 }
 
+
+struct StatsTastePairInsight: Hashable {
+    let firstReviewerName: String
+    let secondReviewerName: String
+    let sharedMoviesCount: Int
+    let averageDifference: Double
+}
+
+struct StatsReviewerBiasInsight: Hashable {
+    let reviewerName: String
+    let comparableRatingsCount: Int
+    let averageBias: Double
+}
+
+struct StatsHotTakeInsight: Hashable {
+    let reviewerName: String
+    let hotTakeCount: Int
+    let comparableRatingsCount: Int
+    let hotTakeRate: Double
+    let averageAbsoluteDeviation: Double
+}
+
+struct StatsTasteDynamicsSnapshot {
+    let tasteTwins: StatsTastePairInsight?
+    let frictionPair: StatsTastePairInsight?
+    let strictestReviewer: StatsReviewerBiasInsight?
+    let mostGenerousReviewer: StatsReviewerBiasInsight?
+    let hotTakeReviewer: StatsHotTakeInsight?
+
+    static let empty = StatsTasteDynamicsSnapshot(
+        tasteTwins: nil,
+        frictionPair: nil,
+        strictestReviewer: nil,
+        mostGenerousReviewer: nil,
+        hotTakeReviewer: nil
+    )
+}
+
 struct CriticGapEntry: Identifiable {
     let movie: Movie
     let groupAverage: Double

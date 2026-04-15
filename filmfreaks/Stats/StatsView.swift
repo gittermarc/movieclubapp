@@ -68,6 +68,8 @@ struct StatsView: View {
 
                     groupHealthCard
 
+                    tasteDynamicsCard
+
                     trendsCard
 
                     highlightsCard

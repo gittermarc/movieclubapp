@@ -10,6 +10,7 @@
 //  - StatsView+Cards.Filter.swift
 //  - StatsView+Cards.Dashboard.swift
 //  - StatsView+Cards.HealthAndTrends.swift
+//  - StatsView+Cards.TasteDynamics.swift
 //  - StatsView+Cards.Highlights.swift
 //  - StatsView+Cards.Leaderboards.swift
 //  - StatsView+Cards.Ratings.swift

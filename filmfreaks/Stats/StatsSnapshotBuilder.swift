@@ -299,6 +299,13 @@ enum StatsSnapshotBuilder {
                 }
         }()
 
+        let tasteDynamics = computeTasteDynamics(
+            movies: filteredMovies,
+            users: users,
+            displayedScore: displayedScore(for:),
+            reviewerKey: reviewerKey(for:)
+        )
+
         var userStatsByUserId: [UUID: StatsUserStats] = [:]
         for user in users {
             var movieIds = Set<UUID>()
@@ -359,6 +366,11 @@ enum StatsSnapshotBuilder {
             actorsByCountRaw: actorsByCountRaw,
             moviesByLocation: moviesByLocation,
             suggestionsByUser: suggestionsByUser,
+            tasteTwins: tasteDynamics.tasteTwins,
+            frictionPair: tasteDynamics.frictionPair,
+            strictestReviewer: tasteDynamics.strictestReviewer,
+            mostGenerousReviewer: tasteDynamics.mostGenerousReviewer,
+            hotTakeReviewer: tasteDynamics.hotTakeReviewer,
             userStatsByUserId: userStatsByUserId
         )
     }

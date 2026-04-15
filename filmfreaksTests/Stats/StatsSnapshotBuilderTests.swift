@@ -41,12 +41,151 @@ struct StatsSnapshotBuilderTests {
         #expect(snapshot.filteredMovies.map(\.title) == ["Recent"])
     }
 
-    private func makeMovie(title: String, watchedDate: Date?, watchedLocation: String?) -> Movie {
+    @Test func computeSnapshotBuildsTasteTwinsAndFrictionPair() {
+        let alice = User(id: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!, name: "Alice")
+        let bob = User(id: UUID(uuidString: "00000000-0000-0000-0000-000000000002")!, name: "Bob")
+        let clara = User(id: UUID(uuidString: "00000000-0000-0000-0000-000000000003")!, name: "Clara")
+
+        let movies = [
+            makeMovie(title: "One", watchedDate: makeDate(year: 2026, month: 1, day: 1), ratings: [
+                makeRating(user: alice, fazit: 7),
+                makeRating(user: bob, fazit: 7),
+                makeRating(user: clara, fazit: 3)
+            ]),
+            makeMovie(title: "Two", watchedDate: makeDate(year: 2026, month: 1, day: 2), ratings: [
+                makeRating(user: alice, fazit: 8),
+                makeRating(user: bob, fazit: 8),
+                makeRating(user: clara, fazit: 4)
+            ]),
+            makeMovie(title: "Three", watchedDate: makeDate(year: 2026, month: 1, day: 3), ratings: [
+                makeRating(user: alice, fazit: 6),
+                makeRating(user: bob, fazit: 7),
+                makeRating(user: clara, fazit: 9)
+            ])
+        ]
+
+        let snapshot = StatsSnapshotBuilder.computeSnapshot(
+            movies: movies,
+            users: [alice, bob, clara],
+            ratingDisplayMode: .fazitAverage,
+            selectedRange: .all,
+            selectedLocationFilter: nil
+        )
+
+        #expect(snapshot.tasteTwins?.firstReviewerName == "Alice")
+        #expect(snapshot.tasteTwins?.secondReviewerName == "Bob")
+        #expect(snapshot.tasteTwins?.sharedMoviesCount == 3)
+        #expect(abs((snapshot.tasteTwins?.averageDifference ?? 0.0) - (1.0 / 3.0)) < 0.0001)
+
+        #expect(snapshot.frictionPair?.firstReviewerName == "Alice")
+        #expect(snapshot.frictionPair?.secondReviewerName == "Clara")
+        #expect(snapshot.frictionPair?.sharedMoviesCount == 3)
+        #expect(abs((snapshot.frictionPair?.averageDifference ?? 0.0) - (11.0 / 3.0)) < 0.0001)
+    }
+
+    @Test func computeSnapshotBuildsStrictGenerousAndHotTakeInsights() {
+        let alice = User(id: UUID(uuidString: "00000000-0000-0000-0000-000000000011")!, name: "Alice")
+        let bob = User(id: UUID(uuidString: "00000000-0000-0000-0000-000000000012")!, name: "Bob")
+        let sam = User(id: UUID(uuidString: "00000000-0000-0000-0000-000000000013")!, name: "Sam")
+        let tina = User(id: UUID(uuidString: "00000000-0000-0000-0000-000000000014")!, name: "Tina")
+
+        let movies = [
+            makeMovie(title: "One", watchedDate: makeDate(year: 2026, month: 2, day: 1), ratings: [
+                makeRating(user: alice, fazit: 7),
+                makeRating(user: bob, fazit: 7),
+                makeRating(user: sam, fazit: 4),
+                makeRating(user: tina, fazit: 9)
+            ]),
+            makeMovie(title: "Two", watchedDate: makeDate(year: 2026, month: 2, day: 2), ratings: [
+                makeRating(user: alice, fazit: 8),
+                makeRating(user: bob, fazit: 8),
+                makeRating(user: sam, fazit: 5),
+                makeRating(user: tina, fazit: 10)
+            ]),
+            makeMovie(title: "Three", watchedDate: makeDate(year: 2026, month: 2, day: 3), ratings: [
+                makeRating(user: alice, fazit: 6),
+                makeRating(user: bob, fazit: 6),
+                makeRating(user: sam, fazit: 3),
+                makeRating(user: tina, fazit: 8)
+            ]),
+            makeMovie(title: "Four", watchedDate: makeDate(year: 2026, month: 2, day: 4), ratings: [
+                makeRating(user: alice, fazit: 7),
+                makeRating(user: bob, fazit: 8),
+                makeRating(user: sam, fazit: 4),
+                makeRating(user: tina, fazit: 10)
+            ])
+        ]
+
+        let snapshot = StatsSnapshotBuilder.computeSnapshot(
+            movies: movies,
+            users: [alice, bob, sam, tina],
+            ratingDisplayMode: .fazitAverage,
+            selectedRange: .all,
+            selectedLocationFilter: nil
+        )
+
+        #expect(snapshot.strictestReviewer?.reviewerName == "Sam")
+        #expect(snapshot.strictestReviewer?.comparableRatingsCount == 4)
+        #expect(snapshot.mostGenerousReviewer?.reviewerName == "Tina")
+        #expect(snapshot.mostGenerousReviewer?.comparableRatingsCount == 4)
+        #expect(snapshot.hotTakeReviewer?.reviewerName == "Sam")
+        #expect(snapshot.hotTakeReviewer?.hotTakeCount == 4)
+        #expect(snapshot.hotTakeReviewer?.comparableRatingsCount == 4)
+    }
+
+    @Test func computeSnapshotSuppressesTasteInsightsForThinData() {
+        let alice = User(id: UUID(uuidString: "00000000-0000-0000-0000-000000000021")!, name: "Alice")
+        let bob = User(id: UUID(uuidString: "00000000-0000-0000-0000-000000000022")!, name: "Bob")
+
+        let movies = [
+            makeMovie(title: "One", watchedDate: makeDate(year: 2026, month: 3, day: 1), ratings: [
+                makeRating(user: alice, fazit: 7),
+                makeRating(user: bob, fazit: 7)
+            ]),
+            makeMovie(title: "Two", watchedDate: makeDate(year: 2026, month: 3, day: 2), ratings: [
+                makeRating(user: alice, fazit: 8),
+                makeRating(user: bob, fazit: 6)
+            ])
+        ]
+
+        let snapshot = StatsSnapshotBuilder.computeSnapshot(
+            movies: movies,
+            users: [alice, bob],
+            ratingDisplayMode: .fazitAverage,
+            selectedRange: .all,
+            selectedLocationFilter: nil
+        )
+
+        #expect(snapshot.tasteTwins == nil)
+        #expect(snapshot.frictionPair == nil)
+        #expect(snapshot.strictestReviewer == nil)
+        #expect(snapshot.mostGenerousReviewer == nil)
+        #expect(snapshot.hotTakeReviewer == nil)
+    }
+
+    private func makeMovie(
+        title: String,
+        watchedDate: Date?,
+        watchedLocation: String? = nil,
+        ratings: [Rating] = []
+    ) -> Movie {
         Movie(
             title: title,
             year: watchedDate == nil ? "2026" : String(Calendar(identifier: .gregorian).component(.year, from: watchedDate!)),
+            ratings: ratings,
             watchedDate: watchedDate,
             watchedLocation: watchedLocation
+        )
+    }
+
+    private func makeRating(user: User, fazit: Int) -> Rating {
+        Rating(
+            reviewerId: user.id,
+            reviewerName: user.name,
+            scores: [:],
+            comment: nil,
+            fazitScore: fazit,
+            updatedAt: nil
         )
     }
 

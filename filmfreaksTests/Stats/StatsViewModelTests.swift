@@ -75,6 +75,11 @@ struct StatsViewModelTests {
             actorsByCountRaw: [],
             moviesByLocation: [],
             suggestionsByUser: [],
+            tasteTwins: nil,
+            frictionPair: nil,
+            strictestReviewer: nil,
+            mostGenerousReviewer: nil,
+            hotTakeReviewer: nil,
             userStatsByUserId: [:]
         )
         let secondSnapshot = StatsSnapshot(
@@ -103,6 +108,11 @@ struct StatsViewModelTests {
             actorsByCountRaw: [],
             moviesByLocation: [],
             suggestionsByUser: [],
+            tasteTwins: nil,
+            frictionPair: nil,
+            strictestReviewer: nil,
+            mostGenerousReviewer: nil,
+            hotTakeReviewer: nil,
             userStatsByUserId: [:]
         )
 
