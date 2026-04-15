@@ -71,11 +71,14 @@ internal extension MovieStore {
         print("MovieStore: leaving group with id \(oldId)")
 
         knownGroups.removeAll { $0.id == oldId }
+        activateLocalGroup()
+    }
 
+    func activateLocalGroup() {
         currentGroupId = nil
         currentGroupName = nil
 
-        // Fallback auf "default"-Gruppe (lokal) – danach (best effort) Cloud-Reload.
+        // Fallback auf die lokale Standardgruppe – danach (best effort) Cloud-Reload.
         loadLocalCache(for: nil)
 
         Task { await self.loadFromCloud() }

@@ -21,7 +21,7 @@ struct GroupSettingsPresentationTests {
         #expect(badge == "Cloud")
     }
 
-    @Test func activeGroupBadgeShowsOwnedAndSharedAccordingToContextScope() {
+    @Test func activeGroupBadgeUsesGermanLabelsForOwnedAndSharedGroups() {
         let ownedContext = GroupContext(
             id: "owned",
             name: "Owned Group",
@@ -37,8 +37,18 @@ struct GroupSettingsPresentationTests {
             ownerName: "owner"
         )
 
-        #expect(GroupSettingsPresentation.activeGroupBadgeText(currentGroupId: ownedContext.id, activeContext: ownedContext) == "Owned")
-        #expect(GroupSettingsPresentation.activeGroupBadgeText(currentGroupId: sharedContext.id, activeContext: sharedContext) == "Shared")
+        #expect(GroupSettingsPresentation.activeGroupBadgeText(currentGroupId: ownedContext.id, activeContext: ownedContext) == "Eigene Gruppe")
+        #expect(GroupSettingsPresentation.activeGroupBadgeText(currentGroupId: sharedContext.id, activeContext: sharedContext) == "Geteilte Gruppe")
+    }
+
+    @Test func activeGroupSummaryUsesExpectedCountCopy() {
+        let summary = GroupSettingsPresentation.activeGroupSummary(
+            memberCount: 1,
+            watchedCount: 2,
+            backlogCount: 3
+        )
+
+        #expect(summary == "1 Mitglied • 2 Filme • 3 im Backlog")
     }
 
     @Test func pendingActionUsesExpectedTitleAndMessageCopy() {

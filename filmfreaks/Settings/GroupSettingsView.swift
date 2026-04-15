@@ -12,6 +12,7 @@ struct GroupSettingsView: View {
     @EnvironmentObject private var movieStore: MovieStore
     @EnvironmentObject private var userStore: UserStore
     @EnvironmentObject private var groupStore: CloudKitGroupStore
+    @EnvironmentObject private var displaySettings: DisplaySettings
 
     @State private var newCloudGroupName: String = ""
     @State private var migrateError: String?
@@ -33,37 +34,149 @@ struct GroupSettingsView: View {
         )
     }
 
+    private var activeGroupDescription: String {
+        GroupSettingsPresentation.activeGroupDescription(
+            currentGroupId: movieStore.currentGroupId,
+            activeContext: activeContext
+        )
+    }
+
+    private var activeGroupSummaryText: String {
+        GroupSettingsPresentation.activeGroupSummary(
+            memberCount: userStore.users.count,
+            watchedCount: movieStore.movies.count,
+            backlogCount: movieStore.backlogMovies.count
+        )
+    }
+
     private var canShareActiveGroup: Bool {
         guard let activeContext else { return false }
         return !activeContext.isShared
     }
 
-    var body: some View {
-        Form {
-            GroupSettingsActiveSectionView(
-                currentGroupName: movieStore.currentGroupName ?? "Standard",
-                activeGroupBadgeText: activeGroupBadgeText,
-                canShareActiveGroup: canShareActiveGroup,
-                isPerformingGroupAction: isPerformingGroupAction,
-                onShareActiveGroup: shareActiveGroup
-            )
+    private var canSwitchToLocalGroup: Bool {
+        movieStore.currentGroupId != nil
+    }
 
-            GroupSettingsCloudSectionView(
-                newCloudGroupName: $newCloudGroupName,
-                ownedGroups: groupStore.ownedGroups,
-                sharedGroups: groupStore.sharedGroups,
-                currentGroupId: movieStore.currentGroupId,
-                isPerformingGroupAction: isPerformingGroupAction,
-                onCreateGroup: createCloudGroup,
-                onSwitchGroup: switchToGroup,
-                onShareGroup: shareGroup,
-                onDeleteGroup: requestDeleteGroup,
-                onLeaveGroup: requestLeaveGroup
-            )
+    private var hasCloudGroups: Bool {
+        !groupStore.ownedGroups.isEmpty || !groupStore.sharedGroups.isEmpty
+    }
+
+    private var horizontalPadding: CGFloat {
+        max(16, displaySettings.metrics.cardPadding + 6)
+    }
+
+    var body: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 24) {
+                GroupSettingsHeroCardView(
+                    currentGroupName: movieStore.currentGroupName ?? "Standard",
+                    activeGroupBadgeText: activeGroupBadgeText,
+                    detailText: activeGroupDescription,
+                    summaryText: activeGroupSummaryText,
+                    canShareActiveGroup: canShareActiveGroup,
+                    canSwitchToLocalGroup: canSwitchToLocalGroup,
+                    isPerformingGroupAction: isPerformingGroupAction,
+                    onShareActiveGroup: shareActiveGroup,
+                    onSwitchToLocalGroup: switchToLocalGroup
+                )
+
+                VStack(alignment: .leading, spacing: 14) {
+                    GroupSettingsSectionHeaderView(
+                        title: "Gruppe wechseln",
+                        subtitle: "Hier bestimmst du, in welchem Raum gerade Filme, Backlog und Mitglieder verwaltet werden."
+                    )
+
+                    GroupSettingsGroupCardView(
+                        title: GroupSettingsPresentation.localGroupTitle(),
+                        subtitle: "Lokale Standardgruppe",
+                        detailText: GroupSettingsPresentation.localGroupDetailText(),
+                        badgeText: "Lokal",
+                        isActive: movieStore.currentGroupId == nil,
+                        isPerformingGroupAction: isPerformingGroupAction,
+                        primaryActionTitle: "Lokal nutzen",
+                        primaryActionSystemImage: "iphone",
+                        onPrimaryAction: switchToLocalGroup,
+                        onShareAction: nil,
+                        destructiveActionTitle: nil,
+                        destructiveActionSystemImage: nil,
+                        onDestructiveAction: nil
+                    )
+
+                    if !groupStore.ownedGroups.isEmpty {
+                        GroupSettingsSectionHeaderView(title: "Eigene Gruppen", subtitle: nil)
+
+                        ForEach(groupStore.ownedGroups) { group in
+                            GroupSettingsGroupCardView(
+                                title: group.name,
+                                subtitle: GroupSettingsPresentation.groupKindText(for: group),
+                                detailText: GroupSettingsPresentation.groupDetailText(for: group),
+                                badgeText: GroupSettingsPresentation.groupKindText(for: group),
+                                isActive: movieStore.currentGroupId == group.id,
+                                isPerformingGroupAction: isPerformingGroupAction,
+                                primaryActionTitle: "Wechseln",
+                                primaryActionSystemImage: "arrow.triangle.2.circlepath",
+                                onPrimaryAction: { switchToGroup(group) },
+                                onShareAction: { shareGroup(group) },
+                                destructiveActionTitle: "Gruppe löschen",
+                                destructiveActionSystemImage: "trash",
+                                onDestructiveAction: { requestDeleteGroup(group) }
+                            )
+                        }
+                    }
+
+                    if !groupStore.sharedGroups.isEmpty {
+                        GroupSettingsSectionHeaderView(title: "Geteilte Gruppen", subtitle: nil)
+
+                        ForEach(groupStore.sharedGroups) { group in
+                            GroupSettingsGroupCardView(
+                                title: group.name,
+                                subtitle: GroupSettingsPresentation.groupKindText(for: group),
+                                detailText: GroupSettingsPresentation.groupDetailText(for: group),
+                                badgeText: GroupSettingsPresentation.groupKindText(for: group),
+                                isActive: movieStore.currentGroupId == group.id,
+                                isPerformingGroupAction: isPerformingGroupAction,
+                                primaryActionTitle: "Wechseln",
+                                primaryActionSystemImage: "arrow.triangle.2.circlepath",
+                                onPrimaryAction: { switchToGroup(group) },
+                                onShareAction: nil,
+                                destructiveActionTitle: "Gruppe verlassen",
+                                destructiveActionSystemImage: "rectangle.portrait.and.arrow.right",
+                                onDestructiveAction: { requestLeaveGroup(group) }
+                            )
+                        }
+                    }
+
+                    if !hasCloudGroups {
+                        GroupSettingsEmptyStateCardView(
+                            message: GroupSettingsPresentation.emptyCloudGroupsMessage()
+                        )
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 14) {
+                    GroupSettingsSectionHeaderView(
+                        title: "Neue Gruppe erstellen",
+                        subtitle: "Eine eigene Cloud-Gruppe ist ideal für Filmabende mit Freunden oder geteilte Backlogs."
+                    )
+
+                    GroupSettingsCreateGroupCardView(
+                        newCloudGroupName: $newCloudGroupName,
+                        isDisabled: isPerformingGroupAction,
+                        onCreateGroup: createCloudGroup
+                    )
+                }
+            }
+            .padding(.horizontal, horizontalPadding)
+            .padding(.vertical, 16)
         }
+        .background(Color(.systemGroupedBackground).ignoresSafeArea())
         .navigationTitle("Gruppen")
         .navigationBarTitleDisplayMode(.inline)
         .task {
+            await groupStore.refresh()
+        }
+        .refreshable {
             await groupStore.refresh()
         }
         .sheet(
@@ -152,6 +265,15 @@ struct GroupSettingsView: View {
         }
     }
 
+    private func switchToLocalGroup() {
+        movieStore.activateLocalGroup()
+        userStore.loadUsers(forGroupId: nil)
+
+        Task {
+            await groupStore.refresh()
+        }
+    }
+
     private func shareActiveGroup() {
         guard let activeContext, !activeContext.isShared else { return }
         shareGroup(activeContext)
@@ -194,7 +316,7 @@ struct GroupSettingsView: View {
             movieStore.knownGroups.removeAll { $0.id == action.group.id }
 
             if movieStore.currentGroupId == action.group.id {
-                movieStore.leaveCurrentGroup()
+                movieStore.activateLocalGroup()
                 userStore.loadUsers(forGroupId: nil)
             }
         } catch {
