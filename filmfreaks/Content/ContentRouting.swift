@@ -119,7 +119,7 @@ private struct ContentRoutingModifier: ViewModifier {
             )
 
         case .calendar:
-            themed(MovieNightCalendarView())
+            themed(MovieNightPlanningView())
 
         case .activity:
             themed(
