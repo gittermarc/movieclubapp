@@ -185,6 +185,18 @@ extension StatsView {
         viewModel.snapshot.hotTakeReviewer
     }
 
+    var safePick: StatsPickInsight? {
+        viewModel.snapshot.safePick
+    }
+
+    var daringPick: StatsPickInsight? {
+        viewModel.snapshot.daringPick
+    }
+
+    var crowdPleaser: StatsPickInsight? {
+        viewModel.snapshot.crowdPleaser
+    }
+
     func statsForUser(_ user: User) -> (movieCount: Int, ratingsCount: Int, averageRating: Double?) {
         guard let s = viewModel.snapshot.userStatsByUserId[user.id] else {
             return (0, 0, nil)

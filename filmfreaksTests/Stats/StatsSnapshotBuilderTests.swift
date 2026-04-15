@@ -133,6 +133,66 @@ struct StatsSnapshotBuilderTests {
         #expect(snapshot.hotTakeReviewer?.comparableRatingsCount == 4)
     }
 
+    @Test func computeSnapshotBuildsPickInsights() {
+        let alice = User(id: UUID(uuidString: "00000000-0000-0000-0000-000000000051")!, name: "Alice")
+        let bob = User(id: UUID(uuidString: "00000000-0000-0000-0000-000000000052")!, name: "Bob")
+        let clara = User(id: UUID(uuidString: "00000000-0000-0000-0000-000000000053")!, name: "Clara")
+        let dan = User(id: UUID(uuidString: "00000000-0000-0000-0000-000000000054")!, name: "Dan")
+        let eva = User(id: UUID(uuidString: "00000000-0000-0000-0000-000000000055")!, name: "Eva")
+
+        let movies = [
+            makeMovie(title: "Safe Harbor", watchedDate: makeDate(year: 2026, month: 6, day: 1), ratings: [
+                makeRating(user: alice, fazit: 9),
+                makeRating(user: bob, fazit: 9),
+                makeRating(user: clara, fazit: 9),
+                makeRating(user: dan, fazit: 8)
+            ]),
+            makeMovie(title: "Crowd Favorite", watchedDate: makeDate(year: 2026, month: 6, day: 2), ratings: [
+                makeRating(user: alice, fazit: 8),
+                makeRating(user: bob, fazit: 8),
+                makeRating(user: clara, fazit: 8),
+                makeRating(user: dan, fazit: 8),
+                makeRating(user: eva, fazit: 8)
+            ]),
+            makeMovie(title: "Split Decision", watchedDate: makeDate(year: 2026, month: 6, day: 3), ratings: [
+                makeRating(user: alice, fazit: 10),
+                makeRating(user: bob, fazit: 10),
+                makeRating(user: clara, fazit: 2),
+                makeRating(user: dan, fazit: 2),
+                makeRating(user: eva, fazit: 8)
+            ]),
+            makeMovie(title: "Cold Shower", watchedDate: makeDate(year: 2026, month: 6, day: 4), ratings: [
+                makeRating(user: alice, fazit: 10),
+                makeRating(user: bob, fazit: 1),
+                makeRating(user: clara, fazit: 1),
+                makeRating(user: dan, fazit: 1),
+                makeRating(user: eva, fazit: 10)
+            ])
+        ]
+
+        let snapshot = StatsSnapshotBuilder.computeSnapshot(
+            movies: movies,
+            users: [alice, bob, clara, dan, eva],
+            ratingDisplayMode: .fazitAverage,
+            selectedRange: .all,
+            selectedLocationFilter: nil
+        )
+
+        #expect(snapshot.safePick?.movie.title == "Safe Harbor")
+        #expect(snapshot.safePick?.ratingsCount == 4)
+        #expect(abs((snapshot.safePick?.averageRating ?? 0.0) - 8.75) < 0.0001)
+
+        #expect(snapshot.daringPick?.movie.title == "Split Decision")
+        #expect(snapshot.daringPick?.ratingsCount == 5)
+        #expect(abs((snapshot.daringPick?.averageRating ?? 0.0) - 6.4) < 0.0001)
+        #expect(abs((snapshot.daringPick?.standardDeviation ?? 0.0) - 3.6660605559) < 0.0001)
+
+        #expect(snapshot.crowdPleaser?.movie.title == "Crowd Favorite")
+        #expect(snapshot.crowdPleaser?.ratingsCount == 5)
+        #expect(abs((snapshot.crowdPleaser?.averageRating ?? 0.0) - 8.0) < 0.0001)
+        #expect(abs((snapshot.crowdPleaser?.standardDeviation ?? 0.0) - 0.0) < 0.0001)
+    }
+
 
     @Test func computeSnapshotBuildsRatingDimensionInsights() {
         let alice = User(id: UUID(uuidString: "00000000-0000-0000-0000-000000000031")!, name: "Alice")
@@ -258,6 +318,37 @@ struct StatsSnapshotBuilderTests {
         #expect(snapshot.strictestReviewer == nil)
         #expect(snapshot.mostGenerousReviewer == nil)
         #expect(snapshot.hotTakeReviewer == nil)
+    }
+
+    @Test func computeSnapshotSuppressesPickInsightsForThinData() {
+        let alice = User(id: UUID(uuidString: "00000000-0000-0000-0000-000000000061")!, name: "Alice")
+        let bob = User(id: UUID(uuidString: "00000000-0000-0000-0000-000000000062")!, name: "Bob")
+        let clara = User(id: UUID(uuidString: "00000000-0000-0000-0000-000000000063")!, name: "Clara")
+
+        let movies = [
+            makeMovie(title: "Almost There", watchedDate: makeDate(year: 2026, month: 7, day: 1), ratings: [
+                makeRating(user: alice, fazit: 8),
+                makeRating(user: bob, fazit: 8),
+                makeRating(user: clara, fazit: 8)
+            ]),
+            makeMovie(title: "Too Wild", watchedDate: makeDate(year: 2026, month: 7, day: 2), ratings: [
+                makeRating(user: alice, fazit: 10),
+                makeRating(user: bob, fazit: 1),
+                makeRating(user: clara, fazit: 10)
+            ])
+        ]
+
+        let snapshot = StatsSnapshotBuilder.computeSnapshot(
+            movies: movies,
+            users: [alice, bob, clara],
+            ratingDisplayMode: .fazitAverage,
+            selectedRange: .all,
+            selectedLocationFilter: nil
+        )
+
+        #expect(snapshot.safePick == nil)
+        #expect(snapshot.daringPick == nil)
+        #expect(snapshot.crowdPleaser == nil)
     }
 
     private func makeMovie(

@@ -84,6 +84,9 @@ struct StatsViewModelTests {
             strictestReviewer: nil,
             mostGenerousReviewer: nil,
             hotTakeReviewer: nil,
+            safePick: nil,
+            daringPick: nil,
+            crowdPleaser: nil,
             userStatsByUserId: [:]
         )
         let secondSnapshot = StatsSnapshot(
@@ -121,6 +124,9 @@ struct StatsViewModelTests {
             strictestReviewer: nil,
             mostGenerousReviewer: nil,
             hotTakeReviewer: nil,
+            safePick: nil,
+            daringPick: nil,
+            crowdPleaser: nil,
             userStatsByUserId: [:]
         )
 

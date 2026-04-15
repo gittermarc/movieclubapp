@@ -72,6 +72,8 @@ struct StatsView: View {
 
                     tasteDynamicsCard
 
+                    pickInsightsCard
+
                     trendsCard
 
                     highlightsCard

@@ -177,6 +177,26 @@ nonisolated struct StatsTasteDynamicsSnapshot {
     )
 }
 
+nonisolated struct StatsPickInsight {
+    let movie: Movie
+    let averageRating: Double
+    let ratingsCount: Int
+    let standardDeviation: Double
+    let recommendationScore: Double
+}
+
+nonisolated struct StatsPickInsightsSnapshot {
+    let safePick: StatsPickInsight?
+    let daringPick: StatsPickInsight?
+    let crowdPleaser: StatsPickInsight?
+
+    static let empty = StatsPickInsightsSnapshot(
+        safePick: nil,
+        daringPick: nil,
+        crowdPleaser: nil
+    )
+}
+
 struct CriticGapEntry: Identifiable {
     let movie: Movie
     let groupAverage: Double

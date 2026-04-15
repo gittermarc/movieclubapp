@@ -312,6 +312,11 @@ enum StatsSnapshotBuilder {
             reviewerKey: reviewerKey(for:)
         )
 
+        let pickInsights = computePickInsights(
+            movies: filteredMovies,
+            displayedScore: displayedScore(for:)
+        )
+
         var userStatsByUserId: [UUID: StatsUserStats] = [:]
         for user in users {
             var movieIds = Set<UUID>()
@@ -381,6 +386,9 @@ enum StatsSnapshotBuilder {
             strictestReviewer: tasteDynamics.strictestReviewer,
             mostGenerousReviewer: tasteDynamics.mostGenerousReviewer,
             hotTakeReviewer: tasteDynamics.hotTakeReviewer,
+            safePick: pickInsights.safePick,
+            daringPick: pickInsights.daringPick,
+            crowdPleaser: pickInsights.crowdPleaser,
             userStatsByUserId: userStatsByUserId
         )
     }
