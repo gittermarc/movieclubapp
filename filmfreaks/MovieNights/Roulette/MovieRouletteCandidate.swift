@@ -28,6 +28,11 @@ struct MovieRouletteCandidate: Identifiable, Equatable, Hashable {
 }
 
 extension MovieRouletteCandidate {
+
+    static func buildPresetCandidates(from preset: MovieRoulettePreset?) -> [MovieRouletteCandidate] {
+        guard let preset else { return [] }
+        return preset.movieRefs.map { MovieRouletteCandidate(movieRef: $0, addedAt: nil) }
+    }
     static func buildBacklogCandidates(from movies: [Movie], activeGroupId rawGroupId: String?) -> [MovieRouletteCandidate] {
         let activeGroupId = normalizedGroupId(rawGroupId)
         guard !activeGroupId.isEmpty else { return [] }

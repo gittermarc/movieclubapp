@@ -20,6 +20,7 @@ struct MovieNightLocalPersistenceTests {
         #expect(loaded.eventsByGroup == snapshot.eventsByGroup)
         #expect(loaded.responsesByGroup == snapshot.responsesByGroup)
         #expect(loaded.activityByGroup == snapshot.activityByGroup)
+        #expect(loaded.presetsByGroup.isEmpty)
     }
 
     @Test func corruptedSnapshotFileFallsBackToEmptySnapshot() async throws {
@@ -35,10 +36,39 @@ struct MovieNightLocalPersistenceTests {
 
         let loaded = await persistence.load()
 
-        #expect(loaded.schemaVersion == 2)
+        #expect(loaded.schemaVersion == 3)
         #expect(loaded.eventsByGroup.isEmpty)
         #expect(loaded.responsesByGroup.isEmpty)
         #expect(loaded.activityByGroup.isEmpty)
+        #expect(loaded.presetsByGroup.isEmpty)
+    }
+
+    @Test func saveAndLoadRoundTripPreservesPresetGroups() async throws {
+        let tempDirectory = try TemporaryDirectory()
+        let persistence = MovieNightLocalPersistence(baseDirectory: tempDirectory.url)
+        let snapshot = MovieNightLocalPersistence.Snapshot(
+            schemaVersion: 3,
+            savedAt: .now,
+            eventsByGroup: [:],
+            responsesByGroup: [:],
+            activityByGroup: [:],
+            presetsByGroup: [
+                "group-1": [
+                    MovieRoulettePreset(
+                        groupId: "group-1",
+                        name: "Sci-Fi",
+                        sortIndex: 0,
+                        movieRefs: [MovieNightMovieRef(movieId: UUID(), title: "Arrival", year: "2016", posterPath: nil, tmdbId: nil)]
+                    )
+                ]
+            ]
+        )
+
+        await persistence.save(snapshot)
+        let loaded = await persistence.load()
+
+        #expect(loaded.schemaVersion == 3)
+        #expect(loaded.presetsByGroup == snapshot.presetsByGroup)
     }
 
     @Test func deleteLocalFileRemovesPersistedSnapshot() async throws {

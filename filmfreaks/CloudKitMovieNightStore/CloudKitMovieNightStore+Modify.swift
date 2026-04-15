@@ -23,7 +23,9 @@ extension CloudKitMovieNightStore {
         saveResponses: [MovieNightResponse],
         deleteResponses: [(eventId: UUID, userId: UUID)],
         saveActivity: [MovieNightActivityEvent],
-        deleteActivityIDs: [UUID]
+        deleteActivityIDs: [UUID],
+        savePresets: [MovieRoulettePreset],
+        deletePresetIDs: [UUID]
     ) async throws {
         let gid = groupId.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !gid.isEmpty else { return }
@@ -31,13 +33,16 @@ extension CloudKitMovieNightStore {
         let route = try routedDatabase(forGroupId: gid)
 
         var recordsToSave: [CKRecord] = []
-        recordsToSave.reserveCapacity(saveEvents.count + saveResponses.count + saveActivity.count)
+        recordsToSave.reserveCapacity(saveEvents.count + saveResponses.count + saveActivity.count + savePresets.count)
 
         let rootRef: CKRecord.Reference? = {
             guard let zoneID = route.zoneID else { return nil }
             let rootID = CKRecord.ID(recordName: gid, zoneID: zoneID)
             return CKRecord.Reference(recordID: rootID, action: .none)
         }()
+
+
+        let presetEncoder = JSONEncoder()
 
         // Events
         for e in saveEvents {
@@ -96,9 +101,25 @@ extension CloudKitMovieNightStore {
             recordsToSave.append(record)
         }
 
+        // Presets
+        for preset in savePresets {
+            let baseID = CKRecord.ID(recordName: preset.id.uuidString)
+            let id = route.zoneID.map { CKRecord.ID(recordName: baseID.recordName, zoneID: $0) } ?? baseID
+            let record = CKRecord(recordType: presetRecordType, recordID: id)
+            record[groupIdKey] = gid as CKRecordValue
+            record[presetNameKey] = preset.displayName as CKRecordValue
+            record[sortIndexKey] = NSNumber(value: preset.sortIndex) as CKRecordValue
+            record[updatedAtKey] = preset.updatedAt as CKRecordValue
+            let data = try presetEncoder.encode(preset.movieRefs)
+            let payload = String(data: data, encoding: .utf8) ?? "[]"
+            record[presetMovieRefsKey] = payload as CKRecordValue
+            if let rootRef { record.parent = rootRef }
+            recordsToSave.append(record)
+        }
+
         // Deletes
         var recordIDsToDelete: [CKRecord.ID] = []
-        recordIDsToDelete.reserveCapacity(deleteEventIDs.count + deleteResponses.count + deleteActivityIDs.count)
+        recordIDsToDelete.reserveCapacity(deleteEventIDs.count + deleteResponses.count + deleteActivityIDs.count + deletePresetIDs.count)
 
         for id in deleteEventIDs {
             let baseID = CKRecord.ID(recordName: id.uuidString)
@@ -114,6 +135,12 @@ extension CloudKitMovieNightStore {
         }
 
         for id in deleteActivityIDs {
+            let baseID = CKRecord.ID(recordName: id.uuidString)
+            let rid = route.zoneID.map { CKRecord.ID(recordName: baseID.recordName, zoneID: $0) } ?? baseID
+            recordIDsToDelete.append(rid)
+        }
+
+        for id in deletePresetIDs {
             let baseID = CKRecord.ID(recordName: id.uuidString)
             let rid = route.zoneID.map { CKRecord.ID(recordName: baseID.recordName, zoneID: $0) } ?? baseID
             recordIDsToDelete.append(rid)

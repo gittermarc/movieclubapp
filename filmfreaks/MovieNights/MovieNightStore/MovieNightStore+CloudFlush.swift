@@ -55,4 +55,24 @@ extension MovieNightStore {
             coordinator.queueActivityDelete(activityId: id, groupId: gid)
         }
     }
+    func queueRoulettePresetSave(_ preset: MovieRoulettePreset, groupId: String) {
+        guard useCloud, cloudStore != nil, let coordinator = cloudSyncCoordinator else { return }
+
+        let gid = groupId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !gid.isEmpty else { return }
+
+        ensureSyncMetaLoaded(forGroupId: gid)
+        coordinator.queuePresetSave(preset, groupId: gid)
+    }
+
+    func queueRoulettePresetDelete(presetId: UUID, groupId: String) {
+        guard useCloud, cloudStore != nil, let coordinator = cloudSyncCoordinator else { return }
+
+        let gid = groupId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !gid.isEmpty else { return }
+
+        ensureSyncMetaLoaded(forGroupId: gid)
+        coordinator.queuePresetDelete(presetId: presetId, groupId: gid)
+    }
+
 }

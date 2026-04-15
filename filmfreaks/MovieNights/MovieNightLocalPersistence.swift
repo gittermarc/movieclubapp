@@ -12,6 +12,18 @@ import Foundation
 /// Stores all movie night data in a single JSON file in Application Support.
 actor MovieNightLocalPersistence {
 
+    private static let iso8601WithFractionalSeconds: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
+
+    private static let iso8601WithoutFractionalSeconds: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter
+    }()
+
     struct Snapshot: Codable, Equatable {
         var schemaVersion: Int
         var savedAt: Date
@@ -19,14 +31,16 @@ actor MovieNightLocalPersistence {
         var eventsByGroup: [String: [MovieNightEvent]]
         var responsesByGroup: [String: [MovieNightResponse]]
         var activityByGroup: [String: [MovieNightActivityEvent]]
+        var presetsByGroup: [String: [MovieRoulettePreset]]
 
-        static func empty(schemaVersion: Int = 2) -> Snapshot {
+        static func empty(schemaVersion: Int = 3) -> Snapshot {
             Snapshot(
                 schemaVersion: schemaVersion,
                 savedAt: .now,
                 eventsByGroup: [:],
                 responsesByGroup: [:],
-                activityByGroup: [:]
+                activityByGroup: [:],
+                presetsByGroup: [:]
             )
         }
 
@@ -35,13 +49,15 @@ actor MovieNightLocalPersistence {
             savedAt: Date,
             eventsByGroup: [String: [MovieNightEvent]],
             responsesByGroup: [String: [MovieNightResponse]],
-            activityByGroup: [String: [MovieNightActivityEvent]]
+            activityByGroup: [String: [MovieNightActivityEvent]],
+            presetsByGroup: [String: [MovieRoulettePreset]]
         ) {
             self.schemaVersion = schemaVersion
             self.savedAt = savedAt
             self.eventsByGroup = eventsByGroup
             self.responsesByGroup = responsesByGroup
             self.activityByGroup = activityByGroup
+            self.presetsByGroup = presetsByGroup
         }
 
         // Backwards compatibility: Snapshot schema v1 didn't have `activityByGroup`.
@@ -53,6 +69,7 @@ actor MovieNightLocalPersistence {
             self.eventsByGroup = (try? c.decode([String: [MovieNightEvent]].self, forKey: .eventsByGroup)) ?? [:]
             self.responsesByGroup = (try? c.decode([String: [MovieNightResponse]].self, forKey: .responsesByGroup)) ?? [:]
             self.activityByGroup = (try? c.decode([String: [MovieNightActivityEvent]].self, forKey: .activityByGroup)) ?? [:]
+            self.presetsByGroup = (try? c.decode([String: [MovieRoulettePreset]].self, forKey: .presetsByGroup)) ?? [:]
         }
     }
 
@@ -69,12 +86,36 @@ actor MovieNightLocalPersistence {
         self.fileURL = base.appendingPathComponent(fileName)
 
         let enc = JSONEncoder()
-        enc.dateEncodingStrategy = .iso8601
+        enc.dateEncodingStrategy = .custom { date, encoder in
+            var container = encoder.singleValueContainer()
+            try container.encode(date.timeIntervalSince1970)
+        }
         enc.outputFormatting = [.prettyPrinted, .sortedKeys]
         self.encoder = enc
 
         let dec = JSONDecoder()
-        dec.dateDecodingStrategy = .iso8601
+        dec.dateDecodingStrategy = .custom { decoder in
+            let container = try decoder.singleValueContainer()
+
+            if let timestamp = try? container.decode(Double.self) {
+                return Date(timeIntervalSince1970: timestamp)
+            }
+
+            let rawValue = try container.decode(String.self)
+
+            if let date = MovieNightLocalPersistence.iso8601WithFractionalSeconds.date(from: rawValue) {
+                return date
+            }
+
+            if let date = MovieNightLocalPersistence.iso8601WithoutFractionalSeconds.date(from: rawValue) {
+                return date
+            }
+
+            throw DecodingError.dataCorruptedError(
+                in: container,
+                debugDescription: "Unsupported persisted date value: \(rawValue)"
+            )
+        }
         self.decoder = dec
     }
 

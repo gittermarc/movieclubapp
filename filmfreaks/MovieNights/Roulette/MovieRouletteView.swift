@@ -10,10 +10,28 @@ internal import SwiftUI
 struct MovieRouletteView: View {
 
     @EnvironmentObject private var movieStore: MovieStore
+    @EnvironmentObject private var movieNightStore: MovieNightStore
     @EnvironmentObject private var displaySettings: DisplaySettings
+
     @StateObject private var viewModel = MovieRouletteViewModel()
+    @State private var isPresetManagerPresented: Bool = false
 
     private var m: DisplaySettings.LayoutMetrics { displaySettings.metrics }
+
+    private var currentGroupId: String {
+        (movieStore.currentGroupId ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var currentGroupPresets: [MovieRoulettePreset] {
+        movieNightStore.roulettePresets(for: currentGroupId)
+    }
+
+    private var currentGroupBacklogMovies: [Movie] {
+        MovieRouletteCandidate
+            .buildBacklogCandidates(from: movieStore.backlogMovies, activeGroupId: currentGroupId)
+            .map(\.movieRef.movieId)
+            .compactMap { movieId in movieStore.backlogMovies.first(where: { $0.id == movieId }) }
+    }
 
     var body: some View {
         ScrollView {
@@ -35,15 +53,46 @@ struct MovieRouletteView: View {
             .padding(.bottom, 20)
         }
         .background(Color(.systemGroupedBackground))
-        .onAppear(perform: syncFromStore)
+        .onAppear {
+            syncFromStores()
+            Task {
+                await movieNightStore.refreshFromCloud(groupId: movieStore.currentGroupId, force: false)
+            }
+        }
         .onReceive(movieStore.$backlogMovies) { _ in
-            syncFromStore()
+            syncFromStores()
+        }
+        .onReceive(movieNightStore.$presetsByGroup) { _ in
+            syncFromStores()
         }
         .onChange(of: movieStore.currentGroupId) { _, _ in
-            syncFromStore()
+            syncFromStores()
         }
         .onChange(of: movieStore.currentGroupName) { _, _ in
-            syncFromStore()
+            syncFromStores()
+        }
+        .sheet(isPresented: $isPresetManagerPresented) {
+            MovieRoulettePresetManagementView(
+                presets: currentGroupPresets,
+                backlogMovies: currentGroupBacklogMovies,
+                onCreatePreset: { name, movieRefs in
+                    _ = movieNightStore.saveRoulettePreset(groupId: currentGroupId, name: name, movieRefs: movieRefs)
+                    syncFromStores()
+                },
+                onUpdatePreset: { presetId, name, movieRefs in
+                    _ = movieNightStore.saveRoulettePreset(groupId: currentGroupId, presetId: presetId, name: name, movieRefs: movieRefs)
+                    viewModel.selectSource(.preset)
+                    if let updatedPreset = movieNightStore.roulettePreset(for: currentGroupId, presetId: presetId) {
+                        viewModel.selectPreset(updatedPreset.id)
+                    }
+                    syncFromStores()
+                },
+                onDeletePreset: { presetId in
+                    movieNightStore.deleteRoulettePreset(groupId: currentGroupId, presetId: presetId)
+                    syncFromStores()
+                }
+            )
+            .environmentObject(displaySettings)
         }
     }
 
@@ -60,7 +109,7 @@ struct MovieRouletteView: View {
                             .foregroundStyle(displaySettings.tintColor)
                     }
 
-                    Text("Ein Spin aus dem Backlog von \(viewModel.groupName). Ideal, wenn ihr euch gerade nicht entscheiden könnt.")
+                    Text(viewModel.sourceDescription)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -71,13 +120,74 @@ struct MovieRouletteView: View {
                 countBadge
             }
 
+            Picker(
+                "Quelle",
+                selection: Binding(
+                    get: { viewModel.selectedSource },
+                    set: { viewModel.selectSource($0) }
+                )
+            ) {
+                ForEach(MovieRouletteSource.allCases) { source in
+                    Text(source.title).tag(source)
+                }
+            }
+            .pickerStyle(.segmented)
+
+            if viewModel.selectedSource == .preset {
+                presetSelectionCard
+            }
+
             HStack(spacing: 8) {
-                sourceBadge(title: "Quelle", value: "Backlog")
+                sourceBadge(title: "Quelle", value: viewModel.sourceBadgeText)
                 sourceBadge(title: "Status", value: viewModel.isSpinning ? "Dreht" : "Bereit")
             }
         }
         .padding(m.cardPadding + 2)
         .background(cardBackground)
+    }
+
+    @ViewBuilder
+    private var presetSelectionCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Vordefinierte Auswahl")
+                        .font(.headline)
+
+                    if viewModel.selectedPresetSummary.isEmpty == false {
+                        Text(viewModel.selectedPresetSummary)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                Spacer(minLength: 10)
+
+                Button(viewModel.availablePresets.isEmpty ? "Anlegen" : "Verwalten") {
+                    isPresetManagerPresented = true
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .disabled(!viewModel.canManagePresets)
+            }
+
+            if viewModel.availablePresets.isEmpty == false {
+                Picker("Auswahl", selection: Binding(
+                    get: { viewModel.selectedPresetId ?? viewModel.availablePresets.first?.id ?? UUID() },
+                    set: { viewModel.selectPreset($0) }
+                )) {
+                    ForEach(viewModel.availablePresets) { preset in
+                        Text(preset.displayName).tag(preset.id)
+                    }
+                }
+                .pickerStyle(.menu)
+            }
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: displaySettings.cardCornerRadius, style: .continuous)
+                .fill(displaySettings.tintColor.opacity(0.08))
+        )
     }
 
     private var rouletteStageCard: some View {
@@ -124,13 +234,20 @@ struct MovieRouletteView: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+
+                if viewModel.selectedSource == .preset, viewModel.canManagePresets {
+                    Button("Auswahlen verwalten") {
+                        isPresetManagerPresented = true
+                    }
+                    .buttonStyle(.bordered)
+                }
             }
             .padding(m.cardPadding + 2)
             .background(cardBackground)
         } else {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
-                    Label("Im Topf", systemImage: "movieclapper")
+                    Label(viewModel.selectedSource == .preset ? "In Auswahl" : "Im Topf", systemImage: "movieclapper")
                         .font(.headline)
 
                     Spacer(minLength: 12)
@@ -181,7 +298,7 @@ struct MovieRouletteView: View {
         VStack(alignment: .trailing, spacing: 2) {
             Text(viewModel.candidateCountText)
                 .font(.headline)
-            Text("im Backlog")
+            Text(viewModel.selectedSource == .preset ? "in Auswahl" : "im Backlog")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -230,11 +347,12 @@ struct MovieRouletteView: View {
         return "Im Rennen: \(joined)."
     }
 
-    private func syncFromStore() {
+    private func syncFromStores() {
         viewModel.update(
             backlogMovies: movieStore.backlogMovies,
             currentGroupId: movieStore.currentGroupId,
-            currentGroupName: movieStore.currentGroupName
+            currentGroupName: movieStore.currentGroupName,
+            presets: currentGroupPresets
         )
     }
 }
@@ -254,11 +372,22 @@ struct MovieRouletteView: View {
         return copy
     }
 
+    let movieNightStore = MovieNightStore(useCloud: false)
+    movieNightStore.presetsByGroup["group-preview"] = [
+        MovieRoulettePreset(
+            groupId: "group-preview",
+            name: "Sonntagsfilme",
+            sortIndex: 0,
+            movieRefs: movieStore.backlogMovies.prefix(2).map { MovieNightMovieRef(movie: $0) }
+        )
+    ]
+
     return NavigationStack {
         MovieRouletteView()
             .navigationTitle("Filmroulette")
             .navigationBarTitleDisplayMode(.inline)
     }
     .environmentObject(movieStore)
+    .environmentObject(movieNightStore)
     .environmentObject(DisplaySettings())
 }

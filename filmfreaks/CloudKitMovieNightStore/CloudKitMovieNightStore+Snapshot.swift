@@ -16,6 +16,7 @@ extension CloudKitMovieNightStore {
         let events: [MovieNightEvent]
         let responses: [MovieNightResponse]
         let activity: [MovieNightActivityEvent]
+        let presets: [MovieRoulettePreset]
     }
 
     /// Loads a full snapshot via queries (used for public/legacy groups).
@@ -29,8 +30,9 @@ extension CloudKitMovieNightStore {
         let events = try await fetchAllEvents(predicate: predicate, database: route.db, zoneID: route.zoneID, fallbackGroupId: groupId)
         let responses = try await fetchAllResponses(predicate: predicate, database: route.db, zoneID: route.zoneID)
         let activity = try await fetchAllActivity(predicate: predicate, database: route.db, zoneID: route.zoneID, fallbackGroupId: groupId)
+        let presets = try await fetchAllPresets(predicate: predicate, database: route.db, zoneID: route.zoneID, fallbackGroupId: groupId)
 
-        return MovieNightSnapshot(events: events, responses: responses, activity: activity)
+        return MovieNightSnapshot(events: events, responses: responses, activity: activity, presets: presets)
     }
 
     // MARK: - Query helpers (snapshot)
@@ -65,6 +67,18 @@ extension CloudKitMovieNightStore {
         let query = CKQuery(recordType: activityRecordType, predicate: predicate)
         let records = try await queryAllRecords(database: database, query: query, zoneID: zoneID)
         return records.compactMap { decodeActivity(record: $0, fallbackGroupId: fallbackGroupId) }
+    }
+
+
+    func fetchAllPresets(
+        predicate: NSPredicate,
+        database: CKDatabase,
+        zoneID: CKRecordZone.ID?,
+        fallbackGroupId: String
+    ) async throws -> [MovieRoulettePreset] {
+        let query = CKQuery(recordType: presetRecordType, predicate: predicate)
+        let records = try await queryAllRecords(database: database, query: query, zoneID: zoneID)
+        return records.compactMap { decodePreset(record: $0, fallbackGroupId: fallbackGroupId) }
     }
 
     func queryAllRecords(database: CKDatabase, query: CKQuery, zoneID: CKRecordZone.ID?) async throws -> [CKRecord] {

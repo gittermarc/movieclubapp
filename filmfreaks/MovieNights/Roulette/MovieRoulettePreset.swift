@@ -1,0 +1,83 @@
+//
+//  MovieRoulettePreset.swift
+//  filmfreaks
+//
+//  Created by Marc Fechner on 15.04.26.
+//
+
+import Foundation
+
+struct MovieRoulettePreset: Identifiable, Codable, Equatable, Hashable {
+    var id: UUID
+    var groupId: String
+    var name: String
+    var sortIndex: Int
+    var movieRefs: [MovieNightMovieRef]
+    var updatedAt: Date
+
+    init(
+        id: UUID = UUID(),
+        groupId: String,
+        name: String,
+        sortIndex: Int,
+        movieRefs: [MovieNightMovieRef],
+        updatedAt: Date = .now
+    ) {
+        self.id = id
+        self.groupId = groupId
+        self.name = name
+        self.sortIndex = sortIndex
+        self.movieRefs = movieRefs
+        self.updatedAt = updatedAt
+    }
+
+    var trimmedName: String {
+        name.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var displayName: String {
+        let trimmed = trimmedName
+        return trimmed.isEmpty ? "Neue Auswahl" : trimmed
+    }
+
+    var movieCount: Int {
+        movieRefs.count
+    }
+}
+
+extension MovieRoulettePreset {
+    static func sortOrder(lhs: MovieRoulettePreset, rhs: MovieRoulettePreset) -> Bool {
+        if lhs.sortIndex != rhs.sortIndex {
+            return lhs.sortIndex < rhs.sortIndex
+        }
+        if lhs.updatedAt != rhs.updatedAt {
+            return lhs.updatedAt > rhs.updatedAt
+        }
+        return lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName) == .orderedAscending
+    }
+
+    static func normalized(_ presets: [MovieRoulettePreset], groupId: String) -> [MovieRoulettePreset] {
+        presets
+            .sorted(by: sortOrder)
+            .enumerated()
+            .map { index, preset in
+                var copy = preset
+                copy.groupId = groupId
+                copy.sortIndex = index
+                return copy
+            }
+    }
+
+    static func deduplicatedMovieRefs(_ refs: [MovieNightMovieRef]) -> [MovieNightMovieRef] {
+        var seen: Set<UUID> = []
+        var result: [MovieNightMovieRef] = []
+        result.reserveCapacity(refs.count)
+
+        for ref in refs {
+            guard seen.insert(ref.movieId).inserted else { continue }
+            result.append(ref)
+        }
+
+        return result
+    }
+}

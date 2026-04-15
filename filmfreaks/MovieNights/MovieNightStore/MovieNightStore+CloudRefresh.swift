@@ -73,6 +73,7 @@ extension MovieNightStore {
         mergeEvents(delta.changedEvents, deleted: delta.deletedEventIDs, groupId: groupId)
         mergeResponses(delta.changedResponses, deleted: delta.deletedResponseIDs, groupId: groupId)
         mergeActivity(delta.changedActivity, deleted: delta.deletedActivityIDs, groupId: groupId)
+        mergeRoulettePresets(delta.changedPresets, deleted: delta.deletedPresetIDs, groupId: groupId)
     }
 
     func applyCloudSnapshot(_ snapshot: CloudKitMovieNightStore.MovieNightSnapshot, groupId: String) {
@@ -81,6 +82,7 @@ extension MovieNightStore {
         mergeEvents(snapshot.events, deleted: [], groupId: groupId)
         mergeResponses(snapshot.responses, deleted: [], groupId: groupId)
         mergeActivity(snapshot.activity, deleted: [], groupId: groupId)
+        mergeRoulettePresets(snapshot.presets, deleted: [], groupId: groupId)
     }
 
     func mergeEvents(_ changed: [MovieNightEvent], deleted: [UUID], groupId: String) {

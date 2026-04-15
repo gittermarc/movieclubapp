@@ -134,6 +134,37 @@ extension CloudKitMovieNightStore {
         )
     }
 
+
+    func decodePreset(record: CKRecord, fallbackGroupId: String) -> MovieRoulettePreset? {
+        guard let id = UUID(uuidString: record.recordID.recordName) else { return nil }
+
+        let groupId = (record[groupIdKey] as? String) ?? fallbackGroupId
+        guard
+            let name = record[presetNameKey] as? String,
+            let updatedAt = record[updatedAtKey] as? Date
+        else { return nil }
+
+        let sortIndex: Int = {
+            if let number = record[sortIndexKey] as? NSNumber { return number.intValue }
+            if let value = record[sortIndexKey] as? Int { return value }
+            return 0
+        }()
+
+        let movieRefs: [MovieNightMovieRef] = {
+            guard let raw = record[presetMovieRefsKey] as? String, let data = raw.data(using: .utf8) else { return [] }
+            return (try? JSONDecoder().decode([MovieNightMovieRef].self, from: data)) ?? []
+        }()
+
+        return MovieRoulettePreset(
+            id: id,
+            groupId: groupId,
+            name: name,
+            sortIndex: sortIndex,
+            movieRefs: movieRefs,
+            updatedAt: updatedAt
+        )
+    }
+
     // MARK: - Response recordName encoding (for deletes)
 
     struct ParsedResponseRecordName {

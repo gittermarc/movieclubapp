@@ -21,6 +21,7 @@ final class MovieNightStore: ObservableObject {
     @Published var eventsByGroup: [String: [MovieNightEvent]] = [:]
     @Published var responsesByGroup: [String: [MovieNightResponse]] = [:]
     @Published var activityByGroup: [String: [MovieNightActivityEvent]] = [:]
+    @Published var presetsByGroup: [String: [MovieRoulettePreset]] = [:]
     @Published var isLoaded: Bool = false
 
     // MARK: - Sync transparency (per group)
@@ -89,6 +90,7 @@ final class MovieNightStore: ObservableObject {
             self.eventsByGroup = snapshot.eventsByGroup
             self.responsesByGroup = snapshot.responsesByGroup
             self.activityByGroup = snapshot.activityByGroup
+            self.presetsByGroup = snapshot.presetsByGroup
             self.isLoaded = true
         }
 

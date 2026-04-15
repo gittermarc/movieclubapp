@@ -23,6 +23,9 @@ extension CloudKitMovieNightStore {
         let changedActivity: [MovieNightActivityEvent]
         let deletedActivityIDs: [UUID]
 
+        let changedPresets: [MovieRoulettePreset]
+        let deletedPresetIDs: [UUID]
+
         let isInitial: Bool
     }
 
@@ -35,6 +38,7 @@ extension CloudKitMovieNightStore {
                 changedEvents: [], deletedEventIDs: [],
                 changedResponses: [], deletedResponseIDs: [],
                 changedActivity: [], deletedActivityIDs: [],
+                changedPresets: [], deletedPresetIDs: [],
                 isInitial: false
             )
         }
@@ -45,6 +49,7 @@ extension CloudKitMovieNightStore {
                 changedEvents: [], deletedEventIDs: [],
                 changedResponses: [], deletedResponseIDs: [],
                 changedActivity: [], deletedActivityIDs: [],
+                changedPresets: [], deletedPresetIDs: [],
                 isInitial: false
             )
         }
@@ -59,10 +64,12 @@ extension CloudKitMovieNightStore {
         var changedEvents: [MovieNightEvent] = []
         var changedResponses: [MovieNightResponse] = []
         var changedActivity: [MovieNightActivityEvent] = []
+        var changedPresets: [MovieRoulettePreset] = []
 
         changedEvents.reserveCapacity(16)
         changedResponses.reserveCapacity(16)
         changedActivity.reserveCapacity(16)
+        changedPresets.reserveCapacity(16)
 
         for record in result.changedRecords {
             switch record.recordType {
@@ -78,6 +85,10 @@ extension CloudKitMovieNightStore {
                 if let a = decodeActivity(record: record, fallbackGroupId: groupId) {
                     changedActivity.append(a)
                 }
+            case presetRecordType:
+                if let preset = decodePreset(record: record, fallbackGroupId: groupId) {
+                    changedPresets.append(preset)
+                }
             default:
                 break
             }
@@ -86,10 +97,12 @@ extension CloudKitMovieNightStore {
         var deletedEventIDs: [UUID] = []
         var deletedResponseIDs: [String] = []
         var deletedActivityIDs: [UUID] = []
+        var deletedPresetIDs: [UUID] = []
 
         deletedEventIDs.reserveCapacity(8)
         deletedResponseIDs.reserveCapacity(8)
         deletedActivityIDs.reserveCapacity(8)
+        deletedPresetIDs.reserveCapacity(8)
 
         for rid in result.deletedRecordIDs {
             guard let type = result.deletedRecordTypesByID[rid] else { continue }
@@ -102,6 +115,8 @@ extension CloudKitMovieNightStore {
                 if let parsed = parseResponseRecordName(rid.recordName) {
                     deletedResponseIDs.append(MovieNightResponse.compositeId(eventId: parsed.eventId, userId: parsed.userId))
                 }
+            case presetRecordType:
+                if let uuid = UUID(uuidString: rid.recordName) { deletedPresetIDs.append(uuid) }
             default:
                 break
             }
@@ -114,6 +129,8 @@ extension CloudKitMovieNightStore {
             deletedResponseIDs: deletedResponseIDs,
             changedActivity: changedActivity,
             deletedActivityIDs: deletedActivityIDs,
+            changedPresets: changedPresets,
+            deletedPresetIDs: deletedPresetIDs,
             isInitial: (previous == nil)
         )
     }

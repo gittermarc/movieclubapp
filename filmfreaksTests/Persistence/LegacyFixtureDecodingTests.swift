@@ -29,6 +29,7 @@ struct LegacyFixtureDecodingTests {
         #expect(snapshot.eventsByGroup.count == 1)
         #expect(snapshot.responsesByGroup.count == 1)
         #expect(snapshot.activityByGroup.isEmpty)
+        #expect(snapshot.presetsByGroup.isEmpty)
     }
 
     @Test func movieNightSnapshotV2FixtureDecodesActivityStream() throws {
@@ -41,5 +42,6 @@ struct LegacyFixtureDecodingTests {
         #expect(snapshot.schemaVersion == 2)
         #expect(snapshot.activityByGroup.count == 1)
         #expect(snapshot.activityByGroup.values.flatMap { $0 }.first?.newStatus == .scheduled)
+        #expect(snapshot.presetsByGroup.isEmpty)
     }
 }

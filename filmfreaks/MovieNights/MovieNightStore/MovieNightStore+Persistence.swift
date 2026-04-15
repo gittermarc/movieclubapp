@@ -15,6 +15,7 @@ extension MovieNightStore {
         eventsByGroup.removeAll()
         responsesByGroup.removeAll()
         activityByGroup.removeAll()
+        presetsByGroup.removeAll()
 
         Task { await persistence.deleteLocalFile() }
 
@@ -26,11 +27,12 @@ extension MovieNightStore {
 
     func persist() {
         let snapshot = MovieNightLocalPersistence.Snapshot(
-            schemaVersion: 2,
+            schemaVersion: 3,
             savedAt: .now,
             eventsByGroup: eventsByGroup,
             responsesByGroup: responsesByGroup,
-            activityByGroup: activityByGroup
+            activityByGroup: activityByGroup,
+            presetsByGroup: presetsByGroup
         )
 
         Task {

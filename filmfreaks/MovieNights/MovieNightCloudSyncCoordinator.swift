@@ -32,6 +32,12 @@ final class MovieNightCloudSyncCoordinator {
         var token: UUID
     }
 
+    struct PendingPresetSave {
+        var groupId: String
+        var preset: MovieRoulettePreset
+        var token: UUID
+    }
+
     struct PendingDelete {
         var groupId: String
         var token: UUID
@@ -62,6 +68,9 @@ final class MovieNightCloudSyncCoordinator {
 
     private var pendingActivitySaves: [UUID: PendingActivitySave] = [:]
     private var pendingActivityDeletes: [UUID: PendingDelete] = [:]
+
+    private var pendingPresetSaves: [UUID: PendingPresetSave] = [:]
+    private var pendingPresetDeletes: [UUID: PendingDelete] = [:]
 
     private var scheduledFlush: Task<Void, Never>?
     private var isFlushing: Bool = false
@@ -145,6 +154,25 @@ final class MovieNightCloudSyncCoordinator {
         scheduleFlush()
     }
 
+
+    func queuePresetSave(_ preset: MovieRoulettePreset, groupId: String) {
+        let gid = groupId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !gid.isEmpty else { return }
+        pendingPresetSaves[preset.id] = PendingPresetSave(groupId: gid, preset: preset, token: UUID())
+        pendingPresetDeletes.removeValue(forKey: preset.id)
+        publishPendingCount(for: gid)
+        scheduleFlush()
+    }
+
+    func queuePresetDelete(presetId: UUID, groupId: String) {
+        let gid = groupId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !gid.isEmpty else { return }
+        pendingPresetSaves.removeValue(forKey: presetId)
+        pendingPresetDeletes[presetId] = PendingDelete(groupId: gid, token: UUID())
+        publishPendingCount(for: gid)
+        scheduleFlush()
+    }
+
     /// Useful for "I just did a bulk change, please push now" moments.
     func flushImmediately() {
         scheduledFlush?.cancel()
@@ -208,7 +236,9 @@ final class MovieNightCloudSyncCoordinator {
                     saveResponses: snapshot.responsesToSave,
                     deleteResponses: snapshot.responsesToDelete,
                     saveActivity: snapshot.activityToSave,
-                    deleteActivityIDs: snapshot.activityIDsToDelete
+                    deleteActivityIDs: snapshot.activityIDsToDelete,
+                    savePresets: snapshot.presetsToSave,
+                    deletePresetIDs: snapshot.presetIDsToDelete
                 )
 
                 // Only remove entries that haven't been superseded during the flush.
@@ -245,6 +275,17 @@ final class MovieNightCloudSyncCoordinator {
                     }
                 }
 
+                for (id, sent) in snapshot.presetSaves {
+                    if let current = pendingPresetSaves[id], current.token == sent.token {
+                        pendingPresetSaves.removeValue(forKey: id)
+                    }
+                }
+                for (id, sent) in snapshot.presetDeletes {
+                    if let current = pendingPresetDeletes[id], current.token == sent.token {
+                        pendingPresetDeletes.removeValue(forKey: id)
+                    }
+                }
+
                 publishPendingCount(for: gid)
                 batchDidSucceed(gid)
 
@@ -273,9 +314,11 @@ final class MovieNightCloudSyncCoordinator {
         var responseDeletes: [String: PendingResponseDelete]
         var activitySaves: [UUID: PendingActivitySave]
         var activityDeletes: [UUID: PendingDelete]
+        var presetSaves: [UUID: PendingPresetSave]
+        var presetDeletes: [UUID: PendingDelete]
 
         var isEmpty: Bool {
-            eventSaves.isEmpty && eventDeletes.isEmpty && responseSaves.isEmpty && responseDeletes.isEmpty && activitySaves.isEmpty && activityDeletes.isEmpty
+            eventSaves.isEmpty && eventDeletes.isEmpty && responseSaves.isEmpty && responseDeletes.isEmpty && activitySaves.isEmpty && activityDeletes.isEmpty && presetSaves.isEmpty && presetDeletes.isEmpty
         }
 
         var eventsToSave: [MovieNightEvent] { eventSaves.values.map { $0.event } }
@@ -286,6 +329,9 @@ final class MovieNightCloudSyncCoordinator {
 
         var activityToSave: [MovieNightActivityEvent] { activitySaves.values.map { $0.activity } }
         var activityIDsToDelete: [UUID] { Array(activityDeletes.keys) }
+
+        var presetsToSave: [MovieRoulettePreset] { presetSaves.values.map { $0.preset } }
+        var presetIDsToDelete: [UUID] { Array(presetDeletes.keys) }
     }
 
     private func snapshotForGroup(_ groupId: String) -> GroupSnapshot {
@@ -295,6 +341,8 @@ final class MovieNightCloudSyncCoordinator {
         let responsesToDelete = pendingResponseDeletes.filter { $0.value.groupId == groupId }
         let activityToSave = pendingActivitySaves.filter { $0.value.groupId == groupId }
         let activityToDelete = pendingActivityDeletes.filter { $0.value.groupId == groupId }
+        let presetsToSave = pendingPresetSaves.filter { $0.value.groupId == groupId }
+        let presetsToDelete = pendingPresetDeletes.filter { $0.value.groupId == groupId }
 
         return GroupSnapshot(
             eventSaves: eventsToSave,
@@ -302,7 +350,9 @@ final class MovieNightCloudSyncCoordinator {
             responseSaves: responsesToSave,
             responseDeletes: responsesToDelete,
             activitySaves: activityToSave,
-            activityDeletes: activityToDelete
+            activityDeletes: activityToDelete,
+            presetSaves: presetsToSave,
+            presetDeletes: presetsToDelete
         )
     }
 
@@ -314,6 +364,8 @@ final class MovieNightCloudSyncCoordinator {
         ids.formUnion(pendingResponseDeletes.values.map { $0.groupId })
         ids.formUnion(pendingActivitySaves.values.map { $0.groupId })
         ids.formUnion(pendingActivityDeletes.values.map { $0.groupId })
+        ids.formUnion(pendingPresetSaves.values.map { $0.groupId })
+        ids.formUnion(pendingPresetDeletes.values.map { $0.groupId })
         return ids.sorted()
     }
 
@@ -324,6 +376,8 @@ final class MovieNightCloudSyncCoordinator {
             + pendingResponseDeletes.values.filter { $0.groupId == groupId }.count
             + pendingActivitySaves.values.filter { $0.groupId == groupId }.count
             + pendingActivityDeletes.values.filter { $0.groupId == groupId }.count
+            + pendingPresetSaves.values.filter { $0.groupId == groupId }.count
+            + pendingPresetDeletes.values.filter { $0.groupId == groupId }.count
         pendingCountDidChange(count, groupId)
     }
 

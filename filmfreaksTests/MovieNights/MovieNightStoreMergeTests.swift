@@ -97,6 +97,48 @@ struct MovieNightStoreMergeTests {
         #expect(merged.last?.createdAt == changed.sorted(by: { $0.createdAt > $1.createdAt })[199].createdAt)
     }
 
+
+    @Test func mergeRoulettePresetsPrefersNewerRemoteVersionsAndNormalizesOrder() async {
+        let store = MovieNightStore(useCloud: false)
+        if let task = store.initialLoadTask {
+            await task.value
+        }
+
+        let groupId = "group-merge-presets"
+        let presetId = UUID()
+        let local = MovieRoulettePreset(
+            id: presetId,
+            groupId: groupId,
+            name: "Alt",
+            sortIndex: 3,
+            movieRefs: [],
+            updatedAt: makeDate(year: 2026, month: 4, day: 1, hour: 10)
+        )
+        let remote = MovieRoulettePreset(
+            id: presetId,
+            groupId: groupId,
+            name: "Neu",
+            sortIndex: 1,
+            movieRefs: [MovieNightMovieRef(movieId: UUID(), title: "Arrival", year: "2016", posterPath: nil, tmdbId: nil)],
+            updatedAt: makeDate(year: 2026, month: 4, day: 2, hour: 10)
+        )
+        let sibling = MovieRoulettePreset(
+            id: UUID(),
+            groupId: groupId,
+            name: "Sibling",
+            sortIndex: 9,
+            movieRefs: [],
+            updatedAt: makeDate(year: 2026, month: 4, day: 1, hour: 9)
+        )
+
+        store.presetsByGroup[groupId] = [local, sibling]
+        store.mergeRoulettePresets([remote], deleted: [], groupId: groupId)
+
+        let merged = store.roulettePresets(for: groupId)
+        #expect(merged.map(\.displayName) == ["Neu", "Sibling"])
+        #expect(merged.map(\.sortIndex) == [0, 1])
+    }
+
     private func makeEvent(
         id: UUID,
         groupId: String,

@@ -28,6 +28,7 @@ struct CloudKitMovieNightStore {
     let eventRecordType = "MovieNightEvent"
     let responseRecordType = "MovieNightResponse"
     let activityRecordType = "MovieNightActivity"
+    let presetRecordType = "MovieRoulettePreset"
 
     // Common keys
     let groupIdKey = "groupId"
@@ -59,4 +60,9 @@ struct CloudKitMovieNightStore {
     let actorUserIdKey = "actorUserId"
     let actorNameKey = "actorName"
     let newStatusKey = "newStatus"
+
+    // Preset keys
+    let presetNameKey = "presetName"
+    let sortIndexKey = "sortIndex"
+    let presetMovieRefsKey = "presetMovieRefs"
 }

@@ -34,4 +34,8 @@ extension MovieNightStore {
     func activityEvents(for groupId: String) -> [MovieNightActivityEvent] {
         (activityByGroup[groupId] ?? []).sorted(by: { $0.createdAt > $1.createdAt })
     }
+
+    func roulettePreset(for groupId: String, presetId: UUID) -> MovieRoulettePreset? {
+        roulettePresets(for: groupId).first(where: { $0.id == presetId })
+    }
 }
