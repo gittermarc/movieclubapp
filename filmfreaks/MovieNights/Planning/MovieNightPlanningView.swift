@@ -8,7 +8,7 @@
 internal import SwiftUI
 
 /// Small planning hub that keeps hosting/routing responsibilities out of the
-/// calendar feature while preparing the second section for Filmroulette.
+/// calendar feature while keeping the planning tools in one place.
 struct MovieNightPlanningView: View {
 
     @State private var selectedSection: MovieNightPlanningSection = .defaultSection
@@ -30,7 +30,7 @@ struct MovieNightPlanningView: View {
         case .calendar:
             MovieNightCalendarContentView()
         case .roulette:
-            MovieNightRoulettePlaceholderView()
+            MovieRouletteView()
         }
     }
 
