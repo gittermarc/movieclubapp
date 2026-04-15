@@ -7,7 +7,7 @@
 
 import Foundation
 
-private enum StatsTasteDynamicsRules {
+nonisolated private enum StatsTasteDynamicsRules {
     static let minimumSharedMoviesForPair = 3
     static let maximumAverageDifferenceForTwins = 1.4
     static let minimumAverageDifferenceForFriction = 1.8
@@ -19,7 +19,7 @@ private enum StatsTasteDynamicsRules {
     static let minimumHotTakeCount = 2
 }
 
-private struct StatsPairKey: Hashable {
+nonisolated private struct StatsPairKey: Hashable {
     let first: String
     let second: String
 
@@ -34,14 +34,14 @@ private struct StatsPairKey: Hashable {
     }
 }
 
-private struct StatsPairAggregate {
+nonisolated private struct StatsPairAggregate {
     let firstName: String
     let secondName: String
     var sharedMoviesCount: Int
     var totalAbsoluteDifference: Double
 }
 
-private struct StatsReviewerAggregate {
+nonisolated private struct StatsReviewerAggregate {
     let reviewerName: String
     var comparableRatingsCount: Int
     var totalBias: Double

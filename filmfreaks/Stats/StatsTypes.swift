@@ -103,20 +103,20 @@ struct MovieHighlight: Identifiable {
 }
 
 
-struct StatsTastePairInsight: Hashable {
+nonisolated struct StatsTastePairInsight: Hashable {
     let firstReviewerName: String
     let secondReviewerName: String
     let sharedMoviesCount: Int
     let averageDifference: Double
 }
 
-struct StatsReviewerBiasInsight: Hashable {
+nonisolated struct StatsReviewerBiasInsight: Hashable {
     let reviewerName: String
     let comparableRatingsCount: Int
     let averageBias: Double
 }
 
-struct StatsHotTakeInsight: Hashable {
+nonisolated struct StatsHotTakeInsight: Hashable {
     let reviewerName: String
     let hotTakeCount: Int
     let comparableRatingsCount: Int
@@ -124,7 +124,7 @@ struct StatsHotTakeInsight: Hashable {
     let averageAbsoluteDeviation: Double
 }
 
-struct StatsTasteDynamicsSnapshot {
+nonisolated struct StatsTasteDynamicsSnapshot {
     let tasteTwins: StatsTastePairInsight?
     let frictionPair: StatsTastePairInsight?
     let strictestReviewer: StatsReviewerBiasInsight?
