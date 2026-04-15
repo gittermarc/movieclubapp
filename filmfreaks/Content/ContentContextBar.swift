@@ -13,6 +13,11 @@ internal import SwiftUI
 /// Anpassung 15.04.26:
 /// - Gruppenaktivität lebt nicht mehr als große Karte unterhalb des Headers,
 ///   sondern als kleine Kontext-Aktion rechts in der Bar.
+///
+/// Anpassung 15.04.26 (Layout-Polish):
+/// - Die Bar bleibt einzeilig und gewinnt eine klarere Priorisierung.
+/// - Der Gruppenname erhält den meisten Platz.
+/// - Aktives Mitglied und Aktivitätszugang verdichten sich bei knapper Breite.
 struct ContentContextBar: View {
 
     @EnvironmentObject private var displaySettings: DisplaySettings
@@ -37,22 +42,21 @@ struct ContentContextBar: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: m.contextBarItemSpacing) {
-            HStack(alignment: .top, spacing: m.contextBarItemSpacing) {
-                Button(action: onTapGroup) {
-                    groupLabel
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Aktuelle Gruppe: \(groupName)")
-
-                verticalDivider
-
-                Button(action: onTapActiveMember) {
-                    activeMemberLabel
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Aktives Mitglied: \(activeMemberDisplayName)")
+            Button(action: onTapGroup) {
+                groupLabel
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .buttonStyle(.plain)
+            .accessibilityLabel("Aktuelle Gruppe: \(groupName)")
+            .layoutPriority(3)
+
+            verticalDivider
+
+            Button(action: onTapActiveMember) {
+                activeMemberLabel
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Aktives Mitglied: \(activeMemberDisplayName)")
+            .layoutPriority(1)
 
             if showsActivityButton {
                 GroupActivityStatusButton(
@@ -60,10 +64,9 @@ struct ContentContextBar: View {
                     newEventsCount: activityNewEventsCount,
                     action: onTapActivity
                 )
-                .fixedSize(horizontal: true, vertical: true)
+                .layoutPriority(0)
             }
         }
-        .fixedSize(horizontal: false, vertical: true)
         .padding(.horizontal, m.contextBarHorizontalPadding)
         .padding(.vertical, m.contextBarVerticalPadding)
         .background(.thinMaterial)
@@ -77,20 +80,22 @@ struct ContentContextBar: View {
     private var verticalDivider: some View {
         Rectangle()
             .fill(Color.primary.opacity(0.12))
-            .frame(width: 1)
-            .frame(maxHeight: .infinity)
-            .padding(.vertical, m.contextBarDividerVerticalPadding)
+            .frame(width: 1, height: 18)
             .accessibilityHidden(true)
     }
 
     private var groupLabel: some View {
-        HStack(alignment: .top, spacing: 8) {
+        HStack(spacing: 8) {
             Image(systemName: "person.3.sequence.fill")
-                .font(.caption)
+                .font(.caption.weight(.semibold))
                 .foregroundStyle(tintColor)
 
-            ContextBarTitleView(label: "Gruppe", value: groupName, wrappedLineLimit: 2)
-                .layoutPriority(1)
+            Text(groupName)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .multilineTextAlignment(.leading)
 
             Spacer(minLength: 0)
         }
@@ -99,7 +104,7 @@ struct ContentContextBar: View {
     }
 
     private var activeMemberLabel: some View {
-        HStack(alignment: .top, spacing: 8) {
+        HStack(spacing: 8) {
             ZStack {
                 Circle()
                     .fill((hasActiveMemberSelected ? tintColor : Color.secondary).opacity(0.18))
@@ -110,12 +115,20 @@ struct ContentContextBar: View {
             }
             .frame(width: 26, height: 26)
 
-            ContextBarTitleView(label: "Aktiv", value: activeMemberDisplayName, wrappedLineLimit: 2)
-                .layoutPriority(1)
+            ViewThatFits(in: .horizontal) {
+                Text(activeMemberDisplayName)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
 
-            Spacer(minLength: 0)
+                Text(activeMemberInitials)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+            }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())
     }
 }

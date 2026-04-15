@@ -26,27 +26,10 @@ struct GroupActivityStatusButton: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 8) {
-                Image(systemName: hasNewEvents ? "sparkles" : "clock.arrow.circlepath")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(hasNewEvents ? tintColor : .secondary)
-
-                Text("Aktivität")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-
-                if hasNewEvents {
-                    Text(newEventsBadgeText)
-                        .font(.caption2.weight(.bold))
-                        .monospacedDigit()
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 3)
-                        .background(tintColor.opacity(0.16))
-                        .foregroundStyle(tintColor)
-                        .clipShape(Capsule())
-                        .accessibilityLabel("\(newEventsCount) neue Aktivitäten")
-                }
+            ViewThatFits(in: .horizontal) {
+                fullContent
+                compactContent
+                iconOnlyContent
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
@@ -63,6 +46,65 @@ struct GroupActivityStatusButton: View {
         .buttonStyle(.plain)
         .accessibilityLabel(accessibilityLabel)
         .accessibilityHint("Öffnet die Gruppenaktivität")
+    }
+
+    private var fullContent: some View {
+        HStack(spacing: 8) {
+            statusIcon
+
+            Text("Aktivität")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+
+            if hasNewEvents {
+                badgeText
+            }
+        }
+        .fixedSize(horizontal: true, vertical: true)
+    }
+
+    private var compactContent: some View {
+        HStack(spacing: 8) {
+            statusIcon
+
+            if hasNewEvents {
+                badgeText
+            }
+        }
+        .fixedSize(horizontal: true, vertical: true)
+    }
+
+    private var iconOnlyContent: some View {
+        statusIcon
+            .overlay(alignment: .topTrailing) {
+                if hasNewEvents {
+                    Circle()
+                        .fill(tintColor)
+                        .frame(width: 8, height: 8)
+                        .offset(x: 3, y: -3)
+                        .accessibilityHidden(true)
+                }
+            }
+            .fixedSize(horizontal: true, vertical: true)
+    }
+
+    private var statusIcon: some View {
+        Image(systemName: hasNewEvents ? "sparkles" : "clock.arrow.circlepath")
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(hasNewEvents ? tintColor : .secondary)
+    }
+
+    private var badgeText: some View {
+        Text(newEventsBadgeText)
+            .font(.caption2.weight(.bold))
+            .monospacedDigit()
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .background(tintColor.opacity(0.16))
+            .foregroundStyle(tintColor)
+            .clipShape(Capsule())
+            .accessibilityLabel("\(newEventsCount) neue Aktivitäten")
     }
 
     private var accessibilityLabel: String {
