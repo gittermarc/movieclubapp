@@ -7,12 +7,12 @@
 
 internal import SwiftUI
 
-/// Kompakte Context-Bar unter dem Titel: Gruppe + aktives Mitglied
-/// Ziel: dezenter, besser integriert (Material), weniger vertikaler Platz als die bisherigen Gradient-Buttons.
+/// Kompakte Context-Bar unter dem Titel: Gruppe + aktives Mitglied + Aktivitätszugang.
+/// Ziel: dezenter, besser integriert (Material), weniger vertikaler Platz als eine eigene Social-Karte.
 ///
-/// Anpassung 15.02.26:
-/// - Lange Gruppen- und Mitgliedsnamen werden nicht mehr abgeschnitten, sondern klappen bei Bedarf auf 2 Zeilen.
-/// - Filmanzahl-Pill entfernt (wirkt in der Bar schnell "busy").
+/// Anpassung 15.04.26:
+/// - Gruppenaktivität lebt nicht mehr als große Karte unterhalb des Headers,
+///   sondern als kleine Kontext-Aktion rechts in der Bar.
 struct ContentContextBar: View {
 
     @EnvironmentObject private var displaySettings: DisplaySettings
@@ -26,26 +26,42 @@ struct ContentContextBar: View {
     let activeMemberInitials: String
     let hasActiveMemberSelected: Bool
 
+    let showsActivityButton: Bool
+    let activityNewEventsCount: Int
+
     let onTapGroup: () -> Void
     let onTapActiveMember: () -> Void
+    let onTapActivity: () -> Void
 
     private var m: DisplaySettings.LayoutMetrics { displaySettings.metrics }
 
     var body: some View {
-        HStack(alignment: .top, spacing: m.contextBarItemSpacing) {
-            Button(action: onTapGroup) {
-                groupLabel
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Aktuelle Gruppe: \(groupName)")
+        HStack(alignment: .center, spacing: m.contextBarItemSpacing) {
+            HStack(alignment: .top, spacing: m.contextBarItemSpacing) {
+                Button(action: onTapGroup) {
+                    groupLabel
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Aktuelle Gruppe: \(groupName)")
 
-            verticalDivider
+                verticalDivider
 
-            Button(action: onTapActiveMember) {
-                activeMemberLabel
+                Button(action: onTapActiveMember) {
+                    activeMemberLabel
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Aktives Mitglied: \(activeMemberDisplayName)")
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Aktives Mitglied: \(activeMemberDisplayName)")
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            if showsActivityButton {
+                GroupActivityStatusButton(
+                    tintColor: tintColor,
+                    newEventsCount: activityNewEventsCount,
+                    action: onTapActivity
+                )
+                .fixedSize(horizontal: true, vertical: true)
+            }
         }
         .fixedSize(horizontal: false, vertical: true)
         .padding(.horizontal, m.contextBarHorizontalPadding)

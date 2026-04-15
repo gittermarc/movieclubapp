@@ -125,7 +125,7 @@ final class DisplaySettings: ObservableObject {
         didSet { defaults.set(showPosterInCompactList, forKey: Keys.showPosterInCompactList) }
     }
 
-    /// Wenn deaktiviert, wird die Gruppenaktivitäts-Karte im Header nicht angezeigt.
+    /// Wenn deaktiviert, wird der Aktivitätszugang in der Context-Bar ausgeblendet.
     @Published var showGroupActivityCard: Bool {
         didSet { defaults.set(showGroupActivityCard, forKey: Keys.showGroupActivityCard) }
     }

@@ -23,13 +23,11 @@ struct ContentHeaderView: View {
     let activeMemberInitials: String
     let hasActiveMemberSelected: Bool
 
+    let showsActivityButton: Bool
+    let activityNewEventsCount: Int
+
     let onTapGroup: () -> Void
     let onTapActiveMember: () -> Void
-
-    // MARK: - Activity (Social)
-
-    let showGroupActivityCard: Bool
-    let activityPreviewItems: [UnifiedGroupActivityEvent]
     let onTapActivity: () -> Void
 
     // MARK: - Onboarding
@@ -81,21 +79,15 @@ struct ContentHeaderView: View {
                     activeMemberDisplayName: activeMemberDisplayName,
                     activeMemberInitials: activeMemberInitials,
                     hasActiveMemberSelected: hasActiveMemberSelected,
+                    showsActivityButton: showsActivityButton,
+                    activityNewEventsCount: activityNewEventsCount,
                     onTapGroup: onTapGroup,
-                    onTapActiveMember: onTapActiveMember
+                    onTapActiveMember: onTapActiveMember,
+                    onTapActivity: onTapActivity
                 )
                 .padding(.horizontal)
                 .padding(.top, 8)
                 .fixedSize(horizontal: false, vertical: true)
-
-                if showGroupActivityCard {
-                    GroupActivityTeaserView(
-                        events: activityPreviewItems,
-                        onOpenAll: onTapActivity
-                    )
-                    .padding(.horizontal)
-                    .padding(.top, 8)
-                }
             }
 
             if shouldShowOnboardingChecklist {
@@ -122,13 +114,10 @@ struct ContentHeaderView: View {
                     }
                 }
                 .pickerStyle(.segmented)
-                // Segmented-Picker soll den verfügbaren Platz nehmen,
-                // aber den Count nicht "wegdrücken" (vor allem auf iPhone schmal).
                 .frame(maxWidth: .infinity)
                 .layoutPriority(0)
 
                 ContentListCountText(totalCount: activeListTotalCount)
-                    // Der Count muss sichtbar bleiben und nicht auf 0 Breite komprimiert werden.
                     .fixedSize(horizontal: true, vertical: false)
                     .layoutPriority(1)
             }
@@ -161,13 +150,6 @@ struct ContentHeaderView: View {
     }
 }
 
-// MARK: - Minimal count label
-
-/// Extrem unaufdringliche Total-Anzeige (locale-formatiert, monospaced digits).
-///
-/// Hinweis: absichtlich nur **eine Zahl** (stabil, nicht gefiltert).
-/// Falls wir später "Shown vs Total" brauchen, kann das hier erweitert werden,
-/// ohne den Header-Layout-Code aufzublähen.
 private struct ContentListCountText: View {
 
     let totalCount: Int

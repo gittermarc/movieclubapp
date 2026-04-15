@@ -55,6 +55,13 @@ struct GroupActivityListView: View {
                 }
             }
             .navigationTitle("Aktivität")
+            .onAppear {
+                GroupActivitySessionStateStore.markViewed(
+                    groupId: groupId,
+                    userId: userStore.selectedUser?.id,
+                    userName: userStore.selectedUser?.name
+                )
+            }
             .sheet(item: $selectedMovieNight) { selection in
                 MovieNightDetailSheet(groupId: selection.groupId, eventId: selection.id)
                     .environmentObject(movieNightStore)

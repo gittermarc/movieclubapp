@@ -67,3 +67,24 @@ extension UnifiedGroupActivityEvent {
         return nil
     }
 }
+
+
+extension UnifiedGroupActivityEvent {
+    var actorUserId: UUID? {
+        switch payload {
+        case .movie(let event):
+            return event.actorId
+        case .movieNight(let event):
+            return event.actorUserId
+        }
+    }
+
+    var actorDisplayName: String? {
+        switch payload {
+        case .movie(let event):
+            return event.actorName
+        case .movieNight(let event):
+            return event.actorName
+        }
+    }
+}

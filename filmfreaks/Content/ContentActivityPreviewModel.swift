@@ -17,6 +17,7 @@ import Combine
 final class ContentActivityPreviewModel: ObservableObject {
 
     @Published private(set) var items: [UnifiedGroupActivityEvent] = []
+    @Published private(set) var allItems: [UnifiedGroupActivityEvent] = []
 
     func update(
         movieStore: MovieStore,
@@ -34,5 +35,6 @@ final class ContentActivityPreviewModel: ObservableObject {
         )
 
         self.items = snapshot.items
+        self.allItems = snapshot.allItems
     }
 }

@@ -167,7 +167,7 @@ struct AppearanceSettingsView: View {
             }
 
             Section("Gruppenaktivität") {
-                Toggle("Gruppenaktivität anzeigen", isOn: $displaySettings.showGroupActivityCard)
+                Toggle("Aktivitätszugang anzeigen", isOn: $displaySettings.showGroupActivityCard)
             }
 
             Section {

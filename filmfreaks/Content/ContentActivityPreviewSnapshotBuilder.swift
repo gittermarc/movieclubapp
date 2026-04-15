@@ -9,6 +9,7 @@ import Foundation
 
 struct ContentActivityPreviewSnapshot {
     let items: [UnifiedGroupActivityEvent]
+    let allItems: [UnifiedGroupActivityEvent]
 }
 
 enum ContentActivityPreviewSnapshotBuilder {
@@ -33,15 +34,47 @@ enum ContentActivityPreviewSnapshotBuilder {
     }
 
     static func build(input: Input) -> ContentActivityPreviewSnapshot {
-        let limitedMovieItems = input.movieEvents
-            .prefix(input.perSourceLimit)
-            .map { UnifiedGroupActivityEvent(movieEvent: $0) }
+        let allItems = merge(
+            movieItems: input.movieEvents.map { UnifiedGroupActivityEvent(movieEvent: $0) },
+            nightItems: input.movieNightEvents.map { UnifiedGroupActivityEvent(movieNightActivity: $0) }
+        )
 
-        let limitedNightItems = input.movieNightEvents
-            .prefix(input.perSourceLimit)
-            .map { UnifiedGroupActivityEvent(movieNightActivity: $0) }
+        let previewItems = merge(
+            movieItems: input.movieEvents
+                .prefix(input.perSourceLimit)
+                .map { UnifiedGroupActivityEvent(movieEvent: $0) },
+            nightItems: input.movieNightEvents
+                .prefix(input.perSourceLimit)
+                .map { UnifiedGroupActivityEvent(movieNightActivity: $0) }
+        )
 
-        let combined = Array((limitedMovieItems + limitedNightItems).enumerated())
+        return ContentActivityPreviewSnapshot(
+            items: Array(previewItems.prefix(input.totalLimit)),
+            allItems: allItems
+        )
+    }
+
+    static func newEventsCount(
+        in events: [UnifiedGroupActivityEvent],
+        currentUserId: UUID?,
+        currentUserName: String?,
+        unseenThreshold: Date
+    ) -> Int {
+        events.filter {
+            isEventNew(
+                $0,
+                currentUserId: currentUserId,
+                currentUserName: currentUserName,
+                unseenThreshold: unseenThreshold
+            )
+        }.count
+    }
+
+    private static func merge(
+        movieItems: [UnifiedGroupActivityEvent],
+        nightItems: [UnifiedGroupActivityEvent]
+    ) -> [UnifiedGroupActivityEvent] {
+        Array((movieItems + nightItems).enumerated())
             .sorted { lhs, rhs in
                 if lhs.element.date != rhs.element.date {
                     return lhs.element.date > rhs.element.date
@@ -49,10 +82,37 @@ enum ContentActivityPreviewSnapshotBuilder {
                 return lhs.offset < rhs.offset
             }
             .map(\.element)
-
-        return ContentActivityPreviewSnapshot(
-            items: Array(combined.prefix(input.totalLimit))
-        )
     }
 
+    private static func isEventNew(
+        _ event: UnifiedGroupActivityEvent,
+        currentUserId: UUID?,
+        currentUserName: String?,
+        unseenThreshold: Date
+    ) -> Bool {
+        guard event.date > unseenThreshold else { return false }
+        guard !isOwnEvent(event, currentUserId: currentUserId, currentUserName: currentUserName) else { return false }
+        return true
+    }
+
+    private static func isOwnEvent(
+        _ event: UnifiedGroupActivityEvent,
+        currentUserId: UUID?,
+        currentUserName: String?
+    ) -> Bool {
+        if let currentUserId, let actorUserId = event.actorUserId, actorUserId == currentUserId {
+            return true
+        }
+
+        let normalizedCurrentUserName = normalizeName(currentUserName)
+        let normalizedActorName = normalizeName(event.actorDisplayName)
+        guard let normalizedCurrentUserName, let normalizedActorName else { return false }
+        return normalizedCurrentUserName == normalizedActorName
+    }
+
+    private static func normalizeName(_ value: String?) -> String? {
+        let trimmed = (value ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        return trimmed.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+    }
 }

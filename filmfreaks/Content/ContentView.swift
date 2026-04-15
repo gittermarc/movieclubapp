@@ -160,6 +160,21 @@ struct ContentView: View {
         return initials(from: activeMemberDisplayName)
     }
 
+
+
+    private var activityNewEventsCount: Int {
+        ContentActivityPreviewSnapshotBuilder.newEventsCount(
+            in: activityPreviewModel.allItems,
+            currentUserId: userStore.selectedUser?.id,
+            currentUserName: userStore.selectedUser?.name,
+            unseenThreshold: GroupActivitySessionStateStore.unseenThreshold(
+                groupId: currentGroupId,
+                userId: userStore.selectedUser?.id,
+                userName: userStore.selectedUser?.name
+            )
+        )
+    }
+
     private func initials(from name: String) -> String {
         let parts = name
             .split(whereSeparator: { $0 == " " || $0 == "-" || $0 == "_" })
@@ -190,10 +205,10 @@ struct ContentView: View {
                             activeMemberDisplayName: activeMemberDisplayName,
                             activeMemberInitials: activeMemberInitials,
                             hasActiveMemberSelected: hasActiveMemberSelected,
+                            showsActivityButton: displaySettings.showGroupActivityCard,
+                            activityNewEventsCount: activityNewEventsCount,
                             onTapGroup: { route = .groupSettings },
                             onTapActiveMember: { route = .users },
-                            showGroupActivityCard: displaySettings.showGroupActivityCard,
-                            activityPreviewItems: activityPreviewModel.items,
                             onTapActivity: { route = .activity },
                             shouldShowOnboardingChecklist: onboarding.shouldShowChecklist,
                             onboardingChecklistExpanded: $onboardingChecklistExpanded,

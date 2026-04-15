@@ -13,6 +13,8 @@ struct filmfreaksApp: App {
     @UIApplicationDelegateAdaptor(CloudKitShareAppDelegate.self) private var appDelegate
 
     init() {
+        GroupActivitySessionStateStore.registerAppLaunch()
+
         // Make HTTP caching for images much more effective across app launches.
         let memory = 100 * 1024 * 1024  // 100 MB
         let disk   = 500 * 1024 * 1024  // 500 MB
