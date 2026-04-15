@@ -149,6 +149,22 @@ extension StatsView {
         viewModel.snapshot.suggestionsByUser
     }
 
+    var strongestCriterion: StatsCriterionAverageInsight? {
+        viewModel.snapshot.strongestCriterion
+    }
+
+    var weakestCriterion: StatsCriterionAverageInsight? {
+        viewModel.snapshot.weakestCriterion
+    }
+
+    var mostControversialCriterion: StatsCriterionControversyInsight? {
+        viewModel.snapshot.mostControversialCriterion
+    }
+
+    var criterionReviewerHighlight: StatsCriterionReviewerHighlight? {
+        viewModel.snapshot.criterionReviewerHighlight
+    }
+
     var tasteTwins: StatsTastePairInsight? {
         viewModel.snapshot.tasteTwins
     }

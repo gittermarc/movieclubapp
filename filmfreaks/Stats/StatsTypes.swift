@@ -103,6 +103,43 @@ struct MovieHighlight: Identifiable {
 }
 
 
+
+nonisolated struct StatsCriterionAverageInsight: Hashable {
+    let criterion: RatingCriterion
+    let averageScore: Double
+    let ratingsCount: Int
+}
+
+nonisolated struct StatsCriterionControversyInsight: Hashable {
+    let criterion: RatingCriterion
+    let standardDeviation: Double
+    let ratingsCount: Int
+    let isMeaningfullyControversial: Bool
+}
+
+nonisolated struct StatsCriterionReviewerHighlight: Hashable {
+    let reviewerName: String
+    let criterion: RatingCriterion
+    let reviewerAverageScore: Double
+    let groupAverageScore: Double
+    let ratingsCount: Int
+    let averageDelta: Double
+}
+
+nonisolated struct StatsRatingDimensionsSnapshot {
+    let strongestCriterion: StatsCriterionAverageInsight?
+    let weakestCriterion: StatsCriterionAverageInsight?
+    let mostControversialCriterion: StatsCriterionControversyInsight?
+    let reviewerHighlight: StatsCriterionReviewerHighlight?
+
+    static let empty = StatsRatingDimensionsSnapshot(
+        strongestCriterion: nil,
+        weakestCriterion: nil,
+        mostControversialCriterion: nil,
+        reviewerHighlight: nil
+    )
+}
+
 nonisolated struct StatsTastePairInsight: Hashable {
     let firstReviewerName: String
     let secondReviewerName: String

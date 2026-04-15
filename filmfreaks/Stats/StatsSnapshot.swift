@@ -49,6 +49,11 @@ struct StatsSnapshot {
     var moviesByLocation: [(location: String, count: Int)]
     var suggestionsByUser: [(name: String, count: Int)]
 
+    var strongestCriterion: StatsCriterionAverageInsight?
+    var weakestCriterion: StatsCriterionAverageInsight?
+    var mostControversialCriterion: StatsCriterionControversyInsight?
+    var criterionReviewerHighlight: StatsCriterionReviewerHighlight?
+
     var tasteTwins: StatsTastePairInsight?
     var frictionPair: StatsTastePairInsight?
     var strictestReviewer: StatsReviewerBiasInsight?
@@ -83,6 +88,10 @@ struct StatsSnapshot {
         actorsByCountRaw: [],
         moviesByLocation: [],
         suggestionsByUser: [],
+        strongestCriterion: nil,
+        weakestCriterion: nil,
+        mostControversialCriterion: nil,
+        criterionReviewerHighlight: nil,
         tasteTwins: nil,
         frictionPair: nil,
         strictestReviewer: nil,

@@ -133,6 +133,103 @@ struct StatsSnapshotBuilderTests {
         #expect(snapshot.hotTakeReviewer?.comparableRatingsCount == 4)
     }
 
+
+    @Test func computeSnapshotBuildsRatingDimensionInsights() {
+        let alice = User(id: UUID(uuidString: "00000000-0000-0000-0000-000000000031")!, name: "Alice")
+        let bob = User(id: UUID(uuidString: "00000000-0000-0000-0000-000000000032")!, name: "Bob")
+        let clara = User(id: UUID(uuidString: "00000000-0000-0000-0000-000000000033")!, name: "Clara")
+
+        let movies = [
+            makeMovie(title: "One", watchedDate: makeDate(year: 2026, month: 4, day: 1), ratings: [
+                makeRating(user: alice, scores: [.music: 3, .ambition: 1, .humor: 3]),
+                makeRating(user: bob, scores: [.music: 2, .ambition: 1, .humor: 1]),
+                makeRating(user: clara, scores: [.music: 2, .ambition: 2, .humor: 3])
+            ]),
+            makeMovie(title: "Two", watchedDate: makeDate(year: 2026, month: 4, day: 2), ratings: [
+                makeRating(user: alice, scores: [.music: 3, .ambition: 1, .humor: 1]),
+                makeRating(user: bob, scores: [.music: 2, .ambition: 1, .humor: 3]),
+                makeRating(user: clara, scores: [.music: 1, .ambition: 1, .humor: 1])
+            ]),
+            makeMovie(title: "Three", watchedDate: makeDate(year: 2026, month: 4, day: 3), ratings: [
+                makeRating(user: alice, scores: [.music: 3, .ambition: 1, .humor: 3]),
+                makeRating(user: bob, scores: [.music: 2, .ambition: 1, .humor: 1]),
+                makeRating(user: clara, scores: [.music: 2, .ambition: 1, .humor: 3])
+            ]),
+            makeMovie(title: "Four", watchedDate: makeDate(year: 2026, month: 4, day: 4), ratings: [
+                makeRating(user: alice, scores: [.music: 3, .ambition: 1, .humor: 1]),
+                makeRating(user: bob, scores: [.music: 2, .ambition: 1, .humor: 3]),
+                makeRating(user: clara, scores: [.music: 1, .ambition: 1, .humor: 1])
+            ]),
+            makeMovie(title: "Five", watchedDate: makeDate(year: 2026, month: 4, day: 5), ratings: [
+                makeRating(user: alice, scores: [.music: 3, .ambition: 1, .humor: 3]),
+                makeRating(user: bob, scores: [.music: 2, .ambition: 1, .humor: 1]),
+                makeRating(user: clara, scores: [.music: 2, .ambition: 2, .humor: 3])
+            ]),
+            makeMovie(title: "Six", watchedDate: makeDate(year: 2026, month: 4, day: 6), ratings: [
+                makeRating(user: alice, scores: [.music: 3, .ambition: 1, .humor: 1]),
+                makeRating(user: bob, scores: [.music: 2, .ambition: 1, .humor: 3]),
+                makeRating(user: clara, scores: [.music: 1, .ambition: 1, .humor: 1])
+            ])
+        ]
+
+        let snapshot = StatsSnapshotBuilder.computeSnapshot(
+            movies: movies,
+            users: [alice, bob, clara],
+            ratingDisplayMode: .ratingAverage,
+            selectedRange: .all,
+            selectedLocationFilter: nil
+        )
+
+        #expect(snapshot.strongestCriterion?.criterion == .music)
+        #expect(snapshot.strongestCriterion?.ratingsCount == 18)
+        #expect(abs((snapshot.strongestCriterion?.averageScore ?? 0.0) - (39.0 / 18.0)) < 0.0001)
+
+        #expect(snapshot.weakestCriterion?.criterion == .ambition)
+        #expect(snapshot.weakestCriterion?.ratingsCount == 18)
+        #expect(abs((snapshot.weakestCriterion?.averageScore ?? 0.0) - (20.0 / 18.0)) < 0.0001)
+
+        #expect(snapshot.mostControversialCriterion?.criterion == .humor)
+        #expect(snapshot.mostControversialCriterion?.ratingsCount == 18)
+        #expect(abs((snapshot.mostControversialCriterion?.standardDeviation ?? 0.0) - 1.0) < 0.0001)
+        #expect(snapshot.mostControversialCriterion?.isMeaningfullyControversial == true)
+
+        #expect(snapshot.criterionReviewerHighlight?.reviewerName == "Alice")
+        #expect(snapshot.criterionReviewerHighlight?.criterion == .music)
+        #expect(snapshot.criterionReviewerHighlight?.ratingsCount == 6)
+        #expect(abs((snapshot.criterionReviewerHighlight?.reviewerAverageScore ?? 0.0) - 3.0) < 0.0001)
+        #expect(abs((snapshot.criterionReviewerHighlight?.groupAverageScore ?? 0.0) - (39.0 / 18.0)) < 0.0001)
+        #expect(abs((snapshot.criterionReviewerHighlight?.averageDelta ?? 0.0) - (15.0 / 18.0)) < 0.0001)
+    }
+
+    @Test func computeSnapshotSuppressesRatingDimensionInsightsForThinData() {
+        let alice = User(id: UUID(uuidString: "00000000-0000-0000-0000-000000000041")!, name: "Alice")
+        let bob = User(id: UUID(uuidString: "00000000-0000-0000-0000-000000000042")!, name: "Bob")
+
+        let movies = [
+            makeMovie(title: "One", watchedDate: makeDate(year: 2026, month: 5, day: 1), ratings: [
+                makeRating(user: alice, scores: [.music: 3]),
+                makeRating(user: bob, scores: [.music: 2])
+            ]),
+            makeMovie(title: "Two", watchedDate: makeDate(year: 2026, month: 5, day: 2), ratings: [
+                makeRating(user: alice, scores: [.music: 3]),
+                makeRating(user: bob, scores: [.music: 2])
+            ])
+        ]
+
+        let snapshot = StatsSnapshotBuilder.computeSnapshot(
+            movies: movies,
+            users: [alice, bob],
+            ratingDisplayMode: .ratingAverage,
+            selectedRange: .all,
+            selectedLocationFilter: nil
+        )
+
+        #expect(snapshot.strongestCriterion == nil)
+        #expect(snapshot.weakestCriterion == nil)
+        #expect(snapshot.mostControversialCriterion == nil)
+        #expect(snapshot.criterionReviewerHighlight == nil)
+    }
+
     @Test func computeSnapshotSuppressesTasteInsightsForThinData() {
         let alice = User(id: UUID(uuidString: "00000000-0000-0000-0000-000000000021")!, name: "Alice")
         let bob = User(id: UUID(uuidString: "00000000-0000-0000-0000-000000000022")!, name: "Bob")
@@ -178,11 +275,15 @@ struct StatsSnapshotBuilderTests {
         )
     }
 
-    private func makeRating(user: User, fazit: Int) -> Rating {
+    private func makeRating(
+        user: User,
+        fazit: Int? = nil,
+        scores: [RatingCriterion: Int] = [:]
+    ) -> Rating {
         Rating(
             reviewerId: user.id,
             reviewerName: user.name,
-            scores: [:],
+            scores: scores,
             comment: nil,
             fazitScore: fazit,
             updatedAt: nil

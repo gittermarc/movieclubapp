@@ -299,6 +299,12 @@ enum StatsSnapshotBuilder {
                 }
         }()
 
+        let ratingDimensions = computeRatingDimensions(
+            movies: filteredMovies,
+            users: users,
+            reviewerKey: reviewerKey(for:)
+        )
+
         let tasteDynamics = computeTasteDynamics(
             movies: filteredMovies,
             users: users,
@@ -366,6 +372,10 @@ enum StatsSnapshotBuilder {
             actorsByCountRaw: actorsByCountRaw,
             moviesByLocation: moviesByLocation,
             suggestionsByUser: suggestionsByUser,
+            strongestCriterion: ratingDimensions.strongestCriterion,
+            weakestCriterion: ratingDimensions.weakestCriterion,
+            mostControversialCriterion: ratingDimensions.mostControversialCriterion,
+            criterionReviewerHighlight: ratingDimensions.reviewerHighlight,
             tasteTwins: tasteDynamics.tasteTwins,
             frictionPair: tasteDynamics.frictionPair,
             strictestReviewer: tasteDynamics.strictestReviewer,
