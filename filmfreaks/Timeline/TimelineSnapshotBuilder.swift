@@ -13,7 +13,7 @@ struct TimelineSnapshot: Equatable, Sendable {
 
 enum TimelineSnapshotBuilder {
 
-    static func build(
+    nonisolated static func build(
         movies: [Movie],
         filterMode: TimelineFilterMode,
         selectedRange: TimelineTimeRange,
@@ -40,7 +40,7 @@ enum TimelineSnapshotBuilder {
         )
     }
 
-    private static func buildAvailableYears(
+    nonisolated private static func buildAvailableYears(
         from movies: [Movie],
         today: Date,
         calendar: Calendar
@@ -56,7 +56,7 @@ enum TimelineSnapshotBuilder {
         return Array(Set(years + [currentYear])).sorted(by: >)
     }
 
-    private static func buildFilteredMovies(
+    nonisolated private static func buildFilteredMovies(
         from movies: [Movie],
         filterMode: TimelineFilterMode,
         selectedRange: TimelineTimeRange,
@@ -95,7 +95,7 @@ enum TimelineSnapshotBuilder {
         return filtered.sorted { ($0.watchedDate ?? .distantPast) > ($1.watchedDate ?? .distantPast) }
     }
 
-    private static func buildMonthGroups(
+    nonisolated private static func buildMonthGroups(
         from movies: [Movie],
         calendar: Calendar
     ) -> [TimelineMonthGroup] {
