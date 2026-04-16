@@ -1,11 +1,11 @@
 import Foundation
 
-struct TimelineMonthGroup: Equatable {
+struct TimelineMonthGroup: Equatable, Sendable {
     let monthStart: Date
     let movies: [Movie]
 }
 
-struct TimelineSnapshot: Equatable {
+struct TimelineSnapshot: Equatable, Sendable {
     var availableYears: [Int] = []
     var filteredMovies: [Movie] = []
     var monthGroups: [TimelineMonthGroup] = []

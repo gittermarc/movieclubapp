@@ -4,7 +4,7 @@ import Combine
 @MainActor
 final class TimelineViewModel: ObservableObject {
 
-    typealias SnapshotBuilder = (
+    typealias SnapshotBuilder = @Sendable (
         _ movies: [Movie],
         _ filterMode: TimelineFilterMode,
         _ selectedRange: TimelineTimeRange,
@@ -13,12 +13,18 @@ final class TimelineViewModel: ObservableObject {
         _ calendar: Calendar
     ) -> TimelineSnapshot
 
-    struct InputSignature: Equatable {
+    struct Inputs: Equatable, Sendable {
         let movies: [Movie]
         let filterMode: TimelineFilterMode
         let selectedRange: TimelineTimeRange
         let selectedYear: Int
         let currentDay: Date
+    }
+
+    struct BuildResult: Sendable {
+        let snapshot: TimelineSnapshot
+        let resolvedSelectedYear: Int
+        let appliedInputs: Inputs
     }
 
     @Published private(set) var filterMode: TimelineFilterMode
@@ -31,7 +37,9 @@ final class TimelineViewModel: ObservableObject {
     private let snapshotBuilder: SnapshotBuilder
 
     private var movies: [Movie] = []
-    private var lastInputSignature: InputSignature?
+    private var updateTask: Task<Void, Never>?
+    private var buildGeneration: Int = 0
+    private var lastScheduledInputs: Inputs?
 
     init(
         initialFilterMode: TimelineFilterMode = .year,
@@ -60,6 +68,10 @@ final class TimelineViewModel: ObservableObject {
                 calendar: calendar
             )
         }
+    }
+
+    deinit {
+        updateTask?.cancel()
     }
 
     func updateMovies(_ movies: [Movie]) {
@@ -95,54 +107,98 @@ final class TimelineViewModel: ObservableObject {
     }
 
     private func rebuildSnapshotIfNeeded(force: Bool = false) {
-        let inputSignature = makeInputSignature()
-        guard force || inputSignature != lastInputSignature else {
+        let inputs = makeInputs()
+        guard force || inputs != lastScheduledInputs else {
             return
         }
 
-        let today = todayProvider()
-        var nextSnapshot = buildSnapshot(selectedYear: selectedYear, today: today)
-        var resolvedSelectedYear = selectedYear
+        lastScheduledInputs = inputs
+        buildGeneration += 1
 
-        if filterMode == .year,
-           !nextSnapshot.availableYears.contains(selectedYear),
-           let firstYear = nextSnapshot.availableYears.first {
-            resolvedSelectedYear = firstYear
-            nextSnapshot = buildSnapshot(selectedYear: firstYear, today: today)
+        let generation = buildGeneration
+        let snapshotBuilder = self.snapshotBuilder
+        let calendar = self.calendar
+
+        updateTask?.cancel()
+        updateTask = Task { [inputs, generation, snapshotBuilder, calendar] in
+            guard !Task.isCancelled else { return }
+
+            let result = await Task.detached(priority: .userInitiated) {
+                Self.buildResult(
+                    for: inputs,
+                    calendar: calendar,
+                    snapshotBuilder: snapshotBuilder
+                )
+            }.value
+
+            guard !Task.isCancelled else { return }
+
+            await MainActor.run { [weak self] in
+                self?.apply(result: result, for: generation)
+            }
         }
-
-        if resolvedSelectedYear != selectedYear {
-            selectedYear = resolvedSelectedYear
-        }
-
-        snapshot = nextSnapshot
-        lastInputSignature = InputSignature(
-            movies: movies,
-            filterMode: filterMode,
-            selectedRange: selectedRange,
-            selectedYear: selectedYear,
-            currentDay: inputSignature.currentDay
-        )
     }
 
-    private func buildSnapshot(selectedYear: Int, today: Date) -> TimelineSnapshot {
-        snapshotBuilder(
-            movies,
-            filterMode,
-            selectedRange,
-            selectedYear,
-            today,
-            calendar
-        )
+    private func apply(result: BuildResult, for generation: Int) {
+        guard buildGeneration == generation else { return }
+
+        if selectedYear != result.resolvedSelectedYear {
+            selectedYear = result.resolvedSelectedYear
+        }
+
+        snapshot = result.snapshot
+        lastScheduledInputs = result.appliedInputs
     }
 
-    private func makeInputSignature() -> InputSignature {
-        InputSignature(
+    private func makeInputs() -> Inputs {
+        Inputs(
             movies: movies,
             filterMode: filterMode,
             selectedRange: selectedRange,
             selectedYear: selectedYear,
             currentDay: calendar.startOfDay(for: todayProvider())
+        )
+    }
+
+    nonisolated private static func buildResult(
+        for inputs: Inputs,
+        calendar: Calendar,
+        snapshotBuilder: SnapshotBuilder
+    ) -> BuildResult {
+        var resolvedSelectedYear = inputs.selectedYear
+        var snapshot = snapshotBuilder(
+            inputs.movies,
+            inputs.filterMode,
+            inputs.selectedRange,
+            inputs.selectedYear,
+            inputs.currentDay,
+            calendar
+        )
+
+        if inputs.filterMode == .year,
+           !snapshot.availableYears.contains(inputs.selectedYear),
+           let firstYear = snapshot.availableYears.first {
+            resolvedSelectedYear = firstYear
+            snapshot = snapshotBuilder(
+                inputs.movies,
+                inputs.filterMode,
+                inputs.selectedRange,
+                firstYear,
+                inputs.currentDay,
+                calendar
+            )
+        }
+
+        return BuildResult(
+            snapshot: snapshot,
+            resolvedSelectedYear: resolvedSelectedYear,
+            appliedInputs: Inputs(
+                movies: inputs.movies,
+                filterMode: inputs.filterMode,
+                selectedRange: inputs.selectedRange,
+                selectedYear: resolvedSelectedYear,
+                currentDay: inputs.currentDay
+            )
         )
     }
 }
