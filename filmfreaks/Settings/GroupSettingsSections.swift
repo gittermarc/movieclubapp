@@ -18,28 +18,42 @@ struct GroupSettingsSectionHeaderView: View {
     }
 }
 
-struct GroupSettingsCardContainer<Content: View>: View {
+struct GroupSettingsCardContainer<Content: View, BackgroundDecoration: View>: View {
     @EnvironmentObject private var displaySettings: DisplaySettings
     let isHighlighted: Bool
     let content: Content
+    let backgroundDecoration: BackgroundDecoration
 
-    init(isHighlighted: Bool = false, @ViewBuilder content: () -> Content) {
+    init(
+        isHighlighted: Bool = false,
+        @ViewBuilder backgroundDecoration: () -> BackgroundDecoration,
+        @ViewBuilder content: () -> Content
+    ) {
         self.isHighlighted = isHighlighted
+        self.backgroundDecoration = backgroundDecoration()
         self.content = content()
     }
 
     var body: some View {
         content
             .padding(displaySettings.metrics.cardPadding + 4)
-            .background(
-                RoundedRectangle(cornerRadius: displaySettings.cardCornerRadius, style: .continuous)
+            .background {
+                cardShape
                     .fill(Color(.secondarySystemBackground))
-            )
+                    .overlay {
+                        backgroundDecoration
+                            .clipShape(cardShape)
+                    }
+            }
             .overlay(
-                RoundedRectangle(cornerRadius: displaySettings.cardCornerRadius, style: .continuous)
+                cardShape
                     .stroke(borderColor, lineWidth: isHighlighted ? 1.5 : 1)
             )
             .shadow(color: shadowColor, radius: isHighlighted ? 12 : 5, x: 0, y: isHighlighted ? 6 : 2)
+    }
+
+    private var cardShape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: displaySettings.cardCornerRadius, style: .continuous)
     }
 
     private var borderColor: Color {
@@ -57,6 +71,12 @@ struct GroupSettingsCardContainer<Content: View>: View {
     }
 }
 
+extension GroupSettingsCardContainer where BackgroundDecoration == EmptyView {
+    init(isHighlighted: Bool = false, @ViewBuilder content: () -> Content) {
+        self.init(isHighlighted: isHighlighted, backgroundDecoration: { EmptyView() }, content: content)
+    }
+}
+
 struct GroupSettingsHeroCardView: View {
     @EnvironmentObject private var displaySettings: DisplaySettings
 
@@ -64,6 +84,7 @@ struct GroupSettingsHeroCardView: View {
     let activeGroupBadgeText: String
     let detailText: String
     let summaryText: String
+    let snapshot: GroupSettingsActiveCardSnapshot
     let canShareActiveGroup: Bool
     let canSwitchToLocalGroup: Bool
     let isPerformingGroupAction: Bool
@@ -71,8 +92,13 @@ struct GroupSettingsHeroCardView: View {
     let onSwitchToLocalGroup: () -> Void
 
     var body: some View {
-        GroupSettingsCardContainer(isHighlighted: true) {
-            VStack(alignment: .leading, spacing: 14) {
+        GroupSettingsCardContainer(
+            isHighlighted: true,
+            backgroundDecoration: {
+                GroupSettingsHeroCardBackdropView(snapshot: snapshot)
+            }
+        ) {
+            VStack(alignment: .leading, spacing: 12) {
                 HStack(alignment: .top, spacing: 12) {
                     ZStack {
                         RoundedRectangle(cornerRadius: 16, style: .continuous)
@@ -100,6 +126,35 @@ struct GroupSettingsHeroCardView: View {
                     Spacer(minLength: 8)
 
                     GroupSettingsBadgeView(text: activeGroupBadgeText)
+                }
+
+                if let memberSummaryText = snapshot.memberSummaryText {
+                    HStack(spacing: 10) {
+                        GroupSettingsMemberAvatarStackView(
+                            members: snapshot.members,
+                            hiddenMemberCount: snapshot.hiddenMemberCount
+                        )
+
+                        Text(memberSummaryText)
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+
+                        Spacer(minLength: 0)
+                    }
+                }
+
+                if let recentActivityText = snapshot.recentActivityText {
+                    Label {
+                        Text(recentActivityText)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                    } icon: {
+                        Image(systemName: "clock")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(displaySettings.tintColor)
+                    }
                 }
 
                 Text(summaryText)
@@ -140,6 +195,84 @@ struct GroupSettingsHeroCardView: View {
             .buttonStyle(.bordered)
             .disabled(isPerformingGroupAction)
         }
+    }
+}
+
+struct GroupSettingsHeroCardBackdropView: View {
+    @EnvironmentObject private var displaySettings: DisplaySettings
+
+    let snapshot: GroupSettingsActiveCardSnapshot
+
+    var body: some View {
+        ZStack {
+            LinearGradient(
+                colors: [
+                    displaySettings.tintColor.opacity(0.16),
+                    displaySettings.tintColor.opacity(0.06),
+                    Color.clear
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+
+            HStack(spacing: 0) {
+                Spacer(minLength: 0)
+
+                ZStack(alignment: .trailing) {
+                    if let backgroundPosterURL = snapshot.backgroundPosterURL {
+                        posterBackdrop(url: backgroundPosterURL)
+                    } else {
+                        fallbackBackdrop
+                    }
+                }
+                .frame(width: 132)
+            }
+
+            LinearGradient(
+                colors: [
+                    Color(.secondarySystemBackground),
+                    Color(.secondarySystemBackground).opacity(0.92),
+                    Color(.secondarySystemBackground).opacity(0.24)
+                ],
+                startPoint: .leading,
+                endPoint: .trailing
+            )
+        }
+        .compositingGroup()
+        .allowsHitTesting(false)
+    }
+
+    private func posterBackdrop(url: URL) -> some View {
+        CachedAsyncImage(url: url) { phase in
+            switch phase {
+            case .success(let image):
+                image
+                    .resizable()
+                    .scaledToFill()
+            case .empty, .failure:
+                fallbackBackdrop
+            @unknown default:
+                fallbackBackdrop
+            }
+        }
+        .opacity(0.22)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .clipped()
+        .mask(
+            LinearGradient(
+                colors: [.clear, .black, .black],
+                startPoint: .leading,
+                endPoint: .trailing
+            )
+        )
+    }
+
+    private var fallbackBackdrop: some View {
+        Image(systemName: snapshot.backgroundSystemImage)
+            .font(.system(size: 74, weight: .semibold))
+            .foregroundStyle(displaySettings.tintColor.opacity(0.12))
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
+            .padding(.trailing, 14)
     }
 }
 

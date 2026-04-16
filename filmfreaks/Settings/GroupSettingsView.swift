@@ -11,6 +11,7 @@ import CloudKit
 struct GroupSettingsView: View {
     @EnvironmentObject private var movieStore: MovieStore
     @EnvironmentObject private var userStore: UserStore
+    @EnvironmentObject private var movieNightStore: MovieNightStore
     @EnvironmentObject private var groupStore: CloudKitGroupStore
     @EnvironmentObject private var displaySettings: DisplaySettings
 
@@ -49,6 +50,20 @@ struct GroupSettingsView: View {
         )
     }
 
+    private var activeCardSnapshot: GroupSettingsActiveCardSnapshot {
+        GroupSettingsActiveCardSnapshotBuilder.build(
+            users: userStore.users,
+            movieEvents: movieStore.activityEvents(displayMode: displaySettings.ratingDisplayMode, limit: 24),
+            movieNightEvents: movieNightStore.activityEvents(for: normalizedCurrentGroupId),
+            movies: movieStore.movies,
+            backlogMovies: movieStore.backlogMovies
+        )
+    }
+
+    private var normalizedCurrentGroupId: String {
+        (movieStore.currentGroupId ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     private var canShareActiveGroup: Bool {
         guard let activeContext else { return false }
         return !activeContext.isShared
@@ -74,6 +89,7 @@ struct GroupSettingsView: View {
                     activeGroupBadgeText: activeGroupBadgeText,
                     detailText: activeGroupDescription,
                     summaryText: activeGroupSummaryText,
+                    snapshot: activeCardSnapshot,
                     canShareActiveGroup: canShareActiveGroup,
                     canSwitchToLocalGroup: canSwitchToLocalGroup,
                     isPerformingGroupAction: isPerformingGroupAction,
@@ -174,10 +190,10 @@ struct GroupSettingsView: View {
         .navigationTitle("Gruppen")
         .navigationBarTitleDisplayMode(.inline)
         .task {
-            await groupStore.refresh()
+            await refreshScreen(forceMovieNightRefresh: false)
         }
         .refreshable {
-            await groupStore.refresh()
+            await refreshScreen(forceMovieNightRefresh: true)
         }
         .sheet(
             isPresented: Binding(
@@ -248,6 +264,7 @@ struct GroupSettingsView: View {
                 movieStore.activateCloudGroup(group)
                 userStore.loadUsers(forGroupId: group.id)
                 await movieStore.refreshFromCloud(force: true)
+                await movieNightStore.refreshFromCloud(groupId: group.id, force: true)
                 await groupStore.refresh()
             } catch {
                 migrateError = error.localizedDescription
@@ -261,6 +278,7 @@ struct GroupSettingsView: View {
 
         Task {
             await movieStore.refreshFromCloud(force: true)
+            await movieNightStore.refreshFromCloud(groupId: group.id, force: true)
             await groupStore.refresh()
         }
     }
@@ -270,8 +288,14 @@ struct GroupSettingsView: View {
         userStore.loadUsers(forGroupId: nil)
 
         Task {
+            await movieNightStore.refreshFromCloud(groupId: nil, force: true)
             await groupStore.refresh()
         }
+    }
+
+    private func refreshScreen(forceMovieNightRefresh: Bool) async {
+        await groupStore.refresh()
+        await movieNightStore.refreshFromCloud(groupId: movieStore.currentGroupId, force: forceMovieNightRefresh)
     }
 
     private func shareActiveGroup() {
