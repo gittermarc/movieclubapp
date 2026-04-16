@@ -11,9 +11,9 @@ import Foundation
 ///
 /// - Movies/Ratings are derived via `GroupActivityEvent`.
 /// - Movie nights use real activity events (`MovieNightActivityEvent`).
-struct UnifiedGroupActivityEvent: Identifiable, Hashable {
+struct UnifiedGroupActivityEvent: Identifiable, Hashable, Sendable {
 
-    enum Kind: String, Codable {
+    enum Kind: String, Codable, Sendable {
         case movieAdded
         case movieRated
         case movieNightProposed
@@ -22,7 +22,7 @@ struct UnifiedGroupActivityEvent: Identifiable, Hashable {
         case movieNightDeleted
     }
 
-    enum Payload: Hashable {
+    enum Payload: Hashable, Sendable {
         case movie(GroupActivityEvent)
         case movieNight(MovieNightActivityEvent)
     }

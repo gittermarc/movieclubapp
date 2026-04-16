@@ -12,7 +12,7 @@ import Foundation
 /// P0: Local-only (persisted to JSON via `MovieNightLocalPersistence`).
 struct MovieNightEvent: Identifiable, Codable, Equatable, Hashable {
 
-    enum Status: String, Codable, CaseIterable {
+    enum Status: String, Codable, CaseIterable, Sendable {
         case open
         case scheduled
         case cancelled

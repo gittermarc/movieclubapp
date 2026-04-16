@@ -10,9 +10,9 @@ import Foundation
 /// Activity stream events for movie night planning.
 ///
 /// P2: Local-only. Will later be synced via CloudKit.
-struct MovieNightActivityEvent: Identifiable, Hashable, Codable {
+struct MovieNightActivityEvent: Identifiable, Hashable, Codable, Sendable {
 
-    enum Kind: String, Codable {
+    enum Kind: String, Codable, Sendable {
         case proposed
         case responded
         case statusChanged

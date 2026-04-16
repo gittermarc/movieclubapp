@@ -70,43 +70,89 @@ extension ContentView {
             route = .quickStart
         }
         updateOnboardingCompletionFlag()
-        updateMovieItemsModel()
-        updateActivityPreviewModel()
+        scheduleMovieItemsRefresh()
+        scheduleActivityPreviewRefresh()
     }
 
     func handleMovieLibraryChanged() {
-        updateMovieItemsModel()
-        updateActivityPreviewModel()
+        scheduleMovieItemsRefresh()
+        scheduleActivityPreviewRefresh()
     }
 
     func handleBacklogLibraryChanged() {
-        updateMovieItemsModel()
-        updateActivityPreviewModel()
+        scheduleMovieItemsRefresh()
+        scheduleActivityPreviewRefresh()
     }
 
     func handleMovieNightActivityChanged() {
-        updateActivityPreviewModel()
+        scheduleActivityPreviewRefresh()
     }
 
     func handleMovieItemsInputsChanged() {
-        updateMovieItemsModel()
+        scheduleMovieItemsRefresh()
     }
 
     func handleRatingDisplayModeChanged() {
-        updateMovieItemsModel()
-        updateActivityPreviewModel()
+        scheduleMovieItemsRefresh()
+        scheduleActivityPreviewRefresh()
     }
 
     func handleRatingSourceVisibilityChanged() {
-        updateMovieItemsModel()
+        scheduleMovieItemsRefresh()
     }
 
     func handleCurrentGroupChanged() {
         updateOnboardingCompletionFlag()
-        updateActivityPreviewModel()
+        scheduleActivityPreviewRefresh()
     }
 
     func handleOnboardingInputsChanged() {
         updateOnboardingCompletionFlag()
+    }
+
+    private func scheduleMovieItemsRefresh() {
+        let coordinator = movieItemsRefreshCoordinator
+        let model = movieItemsModel
+        let watchedMovies = movieStore.movies
+        let backlogMovies = movieStore.backlogMovies
+        let watchedSearchText = watchedSearchText
+        let backlogSearchText = backlogSearchText
+        let filterByUser = filterByUser
+        let selectedSort = selectedSort
+        let ratingDisplayMode = displaySettings.ratingDisplayMode
+        let showTMDbRatingsInLists = displaySettings.showTMDbRatingsInLists
+
+        coordinator.triggerRefresh(debounceSeconds: 0) {
+            model.update(
+                watchedMovies: watchedMovies,
+                backlogMovies: backlogMovies,
+                watchedSearchText: watchedSearchText,
+                backlogSearchText: backlogSearchText,
+                filterByUser: filterByUser,
+                sort: selectedSort,
+                ratingDisplayMode: ratingDisplayMode,
+                showTMDbRatingsInLists: showTMDbRatingsInLists
+            )
+        }
+    }
+
+    private func scheduleActivityPreviewRefresh() {
+        let coordinator = activityPreviewRefreshCoordinator
+        let model = activityPreviewModel
+        let watchedMovies = movieStore.movies
+        let backlogMovies = movieStore.backlogMovies
+        let movieNightEvents = currentGroupId.isEmpty
+            ? []
+            : (movieNightStore.activityByGroup[currentGroupId] ?? [])
+        let ratingDisplayMode = displaySettings.ratingDisplayMode
+
+        coordinator.triggerRefresh(debounceSeconds: 0) {
+            model.update(
+                watchedMovies: watchedMovies,
+                backlogMovies: backlogMovies,
+                movieNightEvents: movieNightEvents,
+                ratingDisplayMode: ratingDisplayMode
+            )
+        }
     }
 }

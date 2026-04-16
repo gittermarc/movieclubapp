@@ -13,7 +13,7 @@ import Foundation
 /// P0: Local-only (persisted to JSON via `MovieNightLocalPersistence`).
 struct MovieNightResponse: Identifiable, Codable, Equatable, Hashable {
 
-    enum Decision: String, Codable, CaseIterable {
+    enum Decision: String, Codable, CaseIterable, Sendable {
         case pending
         case accepted
         case declined

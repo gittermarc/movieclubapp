@@ -29,9 +29,11 @@ struct ContentView: View {
 
     // MARK: - Derived list/grid items (off render path)
     @StateObject var movieItemsModel = ContentMovieItemsModel()
+    @StateObject var movieItemsRefreshCoordinator = AppRefreshCoordinator()
 
     // MARK: - Activity preview (off render path)
     @StateObject var activityPreviewModel = ContentActivityPreviewModel()
+    @StateObject var activityPreviewRefreshCoordinator = AppRefreshCoordinator()
 
     // MARK: - In-List Search (Watched/Backlog)
     @State var watchedSearchText: String = ""

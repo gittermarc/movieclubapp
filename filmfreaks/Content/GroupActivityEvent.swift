@@ -11,9 +11,9 @@ import Foundation
 ///
 /// Important: This is *derived* from existing movie + rating data.
 /// We intentionally do not store a separate Activity record in CloudKit (yet).
-struct GroupActivityEvent: Identifiable, Hashable {
+struct GroupActivityEvent: Identifiable, Hashable, Sendable {
 
-    enum Kind: String, Codable {
+    enum Kind: String, Codable, Sendable {
         case movieAdded
         case movieRated
     }
