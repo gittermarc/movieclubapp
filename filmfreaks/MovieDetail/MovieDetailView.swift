@@ -156,7 +156,7 @@ struct MovieDetailView: View {
                     if runtimeText != nil
                         || director != nil
                         || !castList.isEmpty
-                        || keywordsText != nil
+                        || !keywordNames.isEmpty
                         || trailerKey != nil
                         || !genreNames.isEmpty {
 
@@ -167,7 +167,7 @@ struct MovieDetailView: View {
                                 genreNames: genreNames,
                                 director: director,
                                 castList: castList,
-                                keywordsText: keywordsText,
+                                keywordNames: keywordNames,
                                 trailerKey: trailerKey,
                                 trailerWatchURL: trailerWatchURL,
                                 selectedPerson: $selectedPerson,

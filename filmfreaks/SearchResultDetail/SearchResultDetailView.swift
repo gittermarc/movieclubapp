@@ -137,7 +137,7 @@ struct SearchResultDetailView: View {
                     if runtimeText != nil
                         || director != nil
                         || !castList.isEmpty
-                        || keywordsText != nil
+                        || !keywordNames.isEmpty
                         || trailerKey != nil
                         || !genreNames.isEmpty {
 
@@ -146,7 +146,7 @@ struct SearchResultDetailView: View {
                             genreNames: genreNames,
                             director: director,
                             castList: castList,
-                            keywordsText: keywordsText,
+                            keywordNames: keywordNames,
                             shouldShowTrailer: trailerKey != nil,
                             posterURL: posterURL,
                             trailerWatchURL: trailerWatchURL,

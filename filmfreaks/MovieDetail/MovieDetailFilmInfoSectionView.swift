@@ -15,7 +15,7 @@ struct MovieDetailFilmInfoSectionView: View {
     let genreNames: [String]
     let director: String?
     let castList: [TMDbCast]
-    let keywordsText: String?
+    let keywordNames: [String]
     let trailerKey: String?
     let trailerWatchURL: URL?
 
@@ -66,13 +66,8 @@ struct MovieDetailFilmInfoSectionView: View {
                 castRow
             }
 
-            if let keywordsText {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Schlüsselwörter")
-                        .font(.subheadline).bold()
-                    Text(keywordsText)
-                        .font(.subheadline)
-                }
+            if !keywordNames.isEmpty {
+                MovieMetadataKeywordSectionView(keywordNames: keywordNames)
             }
 
             // Trailer: Inline-Embed deaktiviert (zu oft "Video nicht verfuegbar" in WKWebView).
