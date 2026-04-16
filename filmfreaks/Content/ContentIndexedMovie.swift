@@ -12,7 +12,7 @@ import Foundation
 /// Wir nutzen das für Grid **und** Liste, damit:
 /// - Navigation über Binding (`movies[item.index]`) sauber bleibt
 /// - Delete immer den richtigen Eintrag im Source-Array entfernt
-struct IndexedMovie: Identifiable, Sendable {
+nonisolated struct IndexedMovie: Identifiable, Sendable {
     let index: Int
     let movie: Movie
 

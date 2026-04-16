@@ -12,7 +12,7 @@ import Foundation
 ///
 /// - Note: The fingerprint uses Swift's `Hasher` which is intentionally not stable
 ///   across launches. That's fine: this cache is in-memory only.
-final class MovieSearchIndexCache: @unchecked Sendable {
+nonisolated final class MovieSearchIndexCache: @unchecked Sendable {
 
     private let lock = NSLock()
     private var haystackById: [UUID: String] = [:]

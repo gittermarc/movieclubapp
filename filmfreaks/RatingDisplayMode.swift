@@ -10,7 +10,7 @@ import Foundation
 /// Legt fest, welcher Gruppen-Durchschnitt (1–10) in der UI angezeigt wird.
 /// - ratingAverage: Durchschnitt aus den Kriterien (wie bisher)
 /// - fazitAverage: Durchschnitt aus dem Fazit (1–10), mit Fallback auf ratingAverage für Legacy-Daten
-enum RatingDisplayMode: String, CaseIterable, Identifiable, Codable, Sendable {
+nonisolated enum RatingDisplayMode: String, CaseIterable, Identifiable, Codable, Sendable {
     case ratingAverage
     case fazitAverage
 

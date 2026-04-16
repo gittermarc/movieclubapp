@@ -11,9 +11,9 @@ import Foundation
 ///
 /// Important: This is *derived* from existing movie + rating data.
 /// We intentionally do not store a separate Activity record in CloudKit (yet).
-struct GroupActivityEvent: Identifiable, Hashable, Sendable {
+nonisolated struct GroupActivityEvent: Identifiable, Hashable, Sendable {
 
-    enum Kind: String, Codable, Sendable {
+    nonisolated enum Kind: String, Codable, Sendable {
         case movieAdded
         case movieRated
     }
@@ -61,7 +61,7 @@ struct GroupActivityEvent: Identifiable, Hashable, Sendable {
 }
 
 extension GroupActivityEvent {
-    var posterURL: URL? {
+    nonisolated var posterURL: URL? {
         guard let posterPath else { return nil }
         return URL(string: "https://image.tmdb.org/t/p/w500\(posterPath)")
     }

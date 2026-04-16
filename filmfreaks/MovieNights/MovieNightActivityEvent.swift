@@ -10,9 +10,9 @@ import Foundation
 /// Activity stream events for movie night planning.
 ///
 /// P2: Local-only. Will later be synced via CloudKit.
-struct MovieNightActivityEvent: Identifiable, Hashable, Codable, Sendable {
+nonisolated struct MovieNightActivityEvent: Identifiable, Hashable, Codable, Sendable {
 
-    enum Kind: String, Codable, Sendable {
+    nonisolated enum Kind: String, Codable, Sendable {
         case proposed
         case responded
         case statusChanged
@@ -71,7 +71,7 @@ struct MovieNightActivityEvent: Identifiable, Hashable, Codable, Sendable {
     }
 
     var subtitleText: String {
-        let time = Self.dateTimeFormatter.string(from: eventStart)
+        let time = Self.formattedEventStart(eventStart)
         switch kind {
         case .proposed:
             return "von \(actorName) · \(time)"
@@ -84,10 +84,10 @@ struct MovieNightActivityEvent: Identifiable, Hashable, Codable, Sendable {
         }
     }
 
-    private static let dateTimeFormatter: DateFormatter = {
-        let df = DateFormatter()
-        df.locale = .current
-        df.setLocalizedDateFormatFromTemplate("EEE, d. MMM · HH:mm")
-        return df
-    }()
+    private static func formattedEventStart(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = .current
+        formatter.setLocalizedDateFormatFromTemplate("EEE, d. MMM · HH:mm")
+        return formatter.string(from: date)
+    }
 }

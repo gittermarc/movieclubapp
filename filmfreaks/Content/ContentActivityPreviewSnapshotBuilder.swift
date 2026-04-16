@@ -7,14 +7,14 @@
 
 import Foundation
 
-struct ContentActivityPreviewSnapshot: Sendable {
+nonisolated struct ContentActivityPreviewSnapshot: Sendable {
     let items: [UnifiedGroupActivityEvent]
     let allItems: [UnifiedGroupActivityEvent]
 }
 
-enum ContentActivityPreviewSnapshotBuilder {
+nonisolated enum ContentActivityPreviewSnapshotBuilder {
 
-    struct Input: Sendable {
+    nonisolated struct Input: Sendable {
         let watchedMovies: [Movie]
         let backlogMovies: [Movie]
         let ratingDisplayMode: RatingDisplayMode
@@ -201,13 +201,13 @@ enum ContentActivityPreviewSnapshotBuilder {
     }
 }
 
-private func activityPreviewFirstNonEmpty(_ a: String?, _ b: String?) -> String? {
+nonisolated private func activityPreviewFirstNonEmpty(_ a: String?, _ b: String?) -> String? {
     if let a, !a.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return a }
     if let b, !b.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return b }
     return nil
 }
 
-private func activityPreviewRatingValue(for rating: Rating, displayMode: RatingDisplayMode) -> Double? {
+nonisolated private func activityPreviewRatingValue(for rating: Rating, displayMode: RatingDisplayMode) -> Double? {
     switch displayMode {
     case .ratingAverage:
         let value = rating.averageScoreNormalizedTo10

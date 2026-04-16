@@ -11,9 +11,9 @@ import Foundation
 ///
 /// - Movies/Ratings are derived via `GroupActivityEvent`.
 /// - Movie nights use real activity events (`MovieNightActivityEvent`).
-struct UnifiedGroupActivityEvent: Identifiable, Hashable, Sendable {
+nonisolated struct UnifiedGroupActivityEvent: Identifiable, Hashable, Sendable {
 
-    enum Kind: String, Codable, Sendable {
+    nonisolated enum Kind: String, Codable, Sendable {
         case movieAdded
         case movieRated
         case movieNightProposed
@@ -22,7 +22,7 @@ struct UnifiedGroupActivityEvent: Identifiable, Hashable, Sendable {
         case movieNightDeleted
     }
 
-    enum Payload: Hashable, Sendable {
+    nonisolated enum Payload: Hashable, Sendable {
         case movie(GroupActivityEvent)
         case movieNight(MovieNightActivityEvent)
     }
@@ -57,12 +57,12 @@ struct UnifiedGroupActivityEvent: Identifiable, Hashable, Sendable {
 }
 
 extension UnifiedGroupActivityEvent {
-    var movieEvent: GroupActivityEvent? {
+    nonisolated var movieEvent: GroupActivityEvent? {
         if case .movie(let e) = payload { return e }
         return nil
     }
 
-    var movieNightEvent: MovieNightActivityEvent? {
+    nonisolated var movieNightEvent: MovieNightActivityEvent? {
         if case .movieNight(let e) = payload { return e }
         return nil
     }
@@ -70,7 +70,7 @@ extension UnifiedGroupActivityEvent {
 
 
 extension UnifiedGroupActivityEvent {
-    var actorUserId: UUID? {
+    nonisolated var actorUserId: UUID? {
         switch payload {
         case .movie(let event):
             return event.actorId
@@ -79,7 +79,7 @@ extension UnifiedGroupActivityEvent {
         }
     }
 
-    var actorDisplayName: String? {
+    nonisolated var actorDisplayName: String? {
         switch payload {
         case .movie(let event):
             return event.actorName

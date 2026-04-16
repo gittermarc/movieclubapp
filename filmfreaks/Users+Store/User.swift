@@ -7,7 +7,7 @@
 
 import Foundation
 
-struct User: Identifiable, Hashable, Codable {
+nonisolated struct User: Identifiable, Hashable, Codable {
     var id = UUID()
     var name: String
 }
