@@ -27,24 +27,20 @@ struct MovieMetadataKeywordSectionView: View {
         self.collapsedLimit = collapsedLimit
     }
 
-    private var normalizedKeywordNames: [String] {
-        MovieMetadataTagPresentation.normalizedNames(from: keywordNames)
-    }
-
     private var visibleKeywordNames: [String] {
-        guard normalizedKeywordNames.count > collapsedLimit, isExpanded == false else {
-            return normalizedKeywordNames
+        guard keywordNames.count > collapsedLimit, isExpanded == false else {
+            return keywordNames
         }
 
-        return Array(normalizedKeywordNames.prefix(collapsedLimit))
+        return Array(keywordNames.prefix(collapsedLimit))
     }
 
     private var hiddenKeywordCount: Int {
-        max(0, normalizedKeywordNames.count - collapsedLimit)
+        max(0, keywordNames.count - collapsedLimit)
     }
 
     var body: some View {
-        if normalizedKeywordNames.isEmpty == false {
+        if keywordNames.isEmpty == false {
             VStack(alignment: .leading, spacing: 8) {
                 Text(title)
                     .font(.subheadline).bold()

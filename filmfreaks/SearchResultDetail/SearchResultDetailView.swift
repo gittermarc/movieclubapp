@@ -77,6 +77,7 @@ struct SearchResultDetailView: View {
 
                     // ✅ Wie MovieDetailView: Hero-Header
                     SearchResultDetailHeroHeaderView(
+                        posterPath: details?.poster_path ?? result.poster_path,
                         posterURL: posterURL,
                         title: titleText,
                         yearText: yearText,

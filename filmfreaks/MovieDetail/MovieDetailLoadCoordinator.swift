@@ -86,6 +86,12 @@ struct MovieDetailLoadedMoviePatch {
             movie.posterPath = posterPath
         }
     }
+
+    func applied(to movie: Movie) -> Movie {
+        var updatedMovie = movie
+        apply(to: &updatedMovie)
+        return updatedMovie
+    }
 }
 
 @MainActor

@@ -68,20 +68,7 @@ extension MovieDetailView {
     }
 
     var releaseDateText: String? {
-        guard let raw = loadCoordinator.details?.release_date, !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
-        let inFmt = DateFormatter()
-        inFmt.locale = Locale(identifier: "en_US_POSIX")
-        inFmt.dateFormat = "yyyy-MM-dd"
-
-        let outFmt = DateFormatter()
-        outFmt.locale = Locale(identifier: "de_DE")
-        outFmt.dateFormat = "dd.MM.yyyy"
-
-        if let date = inFmt.date(from: raw) {
-            return outFmt.string(from: date)
-        } else {
-            return raw
-        }
+        MovieMetadataPresentation.formattedReleaseDate(loadCoordinator.details?.release_date)
     }
 
     var originalTitleText: String? {

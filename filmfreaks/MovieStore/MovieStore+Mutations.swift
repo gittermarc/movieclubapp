@@ -139,6 +139,46 @@ internal extension MovieStore {
         return true
     }
 
+
+    @discardableResult
+    func applyLoadedMoviePatch(
+        _ patch: MovieDetailLoadedMoviePatch,
+        toMovieId movieId: UUID,
+        isBacklog: Bool
+    ) -> Bool {
+        if isBacklog {
+            var backlog = backlogMovies
+            guard let index = backlog.firstIndex(where: { $0.id == movieId }) else {
+                return false
+            }
+
+            let originalMovie = backlog[index]
+            let updatedMovie = patch.applied(to: originalMovie)
+            guard updatedMovie != originalMovie else {
+                return true
+            }
+
+            backlog[index] = updatedMovie
+            backlogMovies = backlog
+            return true
+        }
+
+        var watched = movies
+        guard let index = watched.firstIndex(where: { $0.id == movieId }) else {
+            return false
+        }
+
+        let originalMovie = watched[index]
+        let updatedMovie = patch.applied(to: originalMovie)
+        guard updatedMovie != originalMovie else {
+            return true
+        }
+
+        watched[index] = updatedMovie
+        movies = watched
+        return true
+    }
+
     // MARK: - ✅ CAST Migration (Legacy → TMDb Person IDs)
 
     func migrateCastDataIfNeeded() async {

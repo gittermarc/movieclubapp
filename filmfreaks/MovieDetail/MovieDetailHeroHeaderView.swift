@@ -10,11 +10,15 @@ internal import SwiftUI
 struct MovieDetailHeroHeaderView: View {
     let movie: Movie
 
+    private var backgroundPosterURL: URL? {
+        MovieMetadataPresentation.posterURL(path: movie.posterPath, width: .w342)
+    }
+
     var body: some View {
         ZStack(alignment: .bottomLeading) {
             // Background (blurred)
             Group {
-                if let url = movie.posterURL {
+                if let url = backgroundPosterURL {
                     CachedAsyncImage(url: url) { phase in
                         switch phase {
                         case .empty:
@@ -35,7 +39,7 @@ struct MovieDetailHeroHeaderView: View {
             }
             .frame(height: 320)
             .clipped()
-            .blur(radius: 18)
+            .blur(radius: 14)
             .overlay(
                 LinearGradient(
                     colors: [

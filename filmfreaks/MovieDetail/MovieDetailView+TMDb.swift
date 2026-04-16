@@ -17,7 +17,15 @@ extension MovieDetailView {
             for: movie,
             effectiveRegionCode: effectiveWatchProvidersRegionCode
         )
-        if let moviePatch {
+        guard let moviePatch else { return }
+
+        let appliedInStore = movieStore.applyLoadedMoviePatch(
+            moviePatch,
+            toMovieId: movie.id,
+            isBacklog: isBacklog
+        )
+
+        if appliedInStore == false {
             moviePatch.apply(to: &movie)
         }
     }

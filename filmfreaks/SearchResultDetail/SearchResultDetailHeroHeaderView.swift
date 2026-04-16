@@ -9,16 +9,21 @@ internal import SwiftUI
 
 struct SearchResultDetailHeroHeaderView: View {
 
+    let posterPath: String?
     let posterURL: URL?
     let title: String
     let yearText: String?
     let tmdbRating: Double
 
+    private var backgroundPosterURL: URL? {
+        MovieMetadataPresentation.posterURL(path: posterPath, width: .w342)
+    }
+
     var body: some View {
         ZStack(alignment: .bottomLeading) {
 
             Group {
-                if let url = posterURL {
+                if let url = backgroundPosterURL {
                     CachedAsyncImage(url: url) { phase in
                         switch phase {
                         case .empty:
@@ -39,7 +44,7 @@ struct SearchResultDetailHeroHeaderView: View {
             }
             .frame(height: 320)
             .clipped()
-            .blur(radius: 18)
+            .blur(radius: 14)
             .overlay(
                 LinearGradient(
                     colors: [
