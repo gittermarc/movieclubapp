@@ -19,27 +19,18 @@ struct MovieRouletteSpinStripView: View {
 
     var body: some View {
         GeometryReader { proxy in
-            let metrics = layoutMetrics(for: proxy.size)
-            let targetOffset = centeredOffset(
-                width: proxy.size.width,
-                cardWidth: metrics.cardWidth,
-                spacing: metrics.spacing
-            ) - (CGFloat(activeDisplayIndex) * metrics.step)
+            let layout = MovieRouletteSpinStripLayout.metrics(for: proxy.size)
+            let targetOffset = layout.centeredOffset
+                - (CGFloat(activeDisplayIndex) * layout.step)
 
             ZStack {
                 trackBackground
 
                 if displayCandidates.isEmpty {
-                    emptyTrack(cardWidth: metrics.cardWidth)
+                    emptyTrack(cardWidth: layout.cardWidth)
+                        .padding(.horizontal, layout.horizontalInset)
                 } else {
-                    HStack(spacing: metrics.spacing) {
-                        ForEach(Array(displayCandidates.enumerated()), id: \.offset) { index, candidate in
-                            candidateCard(candidate, cardWidth: metrics.cardWidth, isWinner: candidate.id == winningCandidateId)
-                                .accessibilityLabel(accessibilityLabel(for: candidate, index: index))
-                        }
-                    }
-                    .offset(x: targetOffset)
-                    .animation(.easeOut(duration: MovieRouletteSpinEngine.animationDuration), value: activeDisplayIndex)
+                    stripViewport(layout: layout, targetOffset: targetOffset)
                 }
 
                 VStack(spacing: 0) {
@@ -54,15 +45,45 @@ struct MovieRouletteSpinStripView: View {
                 RoundedRectangle(cornerRadius: displaySettings.cardCornerRadius, style: .continuous)
                     .stroke(Color.primary.opacity(0.08), lineWidth: 1)
             }
-            .overlay(alignment: .leading) {
-                edgeFade
-            }
-            .overlay(alignment: .trailing) {
-                edgeFade
-                    .scaleEffect(x: -1, y: 1)
-            }
         }
         .frame(height: 260)
+    }
+
+    private func stripViewport(layout: MovieRouletteSpinStripLayout, targetOffset: CGFloat) -> some View {
+        HStack(spacing: layout.spacing) {
+            ForEach(Array(displayCandidates.enumerated()), id: \.offset) { index, candidate in
+                candidateCard(
+                    candidate,
+                    cardWidth: layout.cardWidth,
+                    isWinner: candidate.id == winningCandidateId
+                )
+                .accessibilityLabel(accessibilityLabel(for: candidate, index: index))
+            }
+        }
+        .offset(x: targetOffset)
+        .animation(.easeOut(duration: MovieRouletteSpinEngine.animationDuration), value: activeDisplayIndex)
+        .frame(width: layout.viewportWidth, alignment: .leading)
+        .clipped()
+        .mask {
+            stripViewportMask(layout: layout)
+        }
+        .padding(.horizontal, layout.horizontalInset)
+    }
+
+    private func stripViewportMask(layout: MovieRouletteSpinStripLayout) -> some View {
+        Rectangle()
+            .fill(
+                LinearGradient(
+                    stops: [
+                        .init(color: .clear, location: 0),
+                        .init(color: .black, location: layout.leadingFadeStop),
+                        .init(color: .black, location: layout.trailingFadeStart),
+                        .init(color: .clear, location: 1)
+                    ],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+            )
     }
 
     private var trackBackground: some View {
@@ -107,15 +128,6 @@ struct MovieRouletteSpinStripView: View {
             .rotationEffect(.degrees(180))
             .frame(width: 16, height: 10)
             .shadow(color: displaySettings.tintColor.opacity(0.12), radius: 6, y: -2)
-    }
-
-    private var edgeFade: some View {
-        LinearGradient(
-            colors: [Color(.systemGroupedBackground), Color(.systemGroupedBackground).opacity(0)],
-            startPoint: .leading,
-            endPoint: .trailing
-        )
-        .frame(width: 44)
     }
 
     private func emptyTrack(cardWidth: CGFloat) -> some View {
@@ -183,18 +195,50 @@ struct MovieRouletteSpinStripView: View {
         let position = index + 1
         return "\(candidate.title), \(candidate.year), Position \(position)"
     }
+}
 
-    private func centeredOffset(width: CGFloat, cardWidth: CGFloat, spacing: CGFloat) -> CGFloat {
-        let totalCardWidth = cardWidth + 24
-        return (width / 2) - (totalCardWidth / 2)
+struct MovieRouletteSpinStripLayout {
+    let cardWidth: CGFloat
+    let spacing: CGFloat
+    let step: CGFloat
+    let horizontalInset: CGFloat
+    let viewportWidth: CGFloat
+    let fadeWidth: CGFloat
+
+    var totalCardWidth: CGFloat {
+        cardWidth + 24
     }
 
-    private func layoutMetrics(for size: CGSize) -> (cardWidth: CGFloat, spacing: CGFloat, step: CGFloat) {
+    var leadingFadeStop: CGFloat {
+        guard viewportWidth > 0 else { return 0 }
+        return min(0.18, fadeWidth / viewportWidth)
+    }
+
+    var trailingFadeStart: CGFloat {
+        max(leadingFadeStop, 1 - leadingFadeStop)
+    }
+
+    var centeredOffset: CGFloat {
+        (viewportWidth / 2) - (totalCardWidth / 2)
+    }
+
+    static func metrics(for size: CGSize) -> MovieRouletteSpinStripLayout {
         let isWide = size.width >= 700
         let cardWidth = isWide ? 154 : min(138, max(96, size.width * 0.28))
         let spacing: CGFloat = isWide ? 18 : 14
+        let horizontalInset: CGFloat = isWide ? 22 : 16
+        let viewportWidth = max(0, size.width - (horizontalInset * 2))
+        let fadeWidth: CGFloat = isWide ? 56 : 44
         let step = cardWidth + 24 + spacing
-        return (cardWidth, spacing, step)
+
+        return MovieRouletteSpinStripLayout(
+            cardWidth: cardWidth,
+            spacing: spacing,
+            step: step,
+            horizontalInset: horizontalInset,
+            viewportWidth: viewportWidth,
+            fadeWidth: fadeWidth
+        )
     }
 }
 
