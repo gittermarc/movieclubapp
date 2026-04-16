@@ -7,14 +7,14 @@
 
 import Foundation
 
-struct ContentMovieItemsSnapshot {
+struct ContentMovieItemsSnapshot: Sendable {
     let watchedItems: [IndexedMovie]
     let backlogItems: [IndexedMovie]
 }
 
 enum ContentMovieItemsSnapshotBuilder {
 
-    struct Input {
+    struct Input: Sendable {
         let watchedMovies: [Movie]
         let backlogMovies: [Movie]
         let watchedSearchText: String

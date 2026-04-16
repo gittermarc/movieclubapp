@@ -12,8 +12,9 @@ import Foundation
 ///
 /// - Note: The fingerprint uses Swift's `Hasher` which is intentionally not stable
 ///   across launches. That's fine: this cache is in-memory only.
-final class MovieSearchIndexCache {
+final class MovieSearchIndexCache: @unchecked Sendable {
 
+    private let lock = NSLock()
     private var haystackById: [UUID: String] = [:]
     private var fingerprintById: [UUID: Int] = [:]
 
@@ -40,8 +41,9 @@ final class MovieSearchIndexCache {
 
     private func normalizedHaystack(for movie: Movie) -> String {
         let fp = fingerprint(for: movie)
-        if let existing = haystackById[movie.id], fingerprintById[movie.id] == fp {
-            return existing
+
+        if let cached = cachedHaystack(for: movie.id, fingerprint: fp) {
+            return cached
         }
 
         var fields: [String] = [movie.title, movie.year]
@@ -71,9 +73,26 @@ final class MovieSearchIndexCache {
         }
 
         let haystack = normalize(fields.joined(separator: " "))
-        haystackById[movie.id] = haystack
-        fingerprintById[movie.id] = fp
+        store(haystack: haystack, for: movie.id, fingerprint: fp)
         return haystack
+    }
+
+    private func cachedHaystack(for movieId: UUID, fingerprint: Int) -> String? {
+        lock.lock()
+        defer { lock.unlock() }
+
+        guard let existing = haystackById[movieId], fingerprintById[movieId] == fingerprint else {
+            return nil
+        }
+
+        return existing
+    }
+
+    private func store(haystack: String, for movieId: UUID, fingerprint: Int) {
+        lock.lock()
+        haystackById[movieId] = haystack
+        fingerprintById[movieId] = fingerprint
+        lock.unlock()
     }
 
     private func normalize(_ value: String) -> String {
