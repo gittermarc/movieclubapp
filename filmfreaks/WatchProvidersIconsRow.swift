@@ -45,26 +45,31 @@ extension TMDbWatchProvidersCountry {
 struct WatchProvidersIconsRow: View {
     let providers: [TMDbWatchProvider]
 
-    var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 12) {
-                ForEach(providers) { provider in
-                    VStack(spacing: 6) {
-                        providerLogo(provider)
-                            .frame(width: 30, height: 30)
+    private var columns: [GridItem] {
+        [GridItem(.adaptive(minimum: 72), spacing: 12, alignment: .top)]
+    }
 
-                        Text(provider.provider_name)
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .frame(width: 74)
-                    }
-                    .accessibilityElement(children: .combine)
-                    .accessibilityLabel(Text(provider.provider_name))
+    var body: some View {
+        LazyVGrid(columns: columns, alignment: .leading, spacing: 12) {
+            ForEach(providers) { provider in
+                VStack(spacing: 6) {
+                    providerLogo(provider)
+                        .frame(width: 30, height: 30)
+
+                    Text(provider.provider_name)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity)
                 }
+                .frame(maxWidth: .infinity, alignment: .top)
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel(Text(provider.provider_name))
             }
-            .padding(.vertical, 2)
         }
+        .padding(.vertical, 2)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     @ViewBuilder

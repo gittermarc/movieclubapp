@@ -92,58 +92,50 @@ struct MovieDetailFilmInfoSectionView: View {
             Text("Hauptdarsteller")
                 .font(.subheadline).bold()
 
-            ZStack(alignment: .trailing) {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        ForEach(castList, id: \.id) { person in
-                            Button {
-                                selectedPerson = SelectedPerson(
-                                    id: person.id,
-                                    name: person.name,
-                                    subtitle: person.character
-                                )
-                            } label: {
-                                HStack(alignment: .center, spacing: 8) {
-                                    castAvatar(profilePath: person.profile_path)
+            LazyVGrid(
+                columns: [GridItem(.adaptive(minimum: 150), spacing: 8, alignment: .top)],
+                alignment: .leading,
+                spacing: 8
+            ) {
+                ForEach(castList, id: \.id) { person in
+                    Button {
+                        selectedPerson = SelectedPerson(
+                            id: person.id,
+                            name: person.name,
+                            subtitle: person.character
+                        )
+                    } label: {
+                        HStack(alignment: .center, spacing: 8) {
+                            castAvatar(profilePath: person.profile_path)
 
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(person.name)
-                                            .font(.caption.weight(.semibold))
-                                            .foregroundStyle(.primary)
-                                            .lineLimit(1)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(person.name)
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.primary)
+                                    .lineLimit(2)
+                                    .multilineTextAlignment(.leading)
 
-                                        if let role = person.character?.trimmingCharacters(in: .whitespacesAndNewlines),
-                                           !role.isEmpty {
-                                            Text(role)
-                                                .font(.caption2)
-                                                .foregroundStyle(.secondary)
-                                                .lineLimit(1)
-                                        }
-                                    }
+                                if let role = person.character?.trimmingCharacters(in: .whitespacesAndNewlines),
+                                   !role.isEmpty {
+                                    Text(role)
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                        .lineLimit(2)
+                                        .multilineTextAlignment(.leading)
                                 }
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 8)
-                                .background(displaySettings.tintSoftBackground)
-                                .clipShape(RoundedRectangle(cornerRadius: 12))
                             }
-                            .buttonStyle(.plain)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                         }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 8)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(displaySettings.tintSoftBackground)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
                     }
-                }
-
-                if castList.count >= 9 {
-                    LinearGradient(
-                        colors: [
-                            Color(.secondarySystemBackground),
-                            Color(.secondarySystemBackground).opacity(0.0)
-                        ],
-                        startPoint: .trailing,
-                        endPoint: .leading
-                    )
-                    .frame(width: 28)
-                    .allowsHitTesting(false)
+                    .buttonStyle(.plain)
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 

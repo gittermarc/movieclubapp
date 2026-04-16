@@ -28,6 +28,7 @@ struct SearchResultDetailSectionCard<Content: View>: View {
             content
         }
         .padding()
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 14)
                 .fill(Color(.secondarySystemBackground))

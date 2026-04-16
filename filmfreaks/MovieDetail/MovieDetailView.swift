@@ -192,7 +192,9 @@ struct MovieDetailView: View {
                     Spacer()
                 }
                 .padding()
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .scrollBounceBehavior(.basedOnSize, axes: .vertical)
         }
         .overlay(alignment: .bottom) {
             GeometryReader { proxy in

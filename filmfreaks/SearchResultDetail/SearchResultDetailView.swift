@@ -169,7 +169,9 @@ struct SearchResultDetailView: View {
                     Spacer(minLength: 0)
                 }
                 .padding()
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .scrollBounceBehavior(.basedOnSize, axes: .vertical)
         }
         .navigationTitle(result.title)
         .navigationBarTitleDisplayMode(.inline)
