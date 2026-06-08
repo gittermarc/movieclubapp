@@ -53,6 +53,73 @@ struct ContentMovieItemsModelTests {
         #expect(model.backlogItems.isEmpty)
     }
 
+    @Test func identicalInputsDoNotStartAnotherSnapshotBuild() async {
+        let counter = BuildCallCounter()
+        let movie = makeMovie(title: "Only")
+        let snapshot = ContentMovieItemsSnapshot(
+            watchedItems: [ContentMovieItem(movie: movie)],
+            backlogItems: []
+        )
+        let model = ContentMovieItemsModel(
+            snapshotBuilder: { _, _ in
+                counter.increment()
+                return snapshot
+            }
+        )
+        let inputs = makeInputs(watchedMovies: [movie])
+
+        let firstUpdateStarted = model.update(inputs)
+        let secondUpdateStarted = model.update(inputs)
+
+        await waitForUpdates(count: 3)
+
+        #expect(firstUpdateStarted)
+        #expect(!secondUpdateStarted)
+        #expect(counter.value == 1)
+        #expect(model.watchedItems.map(\.movieId) == [movie.id])
+    }
+
+    @Test func relevantInputChangeStartsAnotherSnapshotBuild() async {
+        let counter = BuildCallCounter()
+        let movie = makeMovie(title: "Only")
+        let model = ContentMovieItemsModel(
+            snapshotBuilder: { inputs, _ in
+                counter.increment()
+                return ContentMovieItemsSnapshot(
+                    watchedItems: inputs.watchedMovies.map { ContentMovieItem(movie: $0) },
+                    backlogItems: []
+                )
+            }
+        )
+
+        let firstUpdateStarted = model.update(makeInputs(watchedMovies: [movie], watchedSearchText: "only"))
+
+        await waitForUpdates(count: 3)
+
+        let secondUpdateStarted = model.update(makeInputs(watchedMovies: [movie], watchedSearchText: "other"))
+
+        await waitForUpdates(count: 3)
+
+        #expect(firstUpdateStarted)
+        #expect(secondUpdateStarted)
+        #expect(counter.value == 2)
+    }
+
+    @Test func movieContentChangeUpdatesInputSignature() {
+        let movieId = UUID(uuidString: "11111111-1111-1111-1111-111111111111") ?? UUID()
+        let original = makeMovie(id: movieId, title: "Original")
+        let renamed = makeMovie(id: movieId, title: "Renamed")
+
+        let originalSignature = ContentMovieItemsInputSignature(
+            inputs: makeInputs(watchedMovies: [original])
+        )
+        let renamedSignature = ContentMovieItemsInputSignature(
+            inputs: makeInputs(watchedMovies: [renamed])
+        )
+
+        #expect(originalSignature != renamedSignature)
+    }
+
     @Test func updatePublishesBuiltSnapshot() async {
         let model = ContentMovieItemsModel(
             snapshotBuilder: { inputs, cache in
@@ -93,15 +160,39 @@ struct ContentMovieItemsModelTests {
     }
 
     private func makeMovie(
+        id: UUID = UUID(),
         title: String,
         watchedDate: Date? = nil,
         suggestedBy: String? = nil
     ) -> Movie {
         Movie(
+            id: id,
             title: title,
             year: "2026",
             watchedDate: watchedDate,
             suggestedBy: suggestedBy
+        )
+    }
+
+    private func makeInputs(
+        watchedMovies: [Movie] = [],
+        backlogMovies: [Movie] = [],
+        watchedSearchText: String = "",
+        backlogSearchText: String = "",
+        filterByUser: User? = nil,
+        sort: MovieSortOption = .dateNewest,
+        ratingDisplayMode: RatingDisplayMode = .ratingAverage,
+        showTMDbRatingsInLists: Bool = false
+    ) -> ContentMovieItemsModel.Inputs {
+        ContentMovieItemsModel.Inputs(
+            watchedMovies: watchedMovies,
+            backlogMovies: backlogMovies,
+            watchedSearchText: watchedSearchText,
+            backlogSearchText: backlogSearchText,
+            filterByUser: filterByUser,
+            sort: sort,
+            ratingDisplayMode: ratingDisplayMode,
+            showTMDbRatingsInLists: showTMDbRatingsInLists
         )
     }
 
@@ -125,5 +216,22 @@ struct ContentMovieItemsModelTests {
         for _ in 0..<count {
             try? await Task.sleep(nanoseconds: 20_000_000)
         }
+    }
+}
+
+private final class BuildCallCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var count = 0
+
+    var value: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return count
+    }
+
+    func increment() {
+        lock.lock()
+        count += 1
+        lock.unlock()
     }
 }

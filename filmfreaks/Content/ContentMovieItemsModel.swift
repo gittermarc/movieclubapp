@@ -39,6 +39,7 @@ final class ContentMovieItemsModel: ObservableObject {
 
     private var updateTask: Task<Void, Never>?
     private var buildGeneration: Int = 0
+    private var lastInputSignature: ContentMovieItemsInputSignature?
 
     init(
         searchIndex: MovieSearchIndexCache = MovieSearchIndexCache(),
@@ -87,7 +88,14 @@ final class ContentMovieItemsModel: ObservableObject {
         )
     }
 
-    func update(_ inputs: Inputs) {
+    @discardableResult
+    func update(_ inputs: Inputs) -> Bool {
+        let signature = ContentMovieItemsInputSignature(inputs: inputs)
+        guard signature != lastInputSignature else {
+            return false
+        }
+
+        lastInputSignature = signature
         buildGeneration += 1
         let generation = buildGeneration
         let snapshotBuilder = self.snapshotBuilder
@@ -107,11 +115,93 @@ final class ContentMovieItemsModel: ObservableObject {
                 self?.apply(snapshot: snapshot, for: generation)
             }
         }
+
+        return true
     }
 
     private func apply(snapshot: Snapshot, for generation: Int) {
         guard buildGeneration == generation else { return }
         watchedItems = snapshot.watchedItems
         backlogItems = snapshot.backlogItems
+    }
+}
+
+nonisolated struct ContentMovieItemsInputSignature: Equatable {
+    private let watchedMovies: [ContentMovieItemsMovieSignature]
+    private let backlogMovies: [ContentMovieItemsMovieSignature]
+    private let watchedSearchText: String
+    private let backlogSearchText: String
+    private let filterUserId: UUID?
+    private let filterUserName: String?
+    private let sort: MovieSortOption
+    private let ratingDisplayMode: RatingDisplayMode
+    private let showTMDbRatingsInLists: Bool
+
+    init(inputs: ContentMovieItemsModel.Inputs) {
+        self.watchedMovies = inputs.watchedMovies.map(ContentMovieItemsMovieSignature.init)
+        self.backlogMovies = inputs.backlogMovies.map(ContentMovieItemsMovieSignature.init)
+        self.watchedSearchText = inputs.watchedSearchText
+        self.backlogSearchText = inputs.backlogSearchText
+        self.filterUserId = inputs.filterByUser?.id
+        self.filterUserName = inputs.filterByUser?.name
+        self.sort = inputs.sort
+        self.ratingDisplayMode = inputs.ratingDisplayMode
+        self.showTMDbRatingsInLists = inputs.showTMDbRatingsInLists
+    }
+}
+
+private struct ContentMovieItemsMovieSignature: Equatable {
+    let id: UUID
+    let title: String
+    let year: String
+    let tmdbRating: Double?
+    let ratings: [ContentMovieItemsRatingSignature]
+    let posterPath: String?
+    let watchedDate: Date?
+    let watchedLocation: String?
+    let suggestedBy: String?
+    let cast: [ContentMovieItemsPersonSignature]
+    let directors: [ContentMovieItemsPersonSignature]
+    let genres: [String]
+    let keywords: [String]
+
+    init(movie: Movie) {
+        self.id = movie.id
+        self.title = movie.title
+        self.year = movie.year
+        self.tmdbRating = movie.tmdbRating
+        self.ratings = movie.ratings.map(ContentMovieItemsRatingSignature.init)
+        self.posterPath = movie.posterPath
+        self.watchedDate = movie.watchedDate
+        self.watchedLocation = movie.watchedLocation
+        self.suggestedBy = movie.suggestedBy
+        self.cast = (movie.cast ?? []).map(ContentMovieItemsPersonSignature.init)
+        self.directors = (movie.directors ?? []).map(ContentMovieItemsPersonSignature.init)
+        self.genres = movie.genres ?? []
+        self.keywords = movie.keywords ?? []
+    }
+}
+
+private struct ContentMovieItemsRatingSignature: Equatable {
+    let reviewerId: UUID?
+    let reviewerName: String
+    let scores: [RatingCriterion: Int]
+    let fazitScore: Int?
+
+    init(rating: Rating) {
+        self.reviewerId = rating.reviewerId
+        self.reviewerName = rating.reviewerName
+        self.scores = rating.scores
+        self.fazitScore = rating.fazitScore
+    }
+}
+
+private struct ContentMovieItemsPersonSignature: Equatable {
+    let personId: Int
+    let name: String
+
+    init(member: CastMember) {
+        self.personId = member.personId
+        self.name = member.name
     }
 }
