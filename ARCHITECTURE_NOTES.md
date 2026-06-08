@@ -1,623 +1,701 @@
 # ARCHITECTURE_NOTES.md
 
-## Scope dieser Notizen
+Stand: Scan des ZIP-Projekts `tmc_context.zip` am 2026-06-08. Diese Notizen priorisieren Sync/Storage/Model, Entry Points/Navigation und Wartbarkeit/Performance großer Views/Services.
 
-Diese Notizen basieren auf dem gelieferten Projektstand im ZIP und orientieren sich ausschließlich am vorhandenen Code. Unklare Punkte sind als **UNKNOWN** markiert und unten gesammelt.
+## 1. Kernbefund
 
----
+- Die App ist **SwiftUI + ObservableObject Stores + Codable JSON + manuelles CloudKit**.
+- SwiftData/CoreData wurden im App-Code nicht gefunden: kein `import SwiftData`, kein `@Model`, kein CoreData-Stack.
+- App-Code: 320 Swift-Dateien, ca. 39.384 Zeilen unter `filmfreaks/`.
+- Tests: 48 Swift-Testdateien unter `filmfreaksTests/` und `filmfreaksUITests/`.
+- Wichtigster Architektur-Hotspot: CloudKit-Sync ist funktionsreich, aber über mehrere Stores/Coordinators verteilt; einige kritische Queues sind nur in-memory und einige Routing-/Sharing-Regeln sind dupliziert.
 
-## Big Files List — Top 15 nach Zeilen
+## 2. Storage-/Sync-Architektur im Detail
 
-1. `filmfreaks/MovieNights/Roulette/MovieRouletteView.swift` — **446 Zeilen**
-   - Zweck: komplette Roulette-UI inklusive Flows, Listen, Controls, Modals.
-   - Risiko: UI-State, Routing und Präsentationslogik in einer großen Datei; hohe Änderungsfläche.
+### 2.1 Local Storage
 
-2. `filmfreaks/Stats/StatsSnapshotBuilder+TasteDynamics.swift` — **413 Zeilen**
-   - Zweck: Ableitung komplexer Geschmacks-/Bias-/Hot-Take-Insights.
-   - Risiko: rechenintensiv, fachlich dicht, fehleranfällig bei Erweiterungen.
+- `filmfreaks/PersistenceManager.swift`
+  - Zuständig für Movies, Backlog, Users.
+  - Base dir: `Application Support/FilmFreaks/`.
+  - Group-scoped Dateien: `groups/<group>/movies_watched.json`, `movies_backlog.json`, `users.json`.
+  - Debounced writes mit `DispatchQueue(label: "filmfreaks.persistence")`, `debounceSeconds = 0.55`, atomic writes.
+  - Migration aus alten UserDefaults-Keys: `FilmFreaks.movies.v1`, `FilmFreaks.backlogMovies.v1`, `FilmFreaks.users.v1`, `Users_*`, `KnownGroups`.
+  - Risiko: `pendingWrites` speichert WorkItems, aber der WorkItem entfernt sich nach erfolgreichem Write nicht aus `pendingWrites`; dadurch können erledigte WorkItems im Dictionary bleiben, bis ein späteres Flush/Test oder erneuter Write stattfindet.
+- `filmfreaks/MovieNights/MovieNightLocalPersistence.swift`
+  - `actor`-basierte lokale MovieNight-Persistenz.
+  - Base dir: `Application Support/filmfreaks/`.
+  - Eine Datei `movieNights.json` für alle Gruppen und MovieNight-Domänen.
+  - Schema `Snapshot` Version 3 mit Events, Responses, Activity, Presets.
+  - Risiko: Load-/Save-Fehler werden geschluckt; ein defektes JSON führt zu `.empty()` ohne sichtbare Recovery.
+- UserDefaults
+  - Kleine Konfigurationen, Selection, Sync-Meta, Change Tokens, Goals, Search/Recommendation Caches, Person Popularity.
+  - Risiko: Group-scoping ist nicht überall konsistent, z.B. `GoalsStore.yearlyGoalsStorageKey = "ViewingGoalsByYear.v1"` ist nicht group-scoped.
 
-3. `filmfreaks/Stats/StatsSnapshotBuilder.swift` — **405 Zeilen**
-   - Zweck: zentrales Stats-Snapshot-Building.
-   - Risiko: zentraler Analytics-Hub; Änderungen haben breite Seiteneffekte.
+### 2.2 CloudKit Routing
 
-4. `filmfreaks/MovieStore/MovieStore+CloudSync.swift` — **396 Zeilen**
-   - Zweck: Laden, Mergen, Initial-Upload, Rating-Merge, Group-Switch-Schutz.
-   - Risiko: höchst kritischer Datenkonsistenzpfad.
-
-5. `filmfreaks/MovieNights/MovieNightCloudSyncCoordinator.swift` — **387 Zeilen**
-   - Zweck: debounced Batch-Writes für Events/Responses/Activity/Presets.
-   - Risiko: Nebenläufigkeit, Retry, Pending-State, gruppenspezifische Flush-Logik.
-
-6. `filmfreaks/ViewingCustomGoal.swift` — **369 Zeilen**
-   - Zweck: Goal-Domainmodell, Regeln, Codable-/Equatable-Semantik.
-   - Risiko: tragendes Domainmodell mit Migrationsimplikationen.
-
-7. `filmfreaks/Movie.swift` — **366 Zeilen**
-   - Zweck: Kernmodell für Filme und Ratings inklusive Legacy-Migration.
-   - Risiko: jede Modelländerung betrifft Persistenz, Cloud, UI und Stats.
-
-8. `filmfreaks/Stats/StatsView+Cards.Leaderboards.swift` — **355 Zeilen**
-   - Zweck: großer UI-Block für Stats-Cards/Leaderboards.
-   - Risiko: UI-Verantwortung stark konzentriert; schwer reviewbar.
-
-9. `filmfreaks/PersistenceManager.swift` — **343 Zeilen**
-   - Zweck: lokale JSON-Persistenz, Debounce, Dateipfade, Migration.
-   - Risiko: foundation layer; Fehler schlagen in mehreren Stores durch.
-
-10. `filmfreaks/MovieDetail/MovieDetailView.swift` — **339 Zeilen**
-    - Zweck: Haupt-Detailscreen für gespeicherte Filme.
-    - Risiko: großer UI-Knoten mit mehreren Sheets/Zuständen.
-
-11. `filmfreaks/CloudKitUserStore.swift` — **335 Zeilen**
-    - Zweck: CloudKit-Mitgliederverwaltung.
-    - Risiko: Sharing-/Parent-/Sync-Logik nahe am Kernfluss der Gruppen.
-
-12. `filmfreaks/CloudKitMovieStore/CloudKitMovieStore+Modify.swift` — **332 Zeilen**
-    - Zweck: Movie-Upsert, Batch-Modify, Konfliktlösung.
-    - Risiko: Write-Konflikte und Parent-/Routing-Semantik.
-
-13. `filmfreaks/Stats/StatsSnapshotBuilder+RatingDimensions.swift` — **327 Zeilen**
-    - Zweck: Rating-Dimensionen/Statistikableitungen.
-    - Risiko: rechenintensiver Snapshot-Unterbau.
-
-14. `filmfreaks/Settings/GroupSettingsView.swift` — **326 Zeilen**
-    - Zweck: Gruppenverwaltung, Sharing, Wechsel, Löschen/Verlassen.
-    - Risiko: UI und Orchestrierung von Seiteneffekten gemischt.
-
-15. `filmfreaks/MovieNights/Roulette/MovieRouletteViewModel.swift` — **325 Zeilen**
-    - Zweck: Roulette-Session, Kandidatenwahl, Presets, Spin-State.
-    - Risiko: Feature-Logik + UI-Anforderungen eng gekoppelt.
-
-### Einordnung
-
-- Die größte technische Risikokonzentration liegt **nicht** nur in großen Views, sondern vor allem in:
-  - `MovieStore/MovieStore+CloudSync.swift`
-  - `MovieNightCloudSyncCoordinator.swift`
-  - `PersistenceManager.swift`
-  - `CloudKitMovieStore/CloudKitMovieStore+Modify.swift`
-  - `StatsSnapshotBuilder*`
-
----
-
-## Hot Path Analyse
-
-### 1) Rendering / Scrolling / Derived State
-
-#### A. Content-Hauptlisten
-
-- Betroffene Dateien:
-  - `Content/ContentView+Lifecycle.swift`
-  - `Content/ContentMovieItemsModel.swift`
-  - `Content/ContentMovieItemsSnapshotBuilder.swift`
-  - `Content/ContentMainAreaView.swift`
-
-- Beobachtung:
-  - `ContentView` triggert bei vielen Änderungen `updateMovieItemsModel()`.
-  - `ContentMovieItemsModel.update(...)` baut das Snapshot synchron auf dem MainActor.
-  - `ContentMovieItemsSnapshotBuilder.build(...)` macht `filter` + `searchIndex.matches` + `sorted` + `map` auf kompletten Arrays.
-
-- Hotspot-Grund:
-  - **heavy sort/filter auf MainActor**
-  - **häufige Invalidierung** durch Search, Sort, Filter, Rating-Mode, Movie-/Backlog-Änderungen
-
+- Zentraler Router: `filmfreaks/CloudKitRouting.swift`.
+- Regeln:
+  - `nil`/leere Group-ID -> public database.
+  - `GroupContext` vorhanden -> private/shared database + Record-Zone.
+  - UUID-artige Group-ID ohne `GroupContext` -> `CloudKitRoutingError.groupContextNotReady`.
+  - Nicht-UUID Legacy-Gruppe ohne Context -> public database.
 - Bewertung:
-  - Gut: die Logik ist bereits aus dem `body` gezogen.
-  - Nicht gut genug: die Ableitung ist noch nicht off-main.
-
-#### B. Activity Preview im Root-Screen
-
-- Betroffene Dateien:
-  - `Content/ContentActivityPreviewModel.swift`
-  - `Content/ContentActivityPreviewSnapshotBuilder.swift`
-  - `MovieStore/MovieStore+Activity.swift`
-
-- Beobachtung:
-  - Bei Movie-/Backlog-/MovieNight-Änderungen wird die Preview neu gebaut.
-  - `update(...)` läuft auf MainActor.
-
-- Hotspot-Grund:
-  - **iterative Aggregation + Sortierung auf MainActor**
-  - **wiederholte Ableitung aus mehreren Datenquellen**
-
-#### C. Timeline-Snapshot
-
-- Betroffene Dateien:
-  - `Timeline/TimelineViewModel.swift`
-  - `Timeline/TimelineSnapshotBuilder.swift`
-
-- Beobachtung:
-  - `rebuildSnapshotIfNeeded()` baut das Snapshot synchron auf MainActor.
-  - Trigger kommen aus Filter-/Range-/Year-Wechseln und Movie-Updates.
-
-- Hotspot-Grund:
-  - **synchrones Snapshot-Building auf MainActor**
-  - **potenziell teures Gruppieren/Sortieren über vollständige Movie-Liste**
-
-#### D. Stats
-
-- Betroffene Dateien:
-  - `Stats/StatsViewModel.swift`
-  - `Stats/StatsSnapshotBuilder.swift`
-  - `Stats/StatsSnapshotBuilder+*.swift`
-
-- Beobachtung:
-  - Stats sind bereits besser aufgestellt als Content/Timeline.
-  - `StatsViewModel` debounced Updates und rechnet per `Task.detached` off-main.
-
-- Hotspot-Grund:
-  - **große Input-Snapshots**, aber die teuerste Arbeit ist schon sinnvoll ausgelagert.
-
-- Bewertung:
-  - Eher Positivbeispiel als Problemfall.
-
-#### E. Search Result Detail / Movie Detail
-
-- Betroffene Dateien:
-  - `MovieDetail/MovieDetailLoadCoordinator.swift`
-  - `SearchResultDetail/SearchResultDetailView+Loading.swift`
-  - `SearchResultDetail/SearchResultDetailView.swift`
-
-- Beobachtung:
-  - Zwei ähnliche Detail-Ladepfade existieren parallel.
-  - `SearchResultDetailView` startet eigene Tasks auf `onAppear` und `onChange`.
-
-- Hotspot-Grund:
-  - **duplizierte Load-/Transform-Logik**
-  - **wiederholte Tasks bei Zustandsänderungen**
-  - eher Maintainability-Hotspot als Scroll-Performance-Hotspot
-
-### 2) Sync / Storage
-
-#### A. Movie Cloud Refresh / Merge
-
-- Betroffene Datei:
-  - `MovieStore/MovieStore+CloudSync.swift`
-
-- Beobachtung:
-  - Der Pfad unterscheidet zwischen Zone-Change-Delta und Full Fetch.
-  - Lokale Ratings werden gesichert, Cloud-Ratings separat gemerged.
-  - Ergebnisse werden verworfen, wenn in der Zwischenzeit die aktive Gruppe gewechselt hat.
-
-- Hotspot-Grund:
-  - **mehrphasige Merge-Logik**
-  - **Group-Switch Race vermeiden**
-  - **MainActor contention**, weil der Store `@MainActor` ist
-  - **kritischer Datenpfad**
-
-- Was hier gut ist:
-  - `requestedGroupId`-Prüfung verhindert Stale-Apply.
-  - Cloud-Routing schützt UUID-Gruppen vor versehentlichem Public-DB-Fallback.
-
-#### B. Movie Cloud Writes
-
-- Betroffene Dateien:
-  - `MovieCloudSyncCoordinator.swift`
-  - `CloudKitMovieStore/CloudKitMovieStore+Modify.swift`
-
-- Beobachtung:
-  - Debounced Batch-Writes mit Pending-Sets.
-  - Konflikte werden in `CloudKitMovieStore+Modify.swift` per Merge behandelt.
-
-- Hotspot-Grund:
-  - **long-lived Task / Debounce-Lifetime**
-  - **Retry-/Pending-State-Komplexität**
-  - **serverRecordChanged-Konflikte**
-
-#### C. Movie Night Sync
-
-- Betroffene Dateien:
-  - `MovieNights/MovieNightStore/MovieNightStore+CloudRefresh.swift`
-  - `MovieNights/MovieNightCloudSyncCoordinator.swift`
-  - `MovieNights/MovieNightStore/MovieNightStore+Persistence.swift`
-
-- Beobachtung:
-  - Mehrere Datentypen pro Gruppe: Events, Responses, Activity, Presets.
-  - Jeder lokale Write persistiert Snapshot asynchron.
-  - Activity wird auf 200 Einträge gekappt.
-
-- Hotspot-Grund:
-  - **mehrere parallele Datendomänen pro Store**
-  - **komplexe Pending-/Retry-Koordination**
-  - **Snapshot-Persistenz bei häufiger Aktivität**
-
-#### D. Group Routing / Sharing
-
-- Betroffene Dateien:
-  - `CloudKitRouting.swift`
-  - `GroupContext.swift`
-  - `CloudKitGroupStore/*`
-
-- Beobachtung:
-  - CloudKit-Sharing basiert auf Zonen plus Root-Record-Hierarchie.
-  - Stores hängen hart an korrektem `GroupContext`.
-
-- Hotspot-Grund:
-  - **Routing-Korrektheit ist systemkritisch**
-  - Fehler hier führen zu Leerzuständen, Schreibfehlern oder falscher DB-Zielwahl
-
-#### E. Goals Storage
-
-- Betroffene Datei:
-  - `Goals/GoalsStore.swift`
-
-- Beobachtung:
-  - Yearly Goals werden lokal unter `ViewingGoalsByYear.v1` gespeichert.
-  - Custom Goals werden lokal pro Gruppe gespeichert.
-  - Cloud-API ist gruppenspezifisch.
-
-- Hotspot-Grund:
-  - **Scoping-Inkonsistenz lokal vs. Cloud**
-
-- Bewertung:
-  - kein Performance-Hotspot, aber ein **Datenmodell-/Produkt-Hotspot**.
-
-### 3) Concurrency
-
-#### MainActor als Default
-
-- Quelle:
-  - `filmfreaks.xcodeproj/project.pbxproj` → `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`
-
-- Auswirkung:
-  - Standardmäßig landet sehr viel Logik auf dem MainActor.
-  - Das reduziert einige Race Conditions, erhöht aber die Gefahr von UI-Blockaden und Actor-Warnungen.
-
-#### Positive Muster
-
-- `StatsViewModel.swift`
-  - debounced + `Task.detached`
-- `AppRefreshCoordinator.swift`
-  - coalesced resume refreshes
-- `MovieDetailLoadCoordinator.swift`
-  - dedizierter Lade-Koordinator statt nackter View-Tasks
-
-#### Problematische Muster
-
-- `ContentMovieItemsModel.swift`
-  - rechnet synchron auf MainActor
-- `TimelineViewModel.swift`
-  - rechnet synchron auf MainActor
-- `SearchResultDetail/SearchResultDetailView.swift`
-  - View steuert mehrere Reload-Tasks direkt
-- `MovieSearch/MovieSearchView/MovieSearchView.swift`
-  - mehrere Trigger starten Tasks für Empfehlungen
-
-#### Konkrete Risikotypen
-
-- **MainActor contention**
-- **Task lifetime schwer nachvollziehbar**
-- **fehlende zentrale Cancellation-/dedupe-Strategie in manchen Views**
-- **gleichartige Nebenläufigkeitsmuster pro Feature neu erfunden**
-
----
-
-## Refactor Map
-
-### Konkrete Splits
-
-#### 1. `MovieStore/MovieStore+CloudSync.swift`
-
-- Ziel:
-  - Lesbarer und testbarer machen.
-
-- Vorschlag:
-  - `MovieStore+CloudRefresh.swift`
-  - `MovieStore+CloudMerge.swift`
-  - `MovieStore+CloudSyncMeta.swift`
-  - `MovieStore+CloudBootstrap.swift`
-
-- Nutzen:
-  - Pull-/Merge-/Meta-/Initial-Upload-Verantwortung trennen.
-
-#### 2. `MovieNights/MovieNightCloudSyncCoordinator.swift`
-
-- Ziel:
-  - Pending-State je Datentyp isolieren.
-
-- Vorschlag:
-  - `MovieNightCloudSyncCoordinator+Events.swift`
-  - `...+Responses.swift`
-  - `...+Activity.swift`
-  - `...+Presets.swift`
-  - `...+Flush.swift`
-
-- Nutzen:
-  - gezieltere Tests und weniger kognitive Last.
-
-#### 3. `MovieNights/Roulette/MovieRouletteView.swift`
-
-- Ziel:
-  - UI-Datei verschlanken.
-
-- Vorschlag:
-  - `MovieRouletteHeaderView.swift`
-  - `MovieRouletteCandidatesSection.swift`
-  - `MovieRoulettePresetSection.swift`
-  - `MovieRouletteResultCard.swift`
-  - `MovieRouletteActionBar.swift`
-
-- Nutzen:
-  - bessere Wartbarkeit, kleinere Review-Diffs.
-
-#### 4. `MovieDetail/MovieDetailView.swift` + `SearchResultDetail/*`
-
-- Ziel:
-  - Detaildarstellung und Detail-Laden stärker vereinheitlichen.
-
-- Vorschlag:
-  - gemeinsames Detail-Presentationsmodell
-  - gemeinsamer Load-UseCase/Coordinator
-  - gemeinsame Untersektionen für FilmInfo, Trailer, WatchProvider, People
-
-- Nutzen:
-  - weniger doppelte Bugs, weniger Drift.
-
-#### 5. `Settings/GroupSettingsView.swift`
-
-- Ziel:
-  - UI von Orchestrierung entkoppeln.
-
-- Vorschlag:
-  - `GroupSettingsViewModel.swift`
-  - UI-Sektionen behalten, Seiteneffekt-Logik auslagern
-
-- Nutzen:
-  - geringeres Risiko bei Gruppenwechsel-/Delete-/Leave-Flows.
-
-### Cache- / Index-Ideen
-
-#### A. Content-Liste
-
-- Aktuell:
-  - Such-Haystack wird bereits gecacht (`Content/MovieSearchIndexCache.swift`).
-
-- Nächster sinnvoller Schritt:
-  - vollständiges Snapshot-Building off-main rechnen.
-  - ggf. Input-Signature einführen, um identische Rebuilds zu skippen.
-
-#### B. Timeline
-
-- Vorschlag:
-  - `TimelineViewModel` wie `StatsViewModel` debouncen.
-  - Snapshot detached berechnen.
-  - Input-Signature beibehalten, aber Rechenphase auslagern.
-
-#### C. Movie Detail / Search Result Detail
-
-- Vorschlag:
-  - kleine in-memory Detail-Cache-Schicht für TMDb-Details und WatchProvider-Region-Reloads.
-
+  - Die UUID-Schutzregel ist korrekt und wichtig, weil sonst Records in der public DB landen könnten.
+  - Duplikat: `filmfreaks/CloudKitMovieNightStore/CloudKitMovieNightStore+Routing.swift` implementiert eigene Routing-Logik statt `CloudKitRouting` zu nutzen.
+  - Duplikat: `MovieNightCloudSyncCoordinator.swift` hat eigene `requiresGroupContext`/`isRoutingReady` Heuristik.
+
+### 2.3 CloudKit Recordtypen
+
+| Domain | Recordtyp(en) | Pfade | Schlüssel-Design |
+|---|---|---|---|
+| Gruppen | `FFGroup` + `CKShare` | `CloudKitGroupStore/*` | Zone `group.<UUID>`, Root recordName = group ID. |
+| Filme | `Movie` | `CloudKitMovieStore/*` | recordName = `Movie.id`; fields `payload`, `isBacklog`, `updatedAt`, `groupId`. |
+| Ratings | `MovieRating` | `CloudKitRatingStore/*` | recordName = base64url von `groupId|movieId|reviewerId`. |
+| Mitglieder | `GroupMember` | `CloudKitUserStore.swift` | recordName = `<groupId>|<memberId>`, Legacy by canonical name. |
+| Ziele | `ViewingGoal`, `ViewingCustomGoals` | `CloudKitGoalStore.swift` | Jahresziel pro Jahr, Custom Goals als Payload pro Gruppe. |
+| Filmabende | `MovieNightEvent`, `MovieNightResponse`, `MovieNightActivity`, `MovieRoulettePreset` | `CloudKitMovieNightStore/*` | Events/Activity/Presets per UUID, Responses per Composite Key. |
+
+### 2.4 Incremental Sync / Tokens
+
+- `filmfreaks/CloudKitZoneChanges.swift` kapselt `CKFetchRecordZoneChangesOperation`.
+- `filmfreaks/CloudKitZoneChangeTokenStore.swift` persistiert `CKServerChangeToken` pro Namespace, Scope, Zone, Owner.
+- Namespaces:
+  - Movies: `movies`.
+  - Ratings: `ratings`.
+  - Movie Nights: `movieNights`.
+- Risiko: `CKError.changeTokenExpired` wird nicht zentral behandelt. Der Wrapper wirft Fehler, aber es gibt keinen sichtbaren Recovery-Pfad „Token löschen + Full Zone Fetch“.
+
+### 2.5 Upload Queues
+
+- Movies: `filmfreaks/MovieCloudSyncCoordinator.swift`.
+  - Debounced `0.8s`, pending saves/deletes in Dictionaries.
+  - CloudKit-Batch wird über `CloudKitMovieStore.modifyBatch` geschrieben; dort gibt es Chunks à 200.
+  - Läuft auf `@MainActor`.
+- Movie Nights: `filmfreaks/MovieNights/MovieNightCloudSyncCoordinator.swift`.
+  - Debounced `0.8s`, vier Record-Domänen plus Deletes.
+  - Group-by-group Flush.
+  - `CloudKitMovieNightStore.modifyBatch` schreibt alles in einer Operation, ohne Chunking.
+  - `publishPendingCount` und `snapshotForGroup` filtern alle Pending-Dictionaries pro Gruppe; bei vielen Pending Items O(Gruppen × Pending × Recordtypen).
+- Risiko für beide:
+  - Pending Queues sind in-memory; kein persistentes Dirty Journal.
+  - Nach App-Kill bleiben lokale JSON-Daten erhalten, aber die konkrete CloudKit-Upload-Absicht kann verloren gehen.
+  - Beim nächsten Launch gibt es keine klare Startup-Diff-Reconciliation für „lokal geändert, Cloud noch nicht“.
+
+### 2.6 Sharing / Parent Hierarchy
+
+- `filmfreaks/CloudKitGroupStore/CloudKitGroupStore+Sharing.swift` setzt/repairt `record.parent` für:
+  - `Movie`
+  - `MovieRating`
+  - `GroupMember`
+  - `ViewingGoal`
+  - `ViewingCustomGoals`
+- Risiko: MovieNight-Recordtypen fehlen in der Repair-Liste:
+  - `MovieNightEvent`
+  - `MovieNightResponse`
+  - `MovieNightActivity`
+  - `MovieRoulettePreset`
+- Neue Writes in `CloudKitMovieNightStore+Modify.swift` setzen zwar `record.parent`, aber vorhandene Records aus älteren Versionen könnten bei Share-Teilnehmern unsichtbar bleiben.
+
+## 3. Entry Points + Navigation
+
+### 3.1 App Entry
+
+- `filmfreaks/filmfreaksApp.swift`
+  - `@main struct filmfreaksApp: App`.
+  - `@UIApplicationDelegateAdaptor(CloudKitShareAppDelegate.self)` für CloudKit Share Acceptance und Push Handling.
+  - Konfiguriert `URLCache.shared` mit 100 MB Memory und 500 MB Disk.
+  - Erzeugt zentrale EnvironmentObjects:
+    - `MovieStore(useCloud: true)`
+    - `MovieNightStore()`
+    - `UserStore()`
+    - `CloudKitGroupStore()`
+    - `NetworkMonitor.shared`
+    - `DisplaySettings()`
+    - `AppRefreshCoordinator()`
+  - `WindowGroup` rendert `ContentView`, `ToastHost`, `SplashView`.
+  - Bei `scenePhase == .active` wird Refresh-Cascade getriggert:
+    - `groupStore.refresh()`
+    - `movieNightStore.flushPendingCloudChanges()`
+    - `movieStore.refreshFromCloud(force: false)`
+    - `userStore.refreshFromCloud(force: false)`
+    - `movieNightStore.refreshFromCloud(groupId: movieStore.currentGroupId, force: false)`
+
+### 3.2 Root View / Sheet Router
+
+- `filmfreaks/Content/ContentView.swift`
+  - Root mit `NavigationStack`.
+  - State für Mode, ViewStyle, Search, Sort, Filter, Sheet Route, Onboarding.
+  - `ContentHeaderView`, `ContentMainAreaView`, `ContentToolbar`.
+- `filmfreaks/Content/ContentRouting.swift`
+  - `ContentRoute`: `settings`, `quickStart`, `movieSearch`, `users`, `stats`, `timeline`, `calendar`, `activity`, `goals`, `groupSettings`.
+  - Alle Hauptrouten werden per `.sheet(item:)` präsentiert.
+  - `movieSearch` übergibt `existingWatched`, `existingBacklog` sowie Add-Callbacks.
+  - Add-Callbacks reichern Movies mit `currentGroupId`, `currentGroupName`, `addedAt`, `addedById`, `addedByName` an.
+- Navigation Pattern:
+  - Haupt-App: Stack + Sheets, kein globales TabView.
+  - Listen/Grid öffnen `MovieDetailView` via `NavigationLink`.
+  - Featurebereiche nutzen eigene `NavigationStack`s in Sheets.
+
+### 3.3 Deep Links / Shares / Push
+
+- `filmfreaks/CloudKitShareAppDelegate.swift`
+  - Notifications permission bootstrap.
+  - Remote Notification Fetch an `CloudKitActivityPushFetchCoordinator.fetchAndLog`.
+  - `UNUserNotificationCenterDelegate` tap -> `PushDeepLinkRouter.route`.
+- `filmfreaks/CloudKitShareSceneDelegate.swift`
+  - Cold/Warm CloudKit Share Acceptance.
+  - Cold-start Push Deep Link.
+- `filmfreaks/CloudKitShareCoordinator.swift`
+  - `CKAcceptSharesOperation`, Toasts, `.cloudKitShareAccepted` notification.
+- `filmfreaks/Content/ContentView+DeepLink.swift`
+  - Erwartet `groupId` im `userInfo`.
+  - Aktiviert `GroupContext`, lädt Gruppen/User/Movies/MovieNights und routet zu `.activity`.
+- Risiko: `CloudKitActivityPushFetchCoordinator.fetchAndHandle` läuft nur in `#if DEBUG`; Release gibt `false` zurück. Ob das gewollt ist, ist **UNKNOWN**.
+
+## 4. Big Files List: Top 15 Dateien nach Zeilen
+
+| Rang | Zeilen | Pfad | Grober Zweck | Warum riskant |
+|---:|---:|---|---|---|
+| 1 | 446 | `filmfreaks/MovieNights/Roulette/MovieRouletteView.swift` | Roulette-Screen, Sheets, Store-Sync, Kandidatenanzeige | Große View; `currentGroupBacklogMovies` nutzt Map + `first(where:)` je ID => O(n²); viele onReceive/onChange. |
+| 2 | 432 | `filmfreaks/Settings/GroupSettingsSections.swift` | Group-Settings Cards/Sections/Subviews | Viele UI-Komponenten und Actions in einem File; hoher Änderungs-/Merge-Konflikt-Radius. |
+| 3 | 413 | `filmfreaks/Stats/StatsSnapshotBuilder+TasteDynamics.swift` | Taste-/Reviewer-Dynamik-Aggregationen | Algorithmisch komplex; potenziell viele Paar-/Rating-Auswertungen; Korrektheitsrisiko. |
+| 4 | 405 | `filmfreaks/Stats/StatsSnapshotBuilder.swift` | Zentrale Stats-Aggregation | Viele Full-Array-Passes und Sorts; Änderungen können mehrere Karten beeinflussen. |
+| 5 | 396 | `filmfreaks/MovieStore/MovieStore+CloudSync.swift` | Movie/Ratings Cloud Refresh, Merge, Initial Upload | Kritischer Datenpfad; Change-Token, lokale Ratings, Deletes, Group-Switch und Initial Upload in einer Datei. |
+| 6 | 387 | `filmfreaks/MovieNights/MovieNightCloudSyncCoordinator.swift` | Debounced Upload Queue für 4 MovieNight-Recordtypen | MainActor, in-memory Queue, kein Chunking im Store, dupliziert Routing-Heuristik, O(n)-Scans. |
+| 7 | 369 | `filmfreaks/ViewingCustomGoal.swift` | Custom Goal Types, Rules, Codable Migration | Persistenz-/Migrationsmodell; kleine Änderungen können alte Payloads brechen. |
+| 8 | 366 | `filmfreaks/Movie.swift` | Core Movie, Rating, CastMember, Codable Migration | Zentrale Entity; Cloud payload, UI, Stats und Persistence hängen daran. |
+| 9 | 355 | `filmfreaks/Stats/StatsView+Cards.Leaderboards.swift` | Leaderboard-Karten im Stats-UI | Große UI-Datei; Risiko für View invalidation und schwer testbare Präsentationslogik. |
+| 10 | 350 | `filmfreaks/Settings/GroupSettingsView.swift` | Gruppenverwaltung, Share/Delete/Switch/Refresh | Viel State/Actions; `activeCardSnapshot` wird direkt im Renderpfad berechnet. |
+| 11 | 343 | `filmfreaks/PersistenceManager.swift` | JSON-Persistenz, Migration, Debounced Writes | Storage-Kern; Migration + Writer + Pfadlogik gekoppelt; erledigte WorkItems bleiben potenziell referenziert. |
+| 12 | 341 | `filmfreaks/MovieDetail/MovieDetailView.swift` | Filmdetail, Sheets, Rating/Provider/Person-Flows | Hoher State-Surface; `onAppear` startet TMDb Task statt `.task(id:)`; Duplicate Loads möglich. |
+| 13 | 335 | `filmfreaks/CloudKitUserStore.swift` | GroupMember CloudKit CRUD, Legacy-Migration | Identity-/Dedupe-kritisch; Fehler wirken auf Ratings/Notifications/User-Auswahl. |
+| 14 | 332 | `filmfreaks/CloudKitMovieStore/CloudKitMovieStore+Modify.swift` | Movie CloudKit Save/Batch/Delete/Conflict | Kritischer Write-Pfad; Merge-/Conflict-Regeln müssen sehr stabil bleiben. |
+| 15 | 327 | `filmfreaks/Stats/StatsSnapshotBuilder+RatingDimensions.swift` | Rating-Dimension-Aggregationen | Komplexe fachliche Sort-/Aggregationslogik; Performance/Korrektheitsrisiko bei großen Daten. |
+
+## 5. Hot Path Analyse
+
+### 5.1 Rendering / Scrolling
+
+#### Home Liste/Grid
+
+- Pfade:
+  - `filmfreaks/Content/ContentMainAreaView.swift`
+  - `filmfreaks/Content/ContentMovieItemsModel.swift`
+  - `filmfreaks/Content/ContentMovieItemsSnapshotBuilder.swift`
+  - `filmfreaks/Content/ContentView+Lifecycle.swift`
+- Gute Entscheidung:
+  - Filter/Sort/Search werden über `ContentMovieItemsModel` in `Task.detached` berechnet, nicht im `body`.
+  - `MovieSearchIndexCache` reduziert Normalisierungskosten.
+- Hotspot:
+  - `ContentView+Lifecycle.scheduleMovieItemsRefresh()` setzt `debounceSeconds: 0` und kopiert komplette `movieStore.movies`/`backlogMovies` bei jeder Änderung in den Task.
+  - Bei schnellen Batch-Mutationen kann das viele Snapshot-Builds auslösen.
+- Hotspot:
+  - `IndexedMovie` speichert Array-Index. In `ContentMainAreaView.posterGrid` wird gegen stale indices geguarded, weil SwiftUI beim Gruppenwechsel kurz alte Items rendern kann.
+  - Grund: Index-basierte Binding-Navigation ist anfällig gegen Reorder/Delete/Group-Switch.
+  - Refactor: ID-basierte Detailroute + Binding-Lookup nach UUID.
+
+#### Group Settings Hero / Active Card
+
+- Pfade:
+  - `filmfreaks/Settings/GroupSettingsView.swift`
+  - `filmfreaks/Settings/GroupSettingsActiveCardSnapshot.swift`
+- Hotspot:
+  - `activeCardSnapshot` ist eine computed property in der View.
+  - Sie ruft `movieStore.activityEvents(...)`, `movieNightStore.activityEvents(...)` und `GroupSettingsActiveCardSnapshotBuilder.build(...)` direkt im Renderpfad.
+  - `GroupSettingsActiveCardSnapshotBuilder` kombiniert Movie/Backlog und Activity-Vorschau.
+- Konkreter Grund:
+  - Expensive derived data im `body`-Pfad; potenziell exzessive View invalidation bei jeder Published-Änderung in Movie/User/MovieNight/DisplaySettings.
+- Refactor:
+  - `GroupSettingsViewModel` mit debounced Snapshot und Input-Fingerprint.
+
+#### Movie Roulette
+
+- Pfad: `filmfreaks/MovieNights/Roulette/MovieRouletteView.swift`.
+- Hotspot:
+  - `currentGroupBacklogMovies` baut Kandidaten und sucht danach für jede Movie-ID mit `movieStore.backlogMovies.first(where:)` das Movie.
+  - Konkreter Grund: O(n²) Lookup bei großer Backlogliste; wird bei Preset-Manager-Sheet-Auswertung relevant.
+- Refactor:
+  - Einmal `[UUID: Movie]` aus `backlogMovies` bilden oder `MovieRouletteCandidate` direkt mit vollständigem `Movie`/Ref liefern.
+
+#### Stats
+
+- Pfade:
+  - `filmfreaks/Stats/StatsViewModel.swift`
+  - `filmfreaks/Stats/StatsSnapshotBuilder*.swift`
+- Gute Entscheidung:
+  - 200ms Debounce.
+  - Snapshot wird detached auf `.userInitiated` berechnet.
+  - Generation Guard verhindert stale Apply.
+- Hotspot:
+  - Builder-Dateien machen viele Full-Array-Passes, Sorts und Reviewer-/Taste-Auswertungen.
+  - Bei sehr großen Movie-/Rating-Daten kann CPU steigen, auch wenn nicht auf dem MainActor.
+- Hotspot:
+  - `PersonPopularityStore` ist `@MainActor` und `preloadPopularity` macht Batches mit TaskGroup. Das ist netzwerkfreundlich, aber Actor-State und SaveToDisk laufen über MainActor.
+  - `isExpired(_:)` existiert, wird aber nicht genutzt; TTL-Refresh-Verhalten ist **UNKNOWN**.
+
+#### Movie Detail / TMDb
+
+- Pfade:
+  - `filmfreaks/MovieDetail/MovieDetailView.swift`
+  - `filmfreaks/MovieDetail/MovieDetailView+Lifecycle.swift`
+  - `filmfreaks/MovieDetail/MovieDetailLoadCoordinator.swift`
+  - `filmfreaks/TMDbAPI/*`
+- Hotspot:
+  - `handleOnAppear()` startet `Task { await loadDetails() }`.
+  - Konkreter Grund: Unstrukturierte Task-Lifetime; bei mehrfachen Appears kann derselbe TMDb-Fetch erneut starten. `.task(id: movie.tmdbId)` wäre besser cancellable/gebunden.
+- Hotspot:
+  - `MovieStore.migrateCastDataIfNeeded()` in `MovieStore+Mutations.swift` nutzt `withTaskGroup` über alle Zielmovies ohne sichtbares Parallelitätslimit.
+  - Konkreter Grund: Viele Legacy-Movies könnten sehr viele TMDb Credits Requests parallel starten.
+
+#### Images
+
+- Pfad: `filmfreaks/CachedAsyncImage.swift`.
+- Gute Entscheidung:
+  - Memory `NSCache`, Disk Cache, in-flight Dedupe pro URL.
 - Risiko:
-  - Invalidation nach Region-Wechsel sauber halten.
+  - **UNKNOWN:** Ob Bilddaten vor UI-Nutzung downsampled werden. Bei großen Poster-Grids kann Full-Decode Memory/CPU belasten.
+
+### 5.2 Sync / Storage
+
+#### Movies + Ratings
+
+- Pfade:
+  - `filmfreaks/MovieStore/MovieStore+CloudSync.swift`
+  - `filmfreaks/MovieStore/MovieStore+Mutations.swift`
+  - `filmfreaks/CloudKitMovieStore/*`
+  - `filmfreaks/CloudKitRatingStore/*`
+- Positiv:
+  - Movie-Payload trennt Ratings; `MovieRating` separat skaliert besser für Multi-User-Konflikte.
+  - Local ratings werden vor Cloud Reload konserviert und mit Remote Ratings gemerged.
+  - Group-Switch mid-flight wird geprüft; falsches Apply wird verworfen.
+- Hotspot:
+  - Rating delete merge filtert pro Movie `changes.deletedKeys.filter { $0.movieId == copy.id }`.
+  - Konkreter Grund: O(MovieCount × DeletedRatingKeys), wenn viele Rating-Deletes eintreffen.
+  - Refactor: `Dictionary<UUID, Set<String>>` für deleted reviewer keys vor dem Map bilden.
+- Hotspot:
+  - `enqueueCloudSync(newList:oldList:isBacklog:)` baut Dictionaries/Sets und filtert bei jedem Array-`didSet`.
+  - Konkreter Grund: O(n) pro UI-Mutation; bei Bulk-Updates potenziell MainActor-Last.
+- Risiko:
+  - Pending Uploads nicht persistent. Lokaler Add/Edit kann nach App-Kill lokal sichtbar bleiben, aber nicht zwingend automatisch in Cloud hochgeladen werden.
+
+#### Movie Nights
+
+- Pfade:
+  - `filmfreaks/MovieNights/MovieNightStore/*`
+  - `filmfreaks/MovieNights/MovieNightCloudSyncCoordinator.swift`
+  - `filmfreaks/CloudKitMovieNightStore/*`
+- Positiv:
+  - Local-first Writes mit Cloud queue.
+  - Zone Changes für shared/zone groups.
+  - Merge nach `updatedAt`/`respondedAt`, Activity capped auf 200.
+- Hotspot:
+  - `CloudKitMovieNightStore+Modify.swift` schreibt alle Saves/Deletes in einer `CKModifyRecordsOperation`.
+  - Konkreter Grund: kein Chunking; große Presets/Activity-Backlogs/Batch-Änderungen können CloudKit-Limits oder partial failures härter treffen.
+- Hotspot:
+  - `MovieNightCloudSyncCoordinator.publishPendingCount` und `snapshotForGroup` scannen alle Pending-Dictionaries.
+  - Konkreter Grund: O(n)-Scans auf MainActor bei jedem Queue/Flush.
+- Risiko:
+  - Ein Fehler bei einer Gruppe `break`t den Flush-Loop; spätere Gruppen werden bis zum nächsten Trigger blockiert.
+- Risiko:
+  - Kommentare in `MovieNightActivityEvent.swift` und `MovieNightStore+CloudRefresh.swift` sind veraltet bzw. widersprechen existierendem Cloud-Write-Pfad.
+
+#### Goals
+
+- Pfade:
+  - `filmfreaks/Goals/GoalsStore.swift`
+  - `filmfreaks/CloudKitGoalStore.swift`
+  - `filmfreaks/ViewingCustomGoal.swift`
+- Hotspot/Risiko:
+  - Jahresziele sind lokal nicht group-scoped (`ViewingGoalsByYear.v1`), CloudKit aber group-scoped.
+  - Konkreter Grund: Gruppenwechsel kann lokal falsche Jahresziele anzeigen/persistieren.
+- Risiko:
+  - `syncFromCloud` übernimmt Remote nur, wenn `remoteYearly` bzw. `remoteCustom.goals` nicht leer sind.
+  - Konkreter Grund: Remote-Löschung/leer kann lokal stale Daten nicht entfernen.
+- Tradeoff:
+  - Custom Goals als ein versionierter Payload sind schemaflexibel, aber last-writer-wins Konflikte können parallele Änderungen verlieren.
+
+#### Users
+
+- Pfade:
+  - `filmfreaks/Users+Store/UserStore.swift`
+  - `filmfreaks/Users+Store/UserStore+CloudRefresh.swift`
+  - `filmfreaks/CloudKitUserStore.swift`
+- Positiv:
+  - Stable `memberId` Migration für Legacy Records.
+  - Per-group selected user via `SelectedUserSelectionStore`.
+- Risiko:
+  - Initial Bootstrap lädt leere Cloud und lädt lokale User sequenziell hoch.
+  - Nutzerzahl ist vermutlich klein; trotzdem wäre Batch-Upload konsistenter.
+- Risiko:
+  - Konfliktpolitik bei Rename/Delete auf mehreren Geräten ist **UNKNOWN**.
+
+#### CloudKit Subscriptions / Push
+
+- Pfade:
+  - `filmfreaks/CloudKit/CloudKitActivitySubscriptionManager.swift`
+  - `filmfreaks/CloudKit/CloudKitActivityPushFetchCoordinator.swift`
+  - `filmfreaks/Notifications/*`
+- Positiv:
+  - Deterministische Subscription IDs pro Gruppe/Kind.
+  - Subscriptions für `Movie`, `MovieRating`, `MovieNightActivity`.
+- Risiko:
+  - Release-Push-Fetch unklar, weil FetchCoordinator außerhalb DEBUG `false` zurückgibt.
+- Risiko:
+  - Subscriptions feuern visible alert + content-available; UX/Rate-Limits bei hoher Aktivität sind **UNKNOWN**.
+
+### 5.3 Concurrency
+
+- MainActor Stores:
+  - `MovieStore`, `MovieNightStore`, `UserStore`, `GoalsStore`, `CloudKitGroupStore`, `PersonPopularityStore`.
+- Positive Pattern:
+  - `AppRefreshCoordinator` coalesced Resume-Refreshs.
+  - `ContentMovieItemsModel` und `StatsViewModel` nutzen detached Tasks + Generation Guard.
+- Risk Pattern:
+  - `Task { ... }` in `onAppear`, init, network reconnect und mutations ohne zentrale Cancellation.
+  - Sync Coordinators liegen auf MainActor; Dictionary-Snapshot und Pending-Zählung passieren dort.
+  - `MovieStore.migrateCastDataIfNeeded()` startet potenziell viele TMDb Requests parallel.
+  - `CloudKit` async completions sind nicht unbedingt MainActor-bound, aber Store-Anwendung schon; große Merges blockieren UI potenziell.
 
-#### D. Popularity / Recommendations
+## 6. Refactor Map
 
-- Bestehend:
-  - `PersonPopularityStore.swift`
-  - `RecommendationsCacheManager.swift`
+### 6.1 Konkrete Splits
 
-- Vorschlag:
-  - typed recommendation seed cache statt Reflection-Heuristik.
+#### `filmfreaks/MovieStore/MovieStore+CloudSync.swift`
 
-### Vereinheitlichungen
+Aufteilen in:
 
-#### 1. Store-Sync-Pattern vereinheitlichen
+- `MovieCloudRefreshService`
+  - Fetch movies, fetch ratings, apply zone/public strategy.
+- `MovieRatingMergeService`
+  - `mergeRatings`, delete-key indexing, reviewer key normalization.
+- `MovieInitialUploadService`
+  - Initial upload policy, startup reconciliation.
+- `MovieCastMigrationService`
+  - Cast migration mit bounded concurrency und retry/backoff.
+- `MovieSyncStateStore`
+  - Sync meta, last attempt/success/error, pending counts.
 
-- Beobachtung:
-  - MovieStore, UserStore, GoalsStore und MovieNightStore haben ähnliche, aber nicht identische Muster.
+Ziel: Kritische Datenlogik testbarer machen und MainActor-Arbeit reduzieren.
 
-- Vorschlag:
-  - gemeinsames leichtgewichtiges Protokoll für:
-    - sync meta
-    - force/throttled refresh
-    - pending write count
-    - network reconnect retry
+#### `filmfreaks/MovieNights/MovieNightCloudSyncCoordinator.swift`
 
-- Nicht empfohlen:
-  - harter Architektur-Umbau auf generisches Repository-Framework.
+Aufteilen in:
 
-#### 2. Logging vereinheitlichen
+- `MovieNightPendingSyncQueue`
+  - Pending Dictionaries, count per group, snapshot by group.
+- `MovieNightSyncRouter`
+  - Nutzung von `CloudKitRouting` statt eigener Heuristik.
+- `MovieNightSyncFlusher`
+  - Group-by-group Flush, Retry Policy, Fehlerisolierung.
+- `MovieNightSyncMetrics`
+  - Pending counts, last success/error, debug events.
 
-- Beobachtung:
-  - viel `print(...)` im Sync-Pfad.
-  - `PersistenceManager.swift` nutzt bereits `Logger`.
+Ziel: O(n)-Scans verringern, Routing dupliziert entfernen, Fehler einer Gruppe isolieren.
 
-- Vorschlag:
-  - einheitliche `OSLog`-Kategorien für:
-    - CloudRouting
-    - CloudFetch
-    - CloudWrite
-    - Merge
-    - Push
-    - Persistence
+#### `filmfreaks/CloudKitMovieNightStore/CloudKitMovieNightStore+Modify.swift`
 
-#### 3. Detail-Ladepattern vereinheitlichen
+Aufteilen in:
 
-- `MovieDetailLoadCoordinator.swift` als Vorlage für weitere detail-lastige Screens nutzen.
+- `MovieNightRecordBuilder+Event.swift`
+- `MovieNightRecordBuilder+Response.swift`
+- `MovieNightRecordBuilder+Activity.swift`
+- `MovieNightRecordBuilder+Preset.swift`
+- `CloudKitBatchModifyWriter.swift` als generischer Chunked Writer.
 
----
+Ziel: Record-Feldmapping separat testbar machen und Batch-Limits einheitlich behandeln.
 
-## Risiken & Edge Cases
+#### `filmfreaks/Settings/GroupSettingsView.swift`
 
-### Datenverlust / Persistenz
+Aufteilen in:
+
+- `GroupSettingsViewModel`
+  - active context, summaries, active card snapshot, refresh state.
+- `GroupSettingsActions`
+  - create/switch/share/delete/leave workflows.
+- View bleibt rein deklarativ.
 
-- `PersistenceManager.swift`
-  - foundation layer; Pfad-/Dateifehler betreffen mehrere Stores.
+Ziel: Render-Hotspot entfernen und CloudKit-Actions isoliert testen.
 
-- `MovieStore/MovieStore+CloudSync.swift`
-  - Fehlerhafte Merge-Änderungen können Watched/Backlog/Ratings inkonsistent machen.
+#### `filmfreaks/MovieNights/Roulette/MovieRouletteView.swift`
 
-- `CloudKitMovieStore/CloudKitMovieStore+Modify.swift`
-  - falsche Parent-/Zone-Zuweisung würde Shared Visibility brechen.
+Aufteilen/ändern:
+
+- `MovieRouletteScreenChrome`
+- `MovieRoulettePresetSheetRouter`
+- `MovieRouletteBacklogIndex`
+- O(n²)-Lookup in `currentGroupBacklogMovies` ersetzen.
 
-### Migration
-
-- `Movie.swift`
-  - Legacy-Cast-Migration ist vorhanden; weitere Modelländerungen müssen rückwärtskompatibel gedacht werden.
-
-- `ViewingCustomGoalsPayload.swift`
-  - Custom Goal Payload ist versioniert; das ist gut, sollte aber konsequent weitergeführt werden.
-
-### Offline / Multi-Device
-
-- Lokale JSON-Persistenz ist robust genug für Offline-Basics.
-- Cloud-Merges können durch unterschiedliche Gerätezustände komplex werden.
-- Besonders kritisch:
-  - Gruppenwechsel während Cloud-Refresh
-  - Pending-Writes bei Netzwechsel
-  - Zone-Gruppen ohne geladenen `GroupContext`
-
-### Share / Collaboration
-
-- CloudKit-Sharing ist tief in Parent-/Zone-Hierarchie eingebaut.
-- Besonders empfindliche Punkte:
-  - `CloudKitGroupStore.refresh()`
-  - `CloudKitRouting.route(...)`
-  - Parent-Zuweisung in `CloudKitMovieStore+Modify.swift`
-  - ähnliche Parent-Mechanik in anderen CloudKit-Stores
-
-### Produkt-/Semantik-Risiken
-
-- `Goals/GoalsStore.swift`
-  - yearly goals lokal global, cloud-seitig gruppenspezifisch → Produktsemantik unklar.
-
-- Legacy/Public Groups
-  - Code unterstützt noch Fallbacks auf Public DB für nicht-UUID-GroupIDs.
-  - **UNKNOWN**, wie relevant dieser Legacy-Pfad in der echten Nutzung noch ist.
-
----
-
-## Observability / Debuggability
-
-### Bestehende Stärken
-
-- `AppRefreshCoordinator.swift`
-  - gut nachvollziehbarer Refresh-Coalescing-Punkt.
-
-- `CloudKitZoneChangeTokenStore.swift`
-  - Persistenz der Change Tokens unterstützt reproduzierbare Delta-Probleme.
-
-- `GroupContext.swift`
-  - Routingzustand ist lokal inspectable.
-
-- `filmfreaksTests/CloudRouting/*`
-  - gute Testbasis für Routing-/Token-/Context-Logik.
-
-- `filmfreaksTests/Persistence/*`
-  - gute Testbasis für lokale Persistenz.
-
-### Schwächen
-
-- `print(...)` statt strukturierter Logs in vielen Sync-Pfaden.
-- Kein zentrales Debug-Surface für:
-  - aktive Gruppe
-  - aktives Routing (public/private/shared)
-  - Token-Zustand
-  - Pending-Writes je Domäne
-  - letzte erfolgreiche Delta- oder Snapshot-Quelle
-
-### Konkrete Debug-Verbesserungen
-
-- Diagnostic Panel in Settings oder Developer-Overlay mit:
-  - `currentGroupId`
-  - `GroupContext`
-  - DB-Scope/Zone
-  - Pending counts pro Store
-  - last sync success/error timestamps
-  - token present/absent je namespace
-
-- Strukturierte Logs mit Korrelation:
-  - `groupId`
-  - `zoneName`
-  - `scope`
-  - `recordType`
-  - `operation` (`fetchChanges`, `fetchSnapshot`, `modifyBatch`, `initialUpload`)
-
-### Reproduzierbarkeit
-
-- Gute Testabdeckung vorhanden für:
-  - Content-Snapshot-Building
-  - MovieNight-Merges
-  - Routing/Token/Context
-  - Persistence
-  - Timeline
-  - Stats
-  - MovieDetailLoadCoordinator
-
-- Schwächer testbar aktuell:
-  - vollständige End-to-End CloudKit-Orchestrierung
-  - View-getriggerte Task-Lifetimes in Search/Detail-Flows
-
----
-
-## Open Questions
-
-- **UNKNOWN:** Ist der Legacy/Public-DB-Pfad für nicht-UUID-Gruppen noch produktiv relevant oder nur Migrationskompatibilität?
-- **UNKNOWN:** Sollen Yearly Goals tatsächlich gruppenspezifisch sein? Der Cloud-Pfad ist gruppenspezifisch, die lokale `UserDefaults`-Persistenz aktuell nicht.
-- **UNKNOWN:** Ist `Secrets.xcconfig` absichtlich im Repo oder nur im ZIP enthalten?
-- **UNKNOWN:** Gibt es außerhalb des ZIPs CI, Release-Automation oder weitere Build-Skripte?
-- **UNKNOWN:** Gibt es eine dokumentierte CloudKit-Schema-/Migrationsstrategie außerhalb des Codes?
-- **UNKNOWN:** Ist `CloudKitActivityPushFetchCoordinator` in Release tatsächlich funktional vorgesehen? Der Hauptpfad ist in `#if DEBUG` gekapselt.
-- **UNKNOWN:** Sollen MovieSearch-Empfehlungen rein heuristisch bleiben oder ist eine stabilere, typed Bewertungsbasis gewünscht?
-
----
-
-## First 3 Refactors I would do (P0)
-
-### 1) Content-Snapshots off-main rechnen
-
-- **Ziel**
-  - Hauptscreen bei Such-/Filter-/Sortieränderungen spürbar entlasten.
-
-- **Betroffene Dateien**
-  - `Content/ContentMovieItemsModel.swift`
-  - `Content/ContentMovieItemsSnapshotBuilder.swift`
-  - optional: `Content/ContentView+Lifecycle.swift`
-
-- **Risiko**
-  - niedrig bis mittel
-  - vor allem Cancellation-/Generationslogik sauber halten
-
-- **Erwarteter Nutzen**
-  - bessere UI-Reaktionszeit
-  - weniger MainActor-Last im häufigsten Screen der App
-  - Musterangleichung an `StatsViewModel.swift`
-
-### 2) MovieStore-CloudSync in kleinere Verantwortungen schneiden
-
-- **Ziel**
-  - den kritischsten Sync-Pfad wartbarer und gezielter testbar machen.
-
-- **Betroffene Dateien**
-  - `MovieStore/MovieStore+CloudSync.swift`
-  - optional ergänzend Tests in `filmfreaksTests/CloudRouting/*` und `filmfreaksTests/Persistence/*`
-
-- **Risiko**
-  - mittel
-  - Änderungen in diesem Bereich können Merge-Verhalten beeinflussen
-
-- **Erwarteter Nutzen**
-  - bessere Reviewbarkeit
-  - geringere Regression-Wahrscheinlichkeit bei Sync-Anpassungen
-  - klarere Trennung von Fetch, Merge, Initial Upload und Sync Meta
-
-### 3) Detail-Ladelogik MovieDetail / SearchResultDetail vereinheitlichen
-
-- **Ziel**
-  - doppelte TMDb-Load- und Mappinglogik abbauen.
-
-- **Betroffene Dateien**
-  - `MovieDetail/MovieDetailLoadCoordinator.swift`
-  - `SearchResultDetail/SearchResultDetailView+Loading.swift`
-  - `SearchResultDetail/SearchResultDetailView.swift`
-  - ggf. gemeinsame Section-Views
-
-- **Risiko**
-  - mittel
-  - UI-Parität und bestehende Interaktionen müssen sauber erhalten bleiben
-
-- **Erwarteter Nutzen**
-  - weniger doppelte Bugs
-  - konsistentere Detaildarstellung
-  - leichterer Ausbau von WatchProvider-/Trailer-/Credits-Logik
-
+Ziel: Wartbarkeit und bessere Performance für große Backlogs.
+
+#### `filmfreaks/Stats/StatsSnapshotBuilder*.swift`
+
+Weiter splitten nach fachlichen Aggregaten:
+
+- `StatsRatingAggregateBuilder`
+- `StatsTasteDynamicsBuilder`
+- `StatsSuggestionQualityBuilder`
+- `StatsPickInsightsBuilder`
+- `StatsPeopleAggregateBuilder`
+
+Ziel: kleinere Testtargets und klarere Input/Output-Verträge.
+
+#### `filmfreaks/Movie.swift`
+
+Nicht zwingend in viele Dateien fragmentieren, aber Verantwortlichkeiten trennen:
+
+- `Rating.swift`
+- `RatingCriterion.swift`
+- `CastMember.swift`
+- `Movie+CodableMigration.swift`
+- `Movie+RatingAverages.swift`
+
+Ziel: Core Entity kleiner, Migration bewusst isoliert.
+
+#### `filmfreaks/PersistenceManager.swift`
+
+Aufteilen in:
+
+- `PersistencePaths`
+- `DebouncedFileWriter`
+- `LegacyUserDefaultsMigration`
+- `GroupLocalDataCleaner`
+
+Ziel: Pfad-/Migration-/Write-Risiken getrennt testbar machen.
+
+### 6.2 Cache-/Index-Ideen
+
+- `MovieByIdIndex`
+  - Key: `groupId + watchedVersion + backlogVersion`.
+  - Nutzbar für Detail-Bindings, Roulette, rating deletes, activity joins.
+- `DeletedRatingKeyIndex`
+  - Key: `movieId -> Set<reviewerKey>`.
+  - Ersetzt O(MovieCount × DeletedKeys) in `MovieStore+CloudSync.swift`.
+- `GroupSettingsActiveCardSnapshotCache`
+  - Key: `groupId`, `users.count`, `movies.count`, `backlog.count`, `activity max date`, `ratingDisplayMode`.
+  - Invalidierung über Published Store-Versionen, nicht über komplette Array-Equatable.
+- `ContentSnapshotDebounce`
+  - 50–150ms Debounce statt `0` bei Such-/Sort-/Movie-Änderungen.
+  - Bei Suchtext kann `0` gewünscht sein; bei Store-Batchmutationen nicht.
+- `MovieSearchIndexCache.prune(activeMovieIds:)`
+  - Aktueller Cache hat keine sichtbare Prune-Strategie; entfernte Movies können bis App-Neustart im Cache bleiben.
+- `PersonPopularityStore` TTL anwenden
+  - `isExpired(_:)` existiert, wird aber nicht genutzt; fehlende/stale Einträge sollten gezielt neu geladen werden.
+- `CloudKitDirtyJournal`
+  - Persistente Liste lokaler Dirty Records pro Domain/Gruppe.
+  - Key: `domain + groupId + recordId + operation + localVersion`.
+  - Invalidation: nach erfolgreichem CloudKit Save/Delete oder Remote-Delete-Konflikt.
+- `CloudKitTokenRecovery`
+  - Bei `CKError.changeTokenExpired`: Token löschen, Full Zone Fetch erzwingen, Dirty Journal danach re-applien.
+- `MovieNightPendingCountIndex`
+  - Count pro Gruppe inkrementell pflegen statt bei jedem Queue alle Pending-Dictionaries zu filtern.
+- `TMDbRequestLimiter`
+  - Bounded concurrency und optional Retry/Backoff für Cast-Migration, Popularity Preload, Detail Reloads.
+
+### 6.3 Vereinheitlichungen
+
+- **CloudKitRouting überall verwenden**
+  - Ersetzen in `CloudKitMovieNightStore+Routing.swift` und `MovieNightCloudSyncCoordinator.swift`.
+- **CloudKit Batch Writer abstrahieren**
+  - Gemeinsame Behandlung für chunks, partial failure, serverRecordChanged, rate limit, zone busy.
+- **Sync Meta Pattern vereinheitlichen**
+  - MovieStore, UserStore, MovieNightStore haben ähnliche Statusfelder. Gemeinsames `SyncStatusByGroup`-Modell reduziert UI-/Logik-Duplikate.
+- **Local Persistence Namespace vereinheitlichen**
+  - Ein `AppSupportPaths` für `FilmFreaks` statt parallele Groß-/Kleinschreibung.
+- **DI-Protokolle ausbauen**
+  - `GoalsCloudSyncing` ist gutes Beispiel. Ähnliches für Movie/Rating/MovieNight Cloud Stores erleichtert Tests.
+- **Activity Feed Modell klären**
+  - Movie/Rating Activity ist derived; MovieNight Activity ist persistiert. Dokumentation/Benennung sollte das explizit machen.
+- **Error Presentation zentralisieren**
+  - `print` -> `Logger` + user-visible status where relevant.
+
+## 7. Risiken & Edge Cases
+
+### 7.1 Datenverlust / Divergenz
+
+- In-memory Pending Queues können nach App-Kill verloren gehen.
+  - Betroffen: `MovieCloudSyncCoordinator.swift`, `MovieNightCloudSyncCoordinator.swift`, direkte `Task`-Writes in `UserStore+Mutations.swift`, `GoalsStore.swift`.
+  - Folge: lokale JSON-Daten können CloudKit nicht erreichen, wenn keine spätere Mutation sie erneut queued.
+- Public/Legacy Full Fetch kann lokale unsynced Änderungen eher überschreiben als Zone-Delta-Pfad.
+  - Betroffen: `MovieStore+CloudSync.swift`, `CloudKitMovieStore+Query.swift`.
+- MovieNight local decode Fehler -> `.empty()`.
+  - Folge: lokale Filmabenddaten wirken verschwunden, ohne Repair UI.
+- Goals remote empty wird nicht als leer angewendet.
+  - Folge: gelöschte oder leere Ziele bleiben lokal stale.
+
+### 7.2 Migrationen
+
+- `Movie.swift` hat Legacy-Cast-Decoding von `[String]` zu `[CastMember]` mit Legacy-IDs.
+- `ViewingCustomGoalsPayload` migriert Legacy-Versionen zu Version 3.
+- `CloudKitUserStore.swift` migriert `GroupMember` von name-basiertem RecordName zu `memberId`.
+- Risiken:
+  - Neue non-optional Felder in Codable-Modellen ohne Default brechen alte JSON-Dateien.
+  - CloudKit Schema kann Felder/Indexes erfordern; Dashboard-State ist **UNKNOWN**.
+  - `PersistenceManager` lässt alte UserDefaults-Keys bewusst stehen; Rollback-freundlich, aber stale Quellen bleiben.
+
+### 7.3 Multi-Device / Offline
+
+- Ratings pro Reviewer als eigener Record sind gut für Multi-User.
+- Movie payload conflict merge existiert in `CloudKitMovieStore+Merge.swift`.
+- Custom Goals als Einzelpayload pro Gruppe riskieren last-writer-wins-Verlust bei parallelen Änderungen.
+- MovieNight Merge basiert auf Timestamps; Clock skew zwischen Geräten kann Konflikte falsch entscheiden.
+- Activity capped auf 200; alte Aktivitäten verschwinden lokal/remote-semantisch je nach Merge. Erwartetes Retention-Verhalten ist **UNKNOWN**.
+
+### 7.4 CloudKit Share / Collaboration
+
+- Records in shared zones müssen Parent Root setzen.
+- Neue MovieNight writes tun das, aber Share-Hierarchy-Repair lässt MovieNight-Typen aus.
+- `CloudKitGroupStore.refresh()` repairt owned groups einmal per UserDefaults-Flag.
+- Wenn Repair-Liste später erweitert wird, alte `ff.ck.shareHierarchyRepair.v1.<group>` Flags könnten verhindern, dass neue Typen repariert werden.
+  - Refactor: Repair-Version erhöhen oder per record type eigene Repair-Flags.
+
+### 7.5 Security / Secrets
+
+- `filmfreaks/Secrets.xcconfig` enthält im ZIP einen Klartext-`TMDB_API_KEY`.
+- `TMDbAPI.swift` kommentiert korrekt, dass ein Client API Key nie wirklich geheim ist.
+- Trotzdem sollte der gefundene Key rotiert und `Secrets.xcconfig` aus getrackten Artefakten entfernt werden.
+- CloudKit Container/Bundle IDs sind keine Secrets.
+
+### 7.6 Build / Release
+
+- `IPHONEOS_DEPLOYMENT_TARGET = 26.0`; Absicht **UNKNOWN**.
+- Entitlements enthalten `aps-environment = development`; Release-Handling **UNKNOWN**.
+- `CloudKitActivityPushFetchCoordinator` ist DEBUG-only; Release-Verhalten **UNKNOWN**.
+- Kein SPM gefunden; externe Dependencies **UNKNOWN**, aber aus Projektstruktur nicht sichtbar.
+
+## 8. Observability / Debuggability
+
+### Ist-Zustand
+
+- `PersistenceManager.swift` nutzt `os.Logger` mit Subsystem `filmfreaks`, Category `Persistence`.
+- Viele CloudKit-Pfade nutzen `print`, z.B. `MovieStore+CloudSync.swift`, `CloudKitActivityPushFetchCoordinator.swift`, `UserStore+CloudRefresh.swift`.
+- User-visible Feedback:
+  - Toasts über `ToastCenter` / `ToastHost`.
+  - Sync status in Stores (`lastCloudSyncAt`, `lastCloudSyncError`, pending counts).
+- Tests existieren für:
+  - Cloud Routing und Token Store.
+  - Persistence und Fixtures.
+  - Content Snapshot Models.
+  - MovieNight Store/Merge/Retry/Roulette.
+  - Stats Snapshot/ViewModel.
+  - GoalsStore.
+
+### Lücken
+
+- Kein zentraler Sync Event Log sichtbar.
+- Keine strukturierte CloudKit Error-Kategorisierung pro Domain.
+- Keine Metric/Signpost für Snapshot-Build-Zeiten, CloudKit Batch-Größen, Queue-Laufzeiten.
+- Keine sichtbare Recovery-UI für corrupt local JSON oder token expired.
+- Push Debugging ist DEBUG-lastig; Release-Diagnose **UNKNOWN**.
+
+### Vorschläge
+
+- `SyncLogger` mit Kategorien:
+  - `sync.movie.refresh`
+  - `sync.movie.flush`
+  - `sync.rating.refresh`
+  - `sync.movienight.flush`
+  - `sync.group.share`
+  - `sync.token`
+- Pro Sync-Lauf strukturierte Felder:
+  - `groupIdHash`, `scope`, `zoneName`, `namespace`, `changedCount`, `deletedCount`, `pendingBefore`, `pendingAfter`, `durationMs`, `errorCode`.
+- Debug Screen unter Settings:
+  - aktive GroupContext-Daten
+  - pending counts pro Domain
+  - letzte Token-Zeit pro Namespace
+  - letzte CloudKit Errors
+  - lokale Datei-URLs/Größen ohne personenbezogene Payloads
+- Performance Signposts:
+  - `StatsSnapshotBuilder.computeSnapshot`
+  - `ContentMovieItemsSnapshotBuilder.build`
+  - `MovieStore.loadFromCloud apply`
+  - `MovieNightCloudSyncCoordinator.flushNow`
+- Repro Playbooks dokumentieren:
+  - Offline Add Movie -> App Kill -> Relaunch -> Cloud Check.
+  - Share Owner creates MovieNight before/after sharing -> Participant visibility.
+  - Token expired simulation -> recovery.
+  - Group switch during Cloud fetch -> no wrong apply.
+
+## 9. Open Questions
+
+- **UNKNOWN:** Ist iOS `26.0` als Deployment Target absichtlich?
+- **UNKNOWN:** Welche Rolle hat `TMC - The Movie Club.xcodeproj` neben `filmfreaks.xcodeproj`?
+- **UNKNOWN:** Ist `Secrets.xcconfig` im echten Repo getrackt oder nur im ZIP enthalten?
+- **UNKNOWN:** Welche CloudKit Schema-Felder und Query Indexes sind im Dashboard deployed?
+- **UNKNOWN:** Sind Legacy/public Gruppen noch aktiv unterstütztes Feature oder nur Migrationspfad?
+- **UNKNOWN:** Soll CloudKit Push-Fetch in Release aktiv sein?
+- **UNKNOWN:** Wie wird `aps-environment = development` beim Release-Export überschrieben?
+- **UNKNOWN:** Gewünschtes Konfliktmodell für Custom Goals bei paralleler Bearbeitung.
+- **UNKNOWN:** Gewünschtes Konfliktmodell für MovieNight Status/Response bei Clock Skew.
+- **UNKNOWN:** Soll Activity Retention fest 200 sein, oder CloudKit-/lokal unterschiedlich?
+- **UNKNOWN:** Soll `PersonPopularityStore` TTL wirklich ignorieren, sobald ein Record existiert?
+- **UNKNOWN:** Sind TMDb Rate Limits/Retry-Anforderungen produktseitig definiert?
+- **UNKNOWN:** Gibt es Datenschutzvorgaben für Logs, actor names, movie titles in Notifications?
+- **UNKNOWN:** Gibt es ein manuelles CloudKit Schema Migration/Deployment-Dokument?
+
+## 10. First 3 Refactors I would do (P0)
+
+### P0.1 Sync Safety Baseline: Routing, Dirty Journal, Token Recovery, Chunking
+
+- Ziel
+  - CloudKit-Sync gegen Datenverlust und falsches Routing absichern.
+  - Alle Domains sollen dieselben Regeln für Routing, Token-Recovery, Chunking und Pending-Durability nutzen.
+- Betroffene Dateien
+  - `filmfreaks/CloudKitRouting.swift`
+  - `filmfreaks/CloudKitZoneChanges.swift`
+  - `filmfreaks/CloudKitZoneChangeTokenStore.swift`
+  - `filmfreaks/MovieCloudSyncCoordinator.swift`
+  - `filmfreaks/MovieNights/MovieNightCloudSyncCoordinator.swift`
+  - `filmfreaks/CloudKitMovieNightStore/CloudKitMovieNightStore+Modify.swift`
+  - `filmfreaks/CloudKitMovieNightStore/CloudKitMovieNightStore+Routing.swift`
+  - `filmfreaks/CloudKitGroupStore/CloudKitGroupStore+Sharing.swift`
+- Risiko
+  - Mittel bis hoch: Core-Sync-Pfad, CloudKit edge cases, Migration vorhandener pending/local Daten.
+  - Muss mit Multi-Device, Offline, Share-Participant und Token-Expired-Szenarien getestet werden.
+- Erwarteter Effekt
+  - Weniger Risiko für Records im falschen Scope.
+  - Recovery bei `changeTokenExpired`.
+  - Keine verlorenen Upload-Absichten nach App-Kill.
+  - Stabilere MovieNight-Batches bei großen Änderungen.
+
+### P0.2 Group-Scoped Local Storage Cleanup
+
+- Ziel
+  - Lokale Daten strikt und konsistent pro Gruppe speichern und löschen.
+  - Cross-group Leakage und stale Goals verhindern.
+- Betroffene Dateien
+  - `filmfreaks/PersistenceManager.swift`
+  - `filmfreaks/MovieNights/MovieNightLocalPersistence.swift`
+  - `filmfreaks/Goals/GoalsStore.swift`
+  - `filmfreaks/CloudKitGoalStore.swift`
+  - `filmfreaks/MovieStore/MovieStore+Selections.swift`
+  - `filmfreaks/Users+Store/UserStore+Selection.swift`
+- Risiko
+  - Mittel: Pfad-/Key-Migration, alte UserDefaults und bestehende lokale JSON-Dateien müssen sauber übernommen werden.
+  - Besonderes Risiko bei Usern mit mehreren bestehenden Gruppen.
+- Erwarteter Effekt
+  - Keine falschen Jahresziele nach Gruppenwechsel.
+  - Einheitliche App-Support-Struktur.
+  - Gruppenlöschung/Leave kann lokale Caches vollständig und vorhersehbar entfernen.
+  - Bessere Grundlage für Backup/Debug Screen.
+
+### P0.3 Render-Hotpaths entkoppeln: GroupSettings, Roulette, ID-basierte Navigation
+
+- Ziel
+  - Teure Ableitungen und indexbasierte Bindings aus SwiftUI-Renderpfaden entfernen.
+  - Große Views in testbare ViewModels/Subviews splitten.
+- Betroffene Dateien
+  - `filmfreaks/Settings/GroupSettingsView.swift`
+  - `filmfreaks/Settings/GroupSettingsActiveCardSnapshot.swift`
+  - `filmfreaks/MovieNights/Roulette/MovieRouletteView.swift`
+  - `filmfreaks/MovieNights/Roulette/MovieRouletteViewModel.swift`
+  - `filmfreaks/Content/ContentMainAreaView.swift`
+  - `filmfreaks/Content/ContentMovieItemsModel.swift`
+  - `filmfreaks/Content/ContentMovieItemsSnapshotBuilder.swift`
+- Risiko
+  - Niedrig bis mittel: UI-Verhalten muss gleich bleiben; Snapshot-Timing und Navigation-Bindings brauchen Tests.
+  - Achtung bei Delete/Reorder/Group-Switch, weil aktuelle Guard-Logik stale indices abfängt.
+- Erwarteter Effekt
+  - Weniger exzessive View invalidation.
+  - Bessere Scroll-/Sheet-Performance bei großen Backlogs.
+  - Weniger Crash-/Wrong-Binding-Risiko durch ID-basierte Navigation.
+  - Kleinere, wartbarere Feature-Dateien.
