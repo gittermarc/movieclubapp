@@ -35,6 +35,7 @@ final class MovieCloudSyncCoordinator {
     private let pendingCountDidChange: (_ count: Int, _ groupId: String?) -> Void
     private let batchDidSucceed: (_ groupId: String?) -> Void
     private let batchDidFail: (_ error: Error, _ groupId: String?) -> Void
+    private let dirtyJournal: MovieCloudDirtyJournal
 
     private let debounceNanoseconds: UInt64
     private var pendingSaves: [UUID: PendingSave] = [:]
@@ -51,7 +52,8 @@ final class MovieCloudSyncCoordinator {
         networkIsAvailable: @escaping () -> Bool,
         pendingCountDidChange: @escaping (_ count: Int, _ groupId: String?) -> Void,
         batchDidSucceed: @escaping (_ groupId: String?) -> Void,
-        batchDidFail: @escaping (_ error: Error, _ groupId: String?) -> Void
+        batchDidFail: @escaping (_ error: Error, _ groupId: String?) -> Void,
+        dirtyJournal: MovieCloudDirtyJournal = .shared
     ) {
         self.cloudStore = cloudStore
         self.groupIdProvider = groupIdProvider
@@ -61,23 +63,85 @@ final class MovieCloudSyncCoordinator {
         self.pendingCountDidChange = pendingCountDidChange
         self.batchDidSucceed = batchDidSucceed
         self.batchDidFail = batchDidFail
+        self.dirtyJournal = dirtyJournal
 
         let ns = max(0.05, debounce) * 1_000_000_000
         self.debounceNanoseconds = UInt64(ns)
     }
 
     func queueSave(movie: Movie, isBacklog: Bool) {
-        pendingSaves[movie.id] = PendingSave(movie: movie, isBacklog: isBacklog, token: UUID())
+        let groupId = groupIdProvider()
+        let token = UUID()
+        dirtyJournal.recordSave(movie: movie, isBacklog: isBacklog, groupId: groupId, token: token)
+        pendingSaves[movie.id] = PendingSave(movie: movie, isBacklog: isBacklog, token: token)
         pendingDeletes.removeValue(forKey: movie.id)
         publishPendingCount()
         scheduleFlush()
     }
 
     func queueDelete(movieID: UUID) {
+        let groupId = groupIdProvider()
+        let token = UUID()
+        dirtyJournal.recordDelete(movieID: movieID, groupId: groupId, token: token)
         pendingSaves.removeValue(forKey: movieID)
-        pendingDeletes[movieID] = PendingDelete(token: UUID())
+        pendingDeletes[movieID] = PendingDelete(token: token)
         publishPendingCount()
         scheduleFlush()
+    }
+
+    func restorePendingChangesFromJournal(watchedMovies: [Movie], backlogMovies: [Movie]) {
+        scheduledFlush?.cancel()
+        scheduledFlush = nil
+        pendingSaves.removeAll()
+        pendingDeletes.removeAll()
+
+        let groupId = groupIdProvider()
+        let entries = dirtyJournal.entries(groupId: groupId)
+
+        var watchedByID: [UUID: Movie] = [:]
+        watchedByID.reserveCapacity(watchedMovies.count)
+        for movie in watchedMovies {
+            watchedByID[movie.id] = movie
+        }
+
+        var backlogByID: [UUID: Movie] = [:]
+        backlogByID.reserveCapacity(backlogMovies.count)
+        for movie in backlogMovies {
+            backlogByID[movie.id] = movie
+        }
+
+        for entry in entries {
+            switch entry.operation {
+            case .save:
+                let resolvedMovie = entry.movie ?? watchedByID[entry.movieId] ?? backlogByID[entry.movieId]
+                let resolvedIsBacklog: Bool = {
+                    if let isBacklog = entry.isBacklog {
+                        return isBacklog
+                    }
+
+                    return backlogByID[entry.movieId] != nil
+                }()
+
+                guard let resolvedMovie else { continue }
+
+                pendingSaves[entry.movieId] = PendingSave(
+                    movie: resolvedMovie,
+                    isBacklog: resolvedIsBacklog,
+                    token: entry.token
+                )
+                pendingDeletes.removeValue(forKey: entry.movieId)
+
+            case .delete:
+                pendingSaves.removeValue(forKey: entry.movieId)
+                pendingDeletes[entry.movieId] = PendingDelete(token: entry.token)
+            }
+        }
+
+        publishPendingCount()
+
+        if !pendingSaves.isEmpty || !pendingDeletes.isEmpty {
+            scheduleFlush()
+        }
     }
 
     /// Useful for "I just did a bulk change, please push now" moments.
@@ -123,11 +187,13 @@ final class MovieCloudSyncCoordinator {
             for (id, sent) in savesSnapshot {
                 if let current = pendingSaves[id], current.token == sent.token {
                     pendingSaves.removeValue(forKey: id)
+                    dirtyJournal.remove(movieID: id, matchingToken: sent.token, groupId: groupId)
                 }
             }
             for (id, sent) in deletesSnapshot {
                 if let current = pendingDeletes[id], current.token == sent.token {
                     pendingDeletes.removeValue(forKey: id)
+                    dirtyJournal.remove(movieID: id, matchingToken: sent.token, groupId: groupId)
                 }
             }
 

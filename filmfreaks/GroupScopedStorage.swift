@@ -81,6 +81,14 @@ enum GroupScopedStorage {
             .appendingPathComponent(fileName)
     }
 
+    static func movieCloudDirtyJournalURL(root: URL, groupId: String?) -> URL {
+        groupJSONFileURL(
+            root: root,
+            groupId: groupId,
+            fileName: "movie_cloud_dirty_journal.json"
+        )
+    }
+
     static func legacyMovieNightRootURL(
         baseDirectory: URL? = nil,
         fileManager: FileManager = .default

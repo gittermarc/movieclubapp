@@ -34,6 +34,7 @@ internal extension MovieStore {
 
         // Load initial sync meta (now that we have currentGroupId).
         loadSyncMetaForCurrentGroup()
+        restorePendingMovieCloudWritesForCurrentGroup()
 
         Task { await self.loadFromCloud() }
     }
@@ -93,6 +94,13 @@ internal extension MovieStore {
     /// Useful when the device just came back online.
     func flushPendingCloudChanges() {
         cloudSyncCoordinator?.flushImmediately()
+    }
+
+    func restorePendingMovieCloudWritesForCurrentGroup() {
+        cloudSyncCoordinator?.restorePendingChangesFromJournal(
+            watchedMovies: movies,
+            backlogMovies: backlogMovies
+        )
     }
 
     // MARK: - Cloud Laden

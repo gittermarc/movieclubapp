@@ -120,6 +120,7 @@ private extension MovieStore {
         movies = PersistenceManager.shared.loadMovies(groupId: groupId)
         backlogMovies = PersistenceManager.shared.loadBacklogMovies(groupId: groupId)
         isApplyingCloudUpdate = false
+        restorePendingMovieCloudWritesForCurrentGroup()
     }
 
 }
