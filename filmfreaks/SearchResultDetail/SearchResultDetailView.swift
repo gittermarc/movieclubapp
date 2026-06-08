@@ -17,6 +17,8 @@ struct SearchResultDetailView: View {
     // Neue Zustände: Ist der Film schon in einer Liste?
     @State var isInWatched: Bool
     @State var isInBacklog: Bool
+    @State var localWatchedMovies: [Movie]
+    @State var localBacklogMovies: [Movie]
 
     @Environment(\.dismiss) private var dismiss
 
@@ -35,9 +37,14 @@ struct SearchResultDetailView: View {
     // ✅ Trailer Fallback: In-App (SFSafariViewController)
     @State var isTrailerSafariShown = false
 
+    // Detail-Recommendations / Filmreihen
+    @State var metadataDetailResult: TMDbMovieResult?
+
     // Custom init, damit wir den Status von außen übergeben können
     init(
         result: TMDbMovieResult,
+        existingWatched: [Movie] = [],
+        existingBacklog: [Movie] = [],
         isInitiallyInWatched: Bool,
         isInitiallyInBacklog: Bool,
         onAddToWatched: @escaping (Movie) -> Void,
@@ -48,6 +55,8 @@ struct SearchResultDetailView: View {
         self.onAddToBacklog = onAddToBacklog
         _isInWatched = State(initialValue: isInitiallyInWatched)
         _isInBacklog = State(initialValue: isInitiallyInBacklog)
+        _localWatchedMovies = State(initialValue: existingWatched)
+        _localBacklogMovies = State(initialValue: existingBacklog)
     }
 
     // MARK: - Body
@@ -158,6 +167,22 @@ struct SearchResultDetailView: View {
                         }
                     }
 
+                    if let collectionPresentation {
+                        MovieCollectionSectionView(
+                            presentation: collectionPresentation,
+                            onOpenDetail: openMetadataDetail,
+                            onAddToBacklog: addMetadataResultToBacklog
+                        )
+                    }
+
+                    if let recommendationsPresentation {
+                        MovieRecommendationsSectionView(
+                            presentation: recommendationsPresentation,
+                            onOpenDetail: openMetadataDetail,
+                            onAddToBacklog: addMetadataResultToBacklog
+                        )
+                    }
+
                     // ✅ Am Ende behalten: „Zu deiner Liste hinzufügen“
                     SearchResultDetailAddToListSectionView(
                         isInWatched: $isInWatched,
@@ -204,6 +229,29 @@ struct SearchResultDetailView: View {
                 WatchProvidersRegionPickerView()
             }
         }
+        .sheet(item: $metadataDetailResult) { result in
+            NavigationStack {
+                SearchResultDetailView(
+                    result: result,
+                    existingWatched: localWatchedMovies,
+                    existingBacklog: localBacklogMovies,
+                    isInitiallyInWatched: MovieMetadataMembershipResolver.containsMovie(
+                        tmdbId: result.id,
+                        title: result.title,
+                        year: MovieMetadataMembershipResolver.year(from: result.release_date),
+                        in: localWatchedMovies
+                    ),
+                    isInitiallyInBacklog: MovieMetadataMembershipResolver.containsMovie(
+                        tmdbId: result.id,
+                        title: result.title,
+                        year: MovieMetadataMembershipResolver.year(from: result.release_date),
+                        in: localBacklogMovies
+                    ),
+                    onAddToWatched: addMetadataMovieToWatched,
+                    onAddToBacklog: addMetadataMovieToBacklog
+                )
+            }
+        }
         .onAppear {
             if loadCoordinator.details == nil {
                 Task { await loadDetails() }
@@ -211,6 +259,7 @@ struct SearchResultDetailView: View {
         }
         .onChange(of: result.id) { _, _ in
             isOverviewExpanded = false
+            metadataDetailResult = nil
             Task { await loadDetails() }
         }
         .onChange(of: watchProvidersRegionCode) { _, _ in

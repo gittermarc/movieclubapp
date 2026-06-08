@@ -178,6 +178,25 @@ extension SearchResultDetailView {
         return URL(string: "https://www.youtube.com/watch?v=\(key)")
     }
 
+    var collectionPresentation: MovieCollectionPresentation? {
+        MovieCollectionPresentation.make(
+            collectionDetails: loadCoordinator.collectionDetails,
+            currentTMDbId: result.id,
+            watchedMovies: localWatchedMovies,
+            backlogMovies: localBacklogMovies
+        )
+    }
+
+    var recommendationsPresentation: MovieRecommendationsPresentation? {
+        MovieRecommendationsPresentation.make(
+            recommendations: loadCoordinator.recommendations,
+            source: loadCoordinator.recommendationsSource,
+            currentTMDbId: result.id,
+            watchedMovies: localWatchedMovies,
+            backlogMovies: localBacklogMovies
+        )
+    }
+
     // MARK: - Helper
 
     var posterURL: URL? {

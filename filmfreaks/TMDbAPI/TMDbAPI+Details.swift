@@ -19,6 +19,17 @@ nonisolated extension TMDbAPI {
         return try await requestJSON(path: "movie/\(id)", queryItems: items, type: TMDbMovieDetails.self)
     }
 
+    // MARK: - Collection Details
+
+    func fetchCollectionDetails(id: Int) async throws -> TMDbCollectionDetails {
+        let items: [URLQueryItem] = [
+            try apiKeyQueryItem(),
+            URLQueryItem(name: "language", value: "de-DE")
+        ]
+
+        return try await requestJSON(path: "collection/\(id)", queryItems: items, type: TMDbCollectionDetails.self)
+    }
+
     // MARK: - Credits-only (kleiner, ideal für Migration)
 
     func fetchMovieCredits(id: Int) async throws -> TMDbCredits {

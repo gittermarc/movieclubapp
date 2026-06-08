@@ -50,7 +50,8 @@ nonisolated enum MovieMetadataTestFixtures {
         status: String? = "Released",
         homepage: String? = "https://example.com/arrival",
         budget: Int? = 47_000_000,
-        revenue: Int? = 203_000_000
+        revenue: Int? = 203_000_000,
+        belongsToCollection: TMDbCollectionSummary? = nil
     ) -> TMDbMovieDetails {
         TMDbMovieDetails(
             id: id,
@@ -68,7 +69,7 @@ nonisolated enum MovieMetadataTestFixtures {
             videos: TMDbVideosResponse(results: []),
             genres: genres,
             backdrop_path: backdropPath,
-            belongs_to_collection: nil,
+            belongs_to_collection: belongsToCollection,
             images: images,
             release_dates: releaseDates,
             external_ids: TMDbExternalIDs(
@@ -85,6 +86,74 @@ nonisolated enum MovieMetadataTestFixtures {
             homepage: homepage,
             budget: budget,
             revenue: revenue
+        )
+    }
+
+    static func makeCollectionSummary(id: Int = 900, name: String = "Arrival Collection") -> TMDbCollectionSummary {
+        TMDbCollectionSummary(
+            id: id,
+            name: name,
+            poster_path: "/collection-poster.jpg",
+            backdrop_path: "/collection-backdrop.jpg"
+        )
+    }
+
+    static func makeCollectionDetails(
+        id: Int = 900,
+        name: String = "Arrival Collection",
+        parts: [TMDbCollectionPart] = [
+            TMDbCollectionPart(
+                id: 41,
+                title: "Before Arrival",
+                release_date: "2014-01-01",
+                poster_path: "/before.jpg",
+                backdrop_path: "/before-backdrop.jpg",
+                vote_average: 7.0
+            ),
+            TMDbCollectionPart(
+                id: 42,
+                title: "Arrival",
+                release_date: "2016-11-10",
+                poster_path: "/arrival.jpg",
+                backdrop_path: "/arrival-backdrop.jpg",
+                vote_average: 8.4
+            )
+        ]
+    ) -> TMDbCollectionDetails {
+        TMDbCollectionDetails(
+            id: id,
+            name: name,
+            overview: "A compact test collection.",
+            poster_path: "/collection-poster.jpg",
+            backdrop_path: "/collection-backdrop.jpg",
+            parts: parts
+        )
+    }
+
+    static func makeMovieResult(
+        id: Int = 70,
+        title: String = "Fresh",
+        releaseDate: String? = "2017-01-01",
+        voteAverage: Double = 7.3,
+        posterPath: String? = "/fresh.jpg",
+        backdropPath: String? = "/fresh-backdrop.jpg"
+    ) -> TMDbMovieResult {
+        TMDbMovieResult(
+            id: id,
+            title: title,
+            release_date: releaseDate,
+            vote_average: voteAverage,
+            poster_path: posterPath,
+            backdrop_path: backdropPath
+        )
+    }
+
+    static func makeSearchResponse(results: [TMDbMovieResult]) -> TMDbSearchResponse {
+        TMDbSearchResponse(
+            page: 1,
+            results: results,
+            total_pages: 1,
+            total_results: results.count
         )
     }
 
@@ -111,6 +180,9 @@ actor MovieMetadataRepositoryProbe {
     private var detailCallCount = 0
     private var providerCallCount = 0
     private var providerRegions: [String?] = []
+    private var collectionIDs: [Int] = []
+    private var recommendationCallCount = 0
+    private var similarCallCount = 0
 
     func recordDetails() {
         detailCallCount += 1
@@ -119,6 +191,18 @@ actor MovieMetadataRepositoryProbe {
     func recordProvider(region: String?) {
         providerCallCount += 1
         providerRegions.append(region)
+    }
+
+    func recordCollection(id: Int) {
+        collectionIDs.append(id)
+    }
+
+    func recordRecommendations() {
+        recommendationCallCount += 1
+    }
+
+    func recordSimilar() {
+        similarCallCount += 1
     }
 
     func detailsCount() -> Int {
@@ -131,5 +215,17 @@ actor MovieMetadataRepositoryProbe {
 
     func regions() -> [String?] {
         providerRegions
+    }
+
+    func collections() -> [Int] {
+        collectionIDs
+    }
+
+    func recommendationsCount() -> Int {
+        recommendationCallCount
+    }
+
+    func similarCount() -> Int {
+        similarCallCount
     }
 }

@@ -108,6 +108,56 @@ nonisolated struct TMDbCollectionSummary: Decodable, Equatable, Sendable {
     let backdrop_path: String?
 }
 
+nonisolated struct TMDbCollectionDetails: Decodable, Identifiable, Equatable, Sendable {
+    let id: Int
+    let name: String
+    let overview: String?
+    let poster_path: String?
+    let backdrop_path: String?
+    let parts: [TMDbCollectionPart]
+
+    init(
+        id: Int,
+        name: String,
+        overview: String? = nil,
+        poster_path: String? = nil,
+        backdrop_path: String? = nil,
+        parts: [TMDbCollectionPart]
+    ) {
+        self.id = id
+        self.name = name
+        self.overview = overview
+        self.poster_path = poster_path
+        self.backdrop_path = backdrop_path
+        self.parts = parts
+    }
+}
+
+nonisolated struct TMDbCollectionPart: Decodable, Identifiable, Equatable, Sendable {
+    let id: Int
+    let title: String
+    let release_date: String?
+    let poster_path: String?
+    let backdrop_path: String?
+    let vote_average: Double
+
+    init(
+        id: Int,
+        title: String,
+        release_date: String? = nil,
+        poster_path: String? = nil,
+        backdrop_path: String? = nil,
+        vote_average: Double = 0
+    ) {
+        self.id = id
+        self.title = title
+        self.release_date = release_date
+        self.poster_path = poster_path
+        self.backdrop_path = backdrop_path
+        self.vote_average = vote_average
+    }
+}
+
 nonisolated struct TMDbImage: Decodable, Hashable, Sendable {
     let aspect_ratio: Double?
     let height: Int?

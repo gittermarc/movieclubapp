@@ -63,6 +63,9 @@ struct MovieDetailView: View {
     // Trailer Fallback: In-App (SFSafariViewController)
     @State var isTrailerSafariShown = false
 
+    // Detail-Recommendations / Filmreihen
+    @State var metadataDetailResult: TMDbMovieResult?
+
     // Save-Toast
     @State var showSaveToast = false
     @State var saveToastText = "Bewertung gespeichert"
@@ -192,6 +195,22 @@ struct MovieDetailView: View {
                         }
                     }
 
+                    if let collectionPresentation {
+                        MovieCollectionSectionView(
+                            presentation: collectionPresentation,
+                            onOpenDetail: openMetadataDetail,
+                            onAddToBacklog: addMetadataResultToBacklog
+                        )
+                    }
+
+                    if let recommendationsPresentation {
+                        MovieRecommendationsSectionView(
+                            presentation: recommendationsPresentation,
+                            onOpenDetail: openMetadataDetail,
+                            onAddToBacklog: addMetadataResultToBacklog
+                        )
+                    }
+
                     // Bewertungen (Sheet)
                     MovieDetailRatingsTeaserCardView(
                         averageRating: movie.averageRating,
@@ -250,6 +269,29 @@ struct MovieDetailView: View {
         .sheet(isPresented: $showWatchProvidersRegionPicker) {
             NavigationStack {
                 WatchProvidersRegionPickerView()
+            }
+        }
+        .sheet(item: $metadataDetailResult) { result in
+            NavigationStack {
+                SearchResultDetailView(
+                    result: result,
+                    existingWatched: movieStore.movies,
+                    existingBacklog: movieStore.backlogMovies,
+                    isInitiallyInWatched: MovieMetadataMembershipResolver.containsMovie(
+                        tmdbId: result.id,
+                        title: result.title,
+                        year: MovieMetadataMembershipResolver.year(from: result.release_date),
+                        in: movieStore.movies
+                    ),
+                    isInitiallyInBacklog: MovieMetadataMembershipResolver.containsMovie(
+                        tmdbId: result.id,
+                        title: result.title,
+                        year: MovieMetadataMembershipResolver.year(from: result.release_date),
+                        in: movieStore.backlogMovies
+                    ),
+                    onAddToWatched: addMetadataMovieToWatched,
+                    onAddToBacklog: addMetadataMovieToBacklog
+                )
             }
         }
         .sheet(isPresented: $showRatingsSheet) {

@@ -34,6 +34,10 @@ final class MovieMetadataLoadCoordinator: ObservableObject {
     @Published private(set) var isLoadingWatchProviders = false
     @Published private(set) var didLoadWatchProviders = false
 
+    @Published private(set) var collectionDetails: TMDbCollectionDetails?
+    @Published private(set) var recommendations: [TMDbMovieResult] = []
+    @Published private(set) var recommendationsSource: MovieMetadataRecommendationSource?
+
     private let dependencies: Dependencies
     private(set) var lastLoadedMovieID: Int?
     private(set) var lastLoadedWatchProvidersRegionCode: String?
@@ -68,6 +72,9 @@ final class MovieMetadataLoadCoordinator: ObservableObject {
             applyFullLoadSuccess(
                 details: response.details,
                 providersCountry: response.watchProvidersCountry,
+                collectionDetails: response.collectionDetails,
+                recommendations: response.recommendations,
+                recommendationsSource: response.recommendationsSource,
                 movieId: movieID,
                 effectiveRegionCode: effectiveRegionCode
             )
@@ -116,6 +123,9 @@ final class MovieMetadataLoadCoordinator: ObservableObject {
 
     private func beginFullLoad() {
         details = nil
+        collectionDetails = nil
+        recommendations = []
+        recommendationsSource = nil
         isLoadingDetails = true
         detailsError = nil
         beginWatchProvidersReload()
@@ -131,10 +141,16 @@ final class MovieMetadataLoadCoordinator: ObservableObject {
     private func applyFullLoadSuccess(
         details: TMDbMovieDetails,
         providersCountry: TMDbWatchProvidersCountry?,
+        collectionDetails: TMDbCollectionDetails?,
+        recommendations: [TMDbMovieResult],
+        recommendationsSource: MovieMetadataRecommendationSource?,
         movieId: Int,
         effectiveRegionCode: String
     ) {
         self.details = details
+        self.collectionDetails = collectionDetails
+        self.recommendations = recommendations
+        self.recommendationsSource = recommendationsSource
         applyWatchProvidersSuccess(
             providersCountry: providersCountry,
             movieId: movieId,
@@ -144,6 +160,9 @@ final class MovieMetadataLoadCoordinator: ObservableObject {
     }
 
     private func applyFullLoadFailure(errorMessage: String) {
+        collectionDetails = nil
+        recommendations = []
+        recommendationsSource = nil
         detailsError = errorMessage
         isLoadingDetails = false
         applyWatchProvidersFailure()

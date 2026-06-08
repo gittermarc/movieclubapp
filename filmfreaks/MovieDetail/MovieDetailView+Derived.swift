@@ -136,6 +136,25 @@ extension MovieDetailView {
         )
     }
 
+    var collectionPresentation: MovieCollectionPresentation? {
+        MovieCollectionPresentation.make(
+            collectionDetails: loadCoordinator.collectionDetails,
+            currentTMDbId: movie.tmdbId,
+            watchedMovies: movieStore.movies,
+            backlogMovies: movieStore.backlogMovies
+        )
+    }
+
+    var recommendationsPresentation: MovieRecommendationsPresentation? {
+        MovieRecommendationsPresentation.make(
+            recommendations: loadCoordinator.recommendations,
+            source: loadCoordinator.recommendationsSource,
+            currentTMDbId: movie.tmdbId,
+            watchedMovies: movieStore.movies,
+            backlogMovies: movieStore.backlogMovies
+        )
+    }
+
     // MARK: - Bewertungen (Übersicht)
 
     var sortedRatings: [Rating] {

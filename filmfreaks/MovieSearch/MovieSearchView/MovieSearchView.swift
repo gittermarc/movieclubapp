@@ -153,13 +153,15 @@ struct MovieSearchView: View {
 
                 SearchResultDetailView(
                     result: result,
+                    existingWatched: existingWatched,
+                    existingBacklog: existingBacklog,
                     isInitiallyInWatched: isWatched,
                     isInitiallyInBacklog: isBacklog,
                     onAddToWatched: { movie in
-                        handleDetailAddToWatched(movie, key: key)
+                        handleDetailAddToWatched(movie, key: MovieSearchMapper.key(for: movie))
                     },
                     onAddToBacklog: { movie in
-                        handleDetailAddToBacklog(movie, key: key)
+                        handleDetailAddToBacklog(movie, key: MovieSearchMapper.key(for: movie))
                     }
                 )
             }
