@@ -216,33 +216,21 @@ internal extension MovieStore {
                         let changedTotal = changes.changedByMovieId.values.reduce(0) { $0 + $1.count }
                         print("CloudKit: zone changes ratings → changed: \(changedTotal), deleted: \(changes.deletedKeys.count), initial: \(changes.isInitial)")
 
-                        watched = watched.map { m in
-                            var copy = m
-                            if let incoming = changes.changedByMovieId[copy.id] {
-                                copy.ratings = mergeRatings(existing: copy.ratings, incoming: incoming)
-                            }
-                            if !changes.deletedKeys.isEmpty {
-                                let delKeys = changes.deletedKeys.filter { $0.movieId == copy.id }.map { $0.reviewerKey }
-                                if !delKeys.isEmpty {
-                                    let delSet = Set(delKeys)
-                                    copy.ratings.removeAll { delSet.contains(reviewerKey($0)) }
-                                }
-                            }
-                            return copy
+                        let deletedRatingIndex = RatingDeleteKeyIndex(deletedKeys: changes.deletedKeys)
+
+                        watched = watched.map { movie in
+                            applyRatingChanges(
+                                to: movie,
+                                changedByMovieId: changes.changedByMovieId,
+                                deletedRatingIndex: deletedRatingIndex
+                            )
                         }
-                        backlog = backlog.map { m in
-                            var copy = m
-                            if let incoming = changes.changedByMovieId[copy.id] {
-                                copy.ratings = mergeRatings(existing: copy.ratings, incoming: incoming)
-                            }
-                            if !changes.deletedKeys.isEmpty {
-                                let delKeys = changes.deletedKeys.filter { $0.movieId == copy.id }.map { $0.reviewerKey }
-                                if !delKeys.isEmpty {
-                                    let delSet = Set(delKeys)
-                                    copy.ratings.removeAll { delSet.contains(reviewerKey($0)) }
-                                }
-                            }
-                            return copy
+                        backlog = backlog.map { movie in
+                            applyRatingChanges(
+                                to: movie,
+                                changedByMovieId: changes.changedByMovieId,
+                                deletedRatingIndex: deletedRatingIndex
+                            )
                         }
 
                     } else {
@@ -331,6 +319,28 @@ internal extension MovieStore {
         for movie in changedMovies {
             coordinator.queueSave(movie: movie, isBacklog: isBacklog)
         }
+    }
+
+    func applyRatingChanges(
+        to movie: Movie,
+        changedByMovieId: [UUID: [Rating]],
+        deletedRatingIndex: RatingDeleteKeyIndex
+    ) -> Movie {
+        var copy = movie
+
+        if let incoming = changedByMovieId[copy.id] {
+            copy.ratings = mergeRatings(existing: copy.ratings, incoming: incoming)
+        }
+
+        if !deletedRatingIndex.isEmpty {
+            copy.ratings = deletedRatingIndex.removingDeletedRatings(
+                from: copy.ratings,
+                movieId: copy.id,
+                reviewerKey: reviewerKey
+            )
+        }
+
+        return copy
     }
 }
 
