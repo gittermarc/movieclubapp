@@ -150,7 +150,7 @@ nonisolated struct ContentMovieItemsInputSignature: Equatable {
     }
 }
 
-private struct ContentMovieItemsMovieSignature: Equatable {
+nonisolated private struct ContentMovieItemsMovieSignature: Equatable {
     let id: UUID
     let title: String
     let year: String
@@ -182,7 +182,7 @@ private struct ContentMovieItemsMovieSignature: Equatable {
     }
 }
 
-private struct ContentMovieItemsRatingSignature: Equatable {
+nonisolated private struct ContentMovieItemsRatingSignature: Equatable {
     let reviewerId: UUID?
     let reviewerName: String
     let scores: [RatingCriterion: Int]
@@ -196,7 +196,7 @@ private struct ContentMovieItemsRatingSignature: Equatable {
     }
 }
 
-private struct ContentMovieItemsPersonSignature: Equatable {
+nonisolated private struct ContentMovieItemsPersonSignature: Equatable {
     let personId: Int
     let name: String
 

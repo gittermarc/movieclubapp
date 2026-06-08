@@ -69,7 +69,7 @@ struct GroupSettingsActiveCardSnapshotInputSignature: Equatable {
     }
 }
 
-private struct UserSignature: Equatable {
+nonisolated private struct UserSignature: Equatable {
     let id: UUID
     let name: String
 
@@ -79,7 +79,7 @@ private struct UserSignature: Equatable {
     }
 }
 
-private struct MovieEventSignature: Equatable {
+nonisolated private struct MovieEventSignature: Equatable {
     let id: String
     let date: Date
     let actorName: String?
@@ -99,7 +99,7 @@ private struct MovieEventSignature: Equatable {
     }
 }
 
-private struct MovieNightEventSignature: Equatable {
+nonisolated private struct MovieNightEventSignature: Equatable {
     let id: UUID
     let groupId: String
     let kind: MovieNightActivityEvent.Kind
@@ -119,7 +119,7 @@ private struct MovieNightEventSignature: Equatable {
     }
 }
 
-private struct MoviePosterSignature: Equatable {
+nonisolated private struct MoviePosterSignature: Equatable {
     let id: UUID
     let posterPath: String?
 

@@ -28,7 +28,7 @@ nonisolated struct MovieRouletteBacklogIndex {
             Self.isMovie(movie, visibleIn: activeGroupId)
         }
         let moviesById = eligibleMovies.reduce(into: [UUID: Movie]()) { result, movie in
-            if result[movie.id] == nil {
+            if result.keys.contains(movie.id) == false {
                 result[movie.id] = movie
             }
         }
