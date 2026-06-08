@@ -5,7 +5,7 @@
 
 import Foundation
 
-extension TMDbAPI {
+nonisolated extension TMDbAPI {
 
     // MARK: - Film-Details (groß, inkl. credits/keywords/videos)
 

@@ -5,7 +5,7 @@
 
 import Foundation
 
-extension TMDbAPI {
+nonisolated extension TMDbAPI {
 
     // MARK: - Watch Providers (Streaming-Anbieter)
 

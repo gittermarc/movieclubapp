@@ -7,7 +7,7 @@
 
 import Foundation
 
-enum GroupScopedStorage {
+nonisolated enum GroupScopedStorage {
     static let appSupportFolderName = "FilmFreaks"
     static let legacyMovieNightFolderName = "filmfreaks"
     static let groupsFolderName = "groups"

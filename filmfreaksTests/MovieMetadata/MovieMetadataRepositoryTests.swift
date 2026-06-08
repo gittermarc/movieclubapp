@@ -23,13 +23,15 @@ struct MovieMetadataRepositoryTests {
             for: 42,
             profile: .detailPage(regionCode: "de")
         )
+        let responseDetailsID = response.details.id
+        let responseProviderLink = response.watchProvidersCountry?.link
 
-        #expect(response.details.id == 42)
         let detailCalls = await probe.detailsCount()
         let providerCalls = await probe.providersCount()
         let regions = await probe.regions()
 
-        #expect(response.watchProvidersCountry?.link == "https://example.com/DE")
+        #expect(responseDetailsID == 42)
+        #expect(responseProviderLink == "https://example.com/DE")
         #expect(detailCalls == 1)
         #expect(providerCalls == 1)
         #expect(regions == [Optional("DE")])
@@ -51,12 +53,14 @@ struct MovieMetadataRepositoryTests {
         )
 
         let response = try await repository.metadata(for: 42, profile: .quickAdd)
+        let responseDetailsID = response.details.id
+        let hasWatchProviders = response.watchProvidersCountry != nil
 
-        #expect(response.details.id == 42)
         let detailCalls = await probe.detailsCount()
         let providerCalls = await probe.providersCount()
 
-        #expect(response.watchProvidersCountry == nil)
+        #expect(responseDetailsID == 42)
+        #expect(!hasWatchProviders)
         #expect(detailCalls == 1)
         #expect(providerCalls == 0)
     }
@@ -83,11 +87,13 @@ struct MovieMetadataRepositoryTests {
 
         let firstResponse = try await first
         let secondResponse = try await second
+        let firstDetailsID = firstResponse.details.id
+        let secondDetailsID = secondResponse.details.id
 
         let detailCalls = await probe.detailsCount()
         let providerCalls = await probe.providersCount()
 
-        #expect(firstResponse.details.id == secondResponse.details.id)
+        #expect(firstDetailsID == secondDetailsID)
         #expect(detailCalls == 1)
         #expect(providerCalls == 1)
     }

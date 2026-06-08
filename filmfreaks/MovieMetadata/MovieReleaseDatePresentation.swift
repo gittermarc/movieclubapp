@@ -5,7 +5,7 @@
 
 import Foundation
 
-enum MovieReleaseDatePresentation {
+nonisolated enum MovieReleaseDatePresentation {
     static func preferredReleaseDateText(
         releaseDates: TMDbReleaseDatesResponse?,
         regionCode: String,

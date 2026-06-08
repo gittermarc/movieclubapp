@@ -16,6 +16,8 @@ struct MovieMetadataHeroHeaderView: View {
     let runtimeText: String?
     let certificationText: String?
 
+    private let heroHeight: CGFloat = 320
+
     private var backgroundURL: URL? {
         backdropURL ?? posterFallbackBackgroundURL
     }
@@ -25,9 +27,21 @@ struct MovieMetadataHeroHeaderView: View {
     }
 
     var body: some View {
-        ZStack(alignment: .bottomLeading) {
+        GeometryReader { proxy in
+            heroContent(width: max(proxy.size.width, 1))
+        }
+        .frame(height: heroHeight)
+        .frame(maxWidth: .infinity)
+    }
+
+    private func heroContent(width: CGFloat) -> some View {
+        let posterWidth = min(120, max(96, width * 0.32))
+        let posterHeight = posterWidth * 1.5
+        let textColumnWidth = max(92, width - posterWidth - 46)
+
+        return ZStack(alignment: .bottomLeading) {
             backgroundImage
-                .frame(height: 320)
+                .frame(width: width, height: heroHeight)
                 .clipped()
                 .blur(radius: usesPosterFallbackBackground ? 14 : 0)
                 .overlay(backgroundGradient)
@@ -35,7 +49,7 @@ struct MovieMetadataHeroHeaderView: View {
 
             HStack(alignment: .bottom, spacing: 14) {
                 poster
-                    .frame(width: 120, height: 180)
+                    .frame(width: posterWidth, height: posterHeight)
                     .clipShape(RoundedRectangle(cornerRadius: 14))
                     .shadow(color: Color.black.opacity(0.25), radius: 10, x: 0, y: 6)
 
@@ -71,11 +85,14 @@ struct MovieMetadataHeroHeaderView: View {
                     Spacer(minLength: 0)
                 }
                 .padding(.bottom, 6)
+                .frame(maxWidth: textColumnWidth, alignment: .leading)
 
                 Spacer(minLength: 0)
             }
             .padding(16)
+            .frame(width: width, height: heroHeight, alignment: .bottomLeading)
         }
+        .frame(width: width, height: heroHeight, alignment: .bottomLeading)
     }
 
     @ViewBuilder
@@ -87,19 +104,31 @@ struct MovieMetadataHeroHeaderView: View {
             }
 
         if !chipTexts.isEmpty {
-            HStack(spacing: 6) {
-                ForEach(chipTexts, id: \.self) { text in
-                    Text(text)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.white.opacity(0.94))
-                        .lineLimit(1)
-                        .padding(.horizontal, 9)
-                        .padding(.vertical, 5)
-                        .background(Color.white.opacity(0.16))
-                        .clipShape(Capsule())
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 6) {
+                    ForEach(chipTexts, id: \.self) { text in
+                        heroTextChip(text)
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(chipTexts, id: \.self) { text in
+                        heroTextChip(text)
+                    }
                 }
             }
         }
+    }
+
+    private func heroTextChip(_ text: String) -> some View {
+        Text(text)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.white.opacity(0.94))
+            .lineLimit(1)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 5)
+            .background(Color.white.opacity(0.16))
+            .clipShape(Capsule())
     }
 
     @ViewBuilder

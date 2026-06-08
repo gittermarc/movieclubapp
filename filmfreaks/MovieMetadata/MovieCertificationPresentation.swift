@@ -5,7 +5,7 @@
 
 import Foundation
 
-struct MovieCertificationPresentation: Equatable, Sendable {
+nonisolated struct MovieCertificationPresentation: Equatable, Sendable {
     let regionCode: String
     let rawCertification: String
     let text: String

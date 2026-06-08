@@ -5,7 +5,7 @@
 
 import Foundation
 
-enum MovieFactsValuePresentation {
+nonisolated enum MovieFactsValuePresentation {
     static func runtimeText(_ runtime: Int?) -> String? {
         guard let runtime, runtime > 0 else { return nil }
         return "\(runtime) Min."

@@ -7,7 +7,7 @@
 
 import Foundation
 
-enum MovieMetadataPresentation {
+nonisolated enum MovieMetadataPresentation {
 
     enum PosterWidth: String {
         case w92
@@ -54,11 +54,24 @@ enum MovieMetadataPresentation {
         let trimmedValue = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmedValue.isEmpty == false else { return nil }
 
-        if let date = releaseDateInputFormatter.date(from: trimmedValue) {
+        if let date = releaseDateInputFormatter.date(from: normalizedReleaseDateInput(trimmedValue)) {
             return releaseDateOutputFormatter.string(from: date)
         }
 
         return trimmedValue
+    }
+
+    private static func normalizedReleaseDateInput(_ value: String) -> String {
+        guard value.count >= 10 else { return value }
+        let endIndex = value.index(value.startIndex, offsetBy: 10)
+        let datePrefix = String(value[..<endIndex])
+        let characters = Array(datePrefix)
+        guard characters.count == 10,
+              characters[4] == "-",
+              characters[7] == "-" else {
+            return value
+        }
+        return datePrefix
     }
 
     static func posterURL(path: String?, width: PosterWidth) -> URL? {

@@ -5,7 +5,7 @@
 
 import Foundation
 
-enum MovieMetadataRequestProfile: Hashable, Sendable {
+nonisolated enum MovieMetadataRequestProfile: Hashable, Sendable {
     case detailPage(regionCode: String)
     case quickAdd
 
@@ -29,12 +29,12 @@ enum MovieMetadataRequestProfile: Hashable, Sendable {
     }
 }
 
-struct MovieMetadataRequestKey: Hashable, Sendable {
+nonisolated struct MovieMetadataRequestKey: Hashable, Sendable {
     let movieID: Int
     let profile: MovieMetadataRequestProfile
 }
 
-struct MovieMetadataWatchProvidersKey: Hashable, Sendable {
+nonisolated struct MovieMetadataWatchProvidersKey: Hashable, Sendable {
     let movieID: Int
     let regionCode: String?
 }

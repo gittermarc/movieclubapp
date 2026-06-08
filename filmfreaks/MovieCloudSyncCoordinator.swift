@@ -53,7 +53,7 @@ final class MovieCloudSyncCoordinator {
         pendingCountDidChange: @escaping (_ count: Int, _ groupId: String?) -> Void,
         batchDidSucceed: @escaping (_ groupId: String?) -> Void,
         batchDidFail: @escaping (_ error: Error, _ groupId: String?) -> Void,
-        dirtyJournal: MovieCloudDirtyJournal = .shared
+        dirtyJournal: MovieCloudDirtyJournal? = nil
     ) {
         self.cloudStore = cloudStore
         self.groupIdProvider = groupIdProvider
@@ -63,7 +63,7 @@ final class MovieCloudSyncCoordinator {
         self.pendingCountDidChange = pendingCountDidChange
         self.batchDidSucceed = batchDidSucceed
         self.batchDidFail = batchDidFail
-        self.dirtyJournal = dirtyJournal
+        self.dirtyJournal = dirtyJournal ?? .shared
 
         let ns = max(0.05, debounce) * 1_000_000_000
         self.debounceNanoseconds = UInt64(ns)

@@ -8,6 +8,10 @@ struct MovieMetadataPresentationTests {
         #expect(MovieMetadataPresentation.formattedReleaseDate("2016-11-10") == "10.11.2016")
     }
 
+    @Test func formattedReleaseDateFormatsTMDbTimestampStrings() {
+        #expect(MovieMetadataPresentation.formattedReleaseDate("2016-11-24T00:00:00.000Z") == "24.11.2016")
+    }
+
     @Test func formattedReleaseDateFallsBackToTrimmedSourceValue() {
         #expect(MovieMetadataPresentation.formattedReleaseDate("  Frühjahr 2016  ") == "Frühjahr 2016")
     }

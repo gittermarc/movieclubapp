@@ -5,7 +5,7 @@
 
 import Foundation
 
-struct MovieMetadataResponse: Sendable {
+nonisolated struct MovieMetadataResponse: Sendable {
     let details: TMDbMovieDetails
     let watchProvidersCountry: TMDbWatchProvidersCountry?
 }

@@ -5,7 +5,7 @@
 
 import Foundation
 
-struct MovieMetadataLoadedMoviePatch: Equatable, Sendable {
+nonisolated struct MovieMetadataLoadedMoviePatch: Equatable, Sendable {
     let genres: [String]?
     let genreIds: [Int]?
     let keywords: [String]?

@@ -7,14 +7,14 @@ import Foundation
 
 // MARK: - API Models
 
-struct TMDbSearchResponse: Codable, Sendable {
+nonisolated struct TMDbSearchResponse: Codable, Sendable {
     let page: Int
     let results: [TMDbMovieResult]
     let total_pages: Int
     let total_results: Int
 }
 
-struct TMDbMovieResult: Codable, Identifiable, Equatable, Sendable {
+nonisolated struct TMDbMovieResult: Codable, Identifiable, Equatable, Sendable {
     let id: Int
     let title: String
     let release_date: String?
@@ -39,12 +39,12 @@ struct TMDbMovieResult: Codable, Identifiable, Equatable, Sendable {
     }
 }
 
-struct TMDbCredits: Decodable, Sendable {
+nonisolated struct TMDbCredits: Decodable, Sendable {
     let cast: [TMDbCast]
     let crew: [TMDbCrew]
 }
 
-struct TMDbCast: Decodable, Sendable {
+nonisolated struct TMDbCast: Decodable, Sendable {
     /// ✅ TMDb Person ID (wichtig für Persistenz & eindeutige Zuordnung)
     let id: Int
     let name: String
@@ -56,7 +56,7 @@ struct TMDbCast: Decodable, Sendable {
     let profile_path: String?
 }
 
-struct TMDbCrew: Decodable, Sendable {
+nonisolated struct TMDbCrew: Decodable, Sendable {
     /// ✅ TMDb Person ID (für Director-Goals)
     let id: Int
     let name: String
@@ -66,49 +66,49 @@ struct TMDbCrew: Decodable, Sendable {
     let job: String?
 }
 
-struct TMDbKeyword: Decodable, Sendable {
+nonisolated struct TMDbKeyword: Decodable, Sendable {
     let id: Int
     let name: String
 }
 
-struct TMDbKeywordsResponse: Decodable, Sendable {
+nonisolated struct TMDbKeywordsResponse: Decodable, Sendable {
     /// Je nach Endpoint liefert TMDb entweder `keywords` oder `results`
     let keywords: [TMDbKeyword]?
     let results: [TMDbKeyword]?
 
-    var allKeywords: [TMDbKeyword] {
+    nonisolated var allKeywords: [TMDbKeyword] {
         (keywords ?? []) + (results ?? [])
     }
 }
 
-struct TMDbVideo: Decodable, Sendable {
+nonisolated struct TMDbVideo: Decodable, Sendable {
     let key: String
     let name: String
     let site: String
     let type: String
 }
 
-struct TMDbVideosResponse: Decodable, Sendable {
+nonisolated struct TMDbVideosResponse: Decodable, Sendable {
     let results: [TMDbVideo]
 }
 
-struct TMDbGenre: Codable, Hashable, Identifiable, Sendable {
+nonisolated struct TMDbGenre: Codable, Hashable, Identifiable, Sendable {
     let id: Int
     let name: String
 }
 
-struct TMDbGenreListResponse: Decodable, Sendable {
+nonisolated struct TMDbGenreListResponse: Decodable, Sendable {
     let genres: [TMDbGenre]
 }
 
-struct TMDbCollectionSummary: Decodable, Equatable, Sendable {
+nonisolated struct TMDbCollectionSummary: Decodable, Equatable, Sendable {
     let id: Int
     let name: String
     let poster_path: String?
     let backdrop_path: String?
 }
 
-struct TMDbImage: Decodable, Hashable, Sendable {
+nonisolated struct TMDbImage: Decodable, Hashable, Sendable {
     let aspect_ratio: Double?
     let height: Int?
     let iso_639_1: String?
@@ -118,13 +118,13 @@ struct TMDbImage: Decodable, Hashable, Sendable {
     let width: Int?
 }
 
-struct TMDbMovieImagesResponse: Decodable, Sendable {
+nonisolated struct TMDbMovieImagesResponse: Decodable, Sendable {
     let backdrops: [TMDbImage]
     let logos: [TMDbImage]
     let posters: [TMDbImage]
 }
 
-struct TMDbReleaseDate: Decodable, Sendable {
+nonisolated struct TMDbReleaseDate: Decodable, Sendable {
     let certification: String
     let descriptors: [String]?
     let iso_639_1: String?
@@ -133,16 +133,16 @@ struct TMDbReleaseDate: Decodable, Sendable {
     let type: Int
 }
 
-struct TMDbReleaseDatesCountry: Decodable, Sendable {
+nonisolated struct TMDbReleaseDatesCountry: Decodable, Sendable {
     let iso_3166_1: String
     let release_dates: [TMDbReleaseDate]
 }
 
-struct TMDbReleaseDatesResponse: Decodable, Sendable {
+nonisolated struct TMDbReleaseDatesResponse: Decodable, Sendable {
     let results: [TMDbReleaseDatesCountry]
 }
 
-struct TMDbExternalIDs: Decodable, Sendable {
+nonisolated struct TMDbExternalIDs: Decodable, Sendable {
     let imdb_id: String?
     let wikidata_id: String?
     let facebook_id: String?
@@ -150,25 +150,25 @@ struct TMDbExternalIDs: Decodable, Sendable {
     let twitter_id: String?
 }
 
-struct TMDbProductionCompany: Decodable, Identifiable, Sendable {
+nonisolated struct TMDbProductionCompany: Decodable, Identifiable, Sendable {
     let id: Int
     let logo_path: String?
     let name: String
     let origin_country: String?
 }
 
-struct TMDbProductionCountry: Decodable, Hashable, Sendable {
+nonisolated struct TMDbProductionCountry: Decodable, Hashable, Sendable {
     let iso_3166_1: String
     let name: String
 }
 
-struct TMDbSpokenLanguage: Decodable, Hashable, Sendable {
+nonisolated struct TMDbSpokenLanguage: Decodable, Hashable, Sendable {
     let english_name: String?
     let iso_639_1: String
     let name: String
 }
 
-struct TMDbMovieDetails: Decodable, Sendable {
+nonisolated struct TMDbMovieDetails: Decodable, Sendable {
     let id: Int
     let title: String
 
@@ -260,16 +260,16 @@ struct TMDbMovieDetails: Decodable, Sendable {
 
 // MARK: - Watch Providers
 
-struct TMDbWatchProvider: Decodable, Identifiable, Hashable, Sendable {
+nonisolated struct TMDbWatchProvider: Decodable, Identifiable, Hashable, Sendable {
     let provider_id: Int
     let provider_name: String
     let logo_path: String?
     let display_priority: Int?
 
-    var id: Int { provider_id }
+    nonisolated var id: Int { provider_id }
 }
 
-struct TMDbWatchProvidersCountry: Decodable, Sendable {
+nonisolated struct TMDbWatchProvidersCountry: Decodable, Sendable {
     let link: String?
 
     /// Subscription streaming services ("flatrate" in TMDb)
@@ -288,18 +288,18 @@ struct TMDbWatchProvidersCountry: Decodable, Sendable {
     let buy: [TMDbWatchProvider]?
 }
 
-struct TMDbWatchProvidersResponse: Decodable, Sendable {
+nonisolated struct TMDbWatchProvidersResponse: Decodable, Sendable {
     let id: Int
     let results: [String: TMDbWatchProvidersCountry]
 }
 
 // MARK: - Personen
 
-struct TMDbPersonSearchResponse: Decodable, Sendable {
+nonisolated struct TMDbPersonSearchResponse: Decodable, Sendable {
     let results: [TMDbPersonSummary]
 }
 
-struct TMDbPersonSummary: Decodable, Identifiable, Sendable {
+nonisolated struct TMDbPersonSummary: Decodable, Identifiable, Sendable {
     let id: Int
     let name: String
     let profile_path: String?
@@ -307,7 +307,7 @@ struct TMDbPersonSummary: Decodable, Identifiable, Sendable {
     let popularity: Double?
 }
 
-struct TMDbPersonDetails: Decodable, Sendable {
+nonisolated struct TMDbPersonDetails: Decodable, Sendable {
     let id: Int
     let name: String
     let biography: String?
@@ -323,18 +323,18 @@ struct TMDbPersonDetails: Decodable, Sendable {
 
 // MARK: - Keyword Search
 
-struct TMDbKeywordSearchResponse: Decodable, Sendable {
+nonisolated struct TMDbKeywordSearchResponse: Decodable, Sendable {
     let results: [TMDbKeywordSummary]
 }
 
-struct TMDbKeywordSummary: Decodable, Identifiable, Hashable, Sendable {
+nonisolated struct TMDbKeywordSummary: Decodable, Identifiable, Hashable, Sendable {
     let id: Int
     let name: String
 }
 
 // MARK: - Errors
 
-enum TMDbError: Error, Sendable {
+nonisolated enum TMDbError: Error, Sendable {
     case missingAPIKey
     case invalidURL
     case requestFailed

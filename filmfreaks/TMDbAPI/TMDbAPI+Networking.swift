@@ -5,7 +5,7 @@
 
 import Foundation
 
-extension TMDbAPI {
+nonisolated extension TMDbAPI {
 
     static let baseURLString = "https://api.themoviedb.org/3"
 

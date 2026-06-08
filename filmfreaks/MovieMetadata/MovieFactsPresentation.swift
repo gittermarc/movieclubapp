@@ -5,14 +5,14 @@
 
 import Foundation
 
-struct MovieFactItem: Identifiable, Equatable, Sendable {
+nonisolated struct MovieFactItem: Identifiable, Equatable, Sendable {
     let id: String
     let title: String
     let value: String
     let systemImage: String
 }
 
-struct MovieFactsPresentation: Equatable, Sendable {
+nonisolated struct MovieFactsPresentation: Equatable, Sendable {
     let items: [MovieFactItem]
     let certification: MovieCertificationPresentation?
 

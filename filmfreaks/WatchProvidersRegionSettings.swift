@@ -7,7 +7,7 @@
 
 import Foundation
 
-enum WatchProvidersRegionSettings {
+nonisolated enum WatchProvidersRegionSettings {
 
     static let storageKey = "WatchProviders_RegionCode"
 

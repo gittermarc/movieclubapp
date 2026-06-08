@@ -38,8 +38,8 @@ final class MovieMetadataLoadCoordinator: ObservableObject {
     private(set) var lastLoadedMovieID: Int?
     private(set) var lastLoadedWatchProvidersRegionCode: String?
 
-    init(dependencies: Dependencies = .live) {
-        self.dependencies = dependencies
+    init(dependencies: Dependencies? = nil) {
+        self.dependencies = dependencies ?? .live
     }
 
     func loadDetails(for movie: Movie, effectiveRegionCode: String) async -> MovieMetadataLoadedMoviePatch? {

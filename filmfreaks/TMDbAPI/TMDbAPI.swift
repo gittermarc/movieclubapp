@@ -16,7 +16,7 @@ import Foundation
 /// - TMDbAPI+Search.swift
 /// - TMDbAPI+Details.swift
 /// - TMDbAPI+PeopleAndMeta.swift
-final class TMDbAPI: @unchecked Sendable {
+nonisolated final class TMDbAPI: @unchecked Sendable {
 
     static let shared = TMDbAPI()
 
@@ -37,7 +37,7 @@ final class TMDbAPI: @unchecked Sendable {
     }
 }
 
-extension TMDbAPI {
+nonisolated extension TMDbAPI {
 
     static func loadAPIKey() -> String {
         // 1) Environment (praktisch für Debug/CI)
