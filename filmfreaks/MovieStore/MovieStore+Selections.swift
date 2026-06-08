@@ -12,7 +12,7 @@ internal extension MovieStore {
     // MARK: - Published didSet handlers
 
     func handleCurrentGroupIdDidSet() {
-        UserDefaults.standard.set(currentGroupId, forKey: "CurrentGroupId")
+        UserDefaults.standard.set(currentGroupId, forKey: GroupScopedStorage.UserDefaultsKey.currentGroupId)
         addOrUpdateCurrentGroupInKnownGroups()
 
         // Load per-group sync meta (pending, last sync, last error)
@@ -20,7 +20,7 @@ internal extension MovieStore {
     }
 
     func handleCurrentGroupNameDidSet() {
-        UserDefaults.standard.set(currentGroupName, forKey: "CurrentGroupName")
+        UserDefaults.standard.set(currentGroupName, forKey: GroupScopedStorage.UserDefaultsKey.currentGroupName)
         addOrUpdateCurrentGroupInKnownGroups()
     }
 
@@ -101,12 +101,12 @@ internal extension MovieStore {
 
     func saveKnownGroups() {
         if let data = try? JSONEncoder().encode(knownGroups) {
-            UserDefaults.standard.set(data, forKey: Self.knownGroupsKey)
+            UserDefaults.standard.set(data, forKey: GroupScopedStorage.UserDefaultsKey.knownGroups)
         }
     }
 
     static func loadKnownGroups() -> [GroupInfo] {
-        guard let data = UserDefaults.standard.data(forKey: knownGroupsKey),
+        guard let data = UserDefaults.standard.data(forKey: GroupScopedStorage.UserDefaultsKey.knownGroups),
               let decoded = try? JSONDecoder().decode([GroupInfo].self, from: data) else {
             return []
         }
@@ -115,8 +115,6 @@ internal extension MovieStore {
 }
 
 private extension MovieStore {
-    private static let knownGroupsKey = "KnownGroups"
-
     func loadLocalCache(for groupId: String?) {
         isApplyingCloudUpdate = true
         movies = PersistenceManager.shared.loadMovies(groupId: groupId)

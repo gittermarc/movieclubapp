@@ -80,10 +80,11 @@ actor MovieNightLocalPersistence {
 
     init(fileName: String = "movieNights.json", baseDirectory: URL? = nil, fileManager: FileManager = .default) {
         self.fileManager = fileManager
-        let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-        let base = (baseDirectory ?? appSupport ?? fileManager.temporaryDirectory)
-            .appendingPathComponent("filmfreaks", isDirectory: true)
-        self.fileURL = base.appendingPathComponent(fileName)
+        self.fileURL = GroupScopedStorage.movieNightSnapshotURL(
+            fileName: fileName,
+            baseDirectory: baseDirectory,
+            fileManager: fileManager
+        )
 
         let enc = JSONEncoder()
         enc.dateEncodingStrategy = .custom { date, encoder in

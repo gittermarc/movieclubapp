@@ -63,6 +63,6 @@ extension MovieNightStore {
     }
 
     func syncMetaKey(_ groupId: String, _ suffix: String) -> String {
-        Self.syncMetaPrefix + groupId + "." + suffix
+        GroupScopedStorage.UserDefaultsKey.movieNightSyncMeta(groupId: groupId, suffix: suffix)
     }
 }

@@ -66,9 +66,6 @@ final class MovieNightStore: ObservableObject {
     var lastGroupContextRetryAtByGroup: [String: Date] = [:]
     let minGroupContextRetryInterval: TimeInterval = 2
 
-    // UserDefaults base key (per group)
-    static let syncMetaPrefix = "MovieNightStore.SyncMeta."
-
     var initialLoadTask: Task<Void, Never>?
 
     let persistence = MovieNightLocalPersistence()

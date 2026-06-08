@@ -120,8 +120,8 @@ class MovieStore: ObservableObject {
         // 2) Load persisted state
         self.knownGroups = Self.loadKnownGroups()
 
-        self.currentGroupId = UserDefaults.standard.string(forKey: "CurrentGroupId")
-        self.currentGroupName = UserDefaults.standard.string(forKey: "CurrentGroupName")
+        self.currentGroupId = UserDefaults.standard.string(forKey: GroupScopedStorage.UserDefaultsKey.currentGroupId)
+        self.currentGroupName = UserDefaults.standard.string(forKey: GroupScopedStorage.UserDefaultsKey.currentGroupName)
 
         // Load per-group sync meta (pending, last sync, last error)
         loadSyncMetaForCurrentGroup()

@@ -20,8 +20,7 @@ enum SelectedUserSelectionStore {
         var userName: String?
     }
 
-    private static let storageKey = "ff.selectedUser.byGroup.v1"
-    private static let localGroupKey = "__local__"
+    private static let storageKey = GroupScopedStorage.UserDefaultsKey.selectedUserByGroup
 
     // MARK: - Public API
 
@@ -59,8 +58,7 @@ enum SelectedUserSelectionStore {
     // MARK: - Internals
 
     private static func groupKey(for groupId: String?) -> String {
-        let trimmed = (groupId ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? localGroupKey : trimmed
+        GroupScopedStorage.selectedUserGroupKey(for: groupId)
     }
 
     private static func loadMap() -> [String: Entry] {

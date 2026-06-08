@@ -21,8 +21,7 @@ class UserStore: ObservableObject {
         var lastErrorAt: Date?
     }
 
-    static let syncStatusByGroupKey = "UserStore_SyncStatusByGroup"
-    static let localGroupSyncKey = "__local__"
+    static let syncStatusByGroupKey = GroupScopedStorage.UserDefaultsKey.userStoreSyncStatusByGroup
 
     // MARK: - Public state
 
@@ -90,7 +89,7 @@ class UserStore: ObservableObject {
         syncStatusByGroup = Self.loadSyncStatusByGroup()
 
         // gleiche Group-ID wie MovieStore verwenden
-        let groupIdFromDefaults = UserDefaults.standard.string(forKey: "CurrentGroupId")
+        let groupIdFromDefaults = UserDefaults.standard.string(forKey: GroupScopedStorage.UserDefaultsKey.currentGroupId)
         currentGroupId = groupIdFromDefaults
 
         // Ensure published status matches the current group immediately.

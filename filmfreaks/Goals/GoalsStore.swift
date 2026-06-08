@@ -26,7 +26,7 @@ final class GoalsStore: ObservableObject {
 
     var isSyncingGoals: Bool { syncCount > 0 }
 
-    let yearlyGoalsStorageKey = "ViewingGoalsByYear.v1"
+    let yearlyGoalsStorageKey = GroupScopedStorage.UserDefaultsKey.yearlyGoals
     let defaultYearlyGoal = 50
 
     private let userDefaults: UserDefaults
@@ -41,8 +41,7 @@ final class GoalsStore: ObservableObject {
     }
 
     func customGoalsStorageKey(for groupId: String?) -> String {
-        let gid = groupId ?? ""
-        return "ViewingCustomGoals.v3.\(gid)"
+        GroupScopedStorage.UserDefaultsKey.customGoals(groupId: groupId)
     }
 
     func loadYearlyGoals() {

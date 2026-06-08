@@ -12,8 +12,7 @@ extension UserStore {
     // MARK: - Per-group sync status persistence
 
     func syncKey(for groupId: String?) -> String {
-        let trimmed = (groupId ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? Self.localGroupSyncKey : trimmed
+        GroupScopedStorage.selectedUserGroupKey(for: groupId)
     }
 
     func applySyncStatusForCurrentGroup() {

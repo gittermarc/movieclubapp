@@ -41,8 +41,7 @@ internal extension MovieStore {
     // MARK: - Sync meta persistence (per group)
 
     func groupKey(_ groupId: String?) -> String {
-        let gid = (groupId ?? currentGroupId)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return gid.isEmpty ? "__default__" : gid
+        GroupScopedStorage.syncGroupKey(for: groupId ?? currentGroupId)
     }
 
     func loadSyncMetaForCurrentGroup() {
@@ -88,9 +87,7 @@ internal extension MovieStore {
 }
 
 private extension MovieStore {
-    private static let syncMetaPrefix = "MovieStore.SyncMeta."
-
     func syncKey(_ suffix: String, groupId: String?) -> String {
-        Self.syncMetaPrefix + groupKey(groupId) + "." + suffix
+        GroupScopedStorage.UserDefaultsKey.movieStoreSyncMeta(groupId: groupId ?? currentGroupId, suffix: suffix)
     }
 }

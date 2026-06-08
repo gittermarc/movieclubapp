@@ -41,7 +41,7 @@ final class PersistenceManager {
     private let userDefaults: UserDefaults
 
     /// Migration-Flag (UserDefaults bleibt für Kleinkram ok)
-    private let migrationFlagKey = "FilmFreaks.diskPersistence.v2.migrated"
+    private let migrationFlagKey = GroupScopedStorage.UserDefaultsKey.diskPersistenceMigration
 
     private init() {
         self.baseDir = Self.makeBaseDir()
@@ -95,10 +95,7 @@ final class PersistenceManager {
     ///
     /// Note: This does **not** affect CloudKit data. It only cleans up local disk persistence.
     func deleteGroupData(groupId: String?) {
-        let gid = safeGroupFolderName(for: groupId)
-        let groupDir = baseDir
-            .appendingPathComponent("groups", isDirectory: true)
-            .appendingPathComponent(gid, isDirectory: true)
+        let groupDir = GroupScopedStorage.groupDirectoryURL(root: baseDir, groupId: groupId)
 
         lock.lock()
         let urlsToCancel = pendingWrites.keys.filter { $0.path.hasPrefix(groupDir.path) }
@@ -119,7 +116,7 @@ final class PersistenceManager {
 
     // Selected User (klein → UserDefaults bleibt ok)
 
-    private let selectedUserNameKey = "FilmFreaks.selectedUserName.v1"
+    private let selectedUserNameKey = GroupScopedStorage.UserDefaultsKey.selectedUserName
 
     func saveSelectedUserName(_ name: String?) {
         userDefaults.set(name, forKey: selectedUserNameKey)
@@ -132,38 +129,17 @@ final class PersistenceManager {
     // MARK: - Internals
 
     private static func makeBaseDir() -> URL {
-        let fm = FileManager.default
-
-        if let appSupport = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first {
-            return appSupport.appendingPathComponent("FilmFreaks", isDirectory: true)
-        }
-
-        // Fallback (sollte praktisch nie passieren)
-        let docs = fm.urls(for: .documentDirectory, in: .userDomainMask).first!
-        return docs.appendingPathComponent("FilmFreaks", isDirectory: true)
+        GroupScopedStorage.applicationSupportRootURL()
     }
 
     private func fileURL(kind: Kind, groupId: String?) -> URL {
-        let gid = safeGroupFolderName(for: groupId)
-        let groupDir = baseDir
-            .appendingPathComponent("groups", isDirectory: true)
-            .appendingPathComponent(gid, isDirectory: true)
-
-        ensureDirectoryExists(groupDir)
-
-        return groupDir.appendingPathComponent("\(kind.rawValue).json")
-    }
-
-    private func safeGroupFolderName(for groupId: String?) -> String {
-        let raw = (groupId?.trimmingCharacters(in: .whitespacesAndNewlines)).flatMap { $0.isEmpty ? nil : $0 }
-
-        // Default-Gruppe
-        guard let raw else { return "default" }
-
-        // Relativ robuste Dateinamen ohne extra Dependencies.
-        // Erlaubt: A–Z a–z 0–9 - _
-        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_"))
-        return raw.addingPercentEncoding(withAllowedCharacters: allowed) ?? "default"
+        let url = GroupScopedStorage.groupJSONFileURL(
+            root: baseDir,
+            groupId: groupId,
+            fileName: "\(kind.rawValue).json"
+        )
+        ensureDirectoryExists(url.deletingLastPathComponent())
+        return url
     }
 
     private func ensureDirectoryExists(_ dir: URL) {
@@ -254,9 +230,9 @@ final class PersistenceManager {
         guard defaults.bool(forKey: migrationFlagKey) == false else { return }
 
         // Wenn jemand frisch installiert, gibt's nichts zu migrieren.
-        let hasOldMovies = defaults.data(forKey: "FilmFreaks.movies.v1") != nil
-        let hasOldBacklog = defaults.data(forKey: "FilmFreaks.backlogMovies.v1") != nil
-        let hasOldUsersV1 = defaults.data(forKey: "FilmFreaks.users.v1") != nil
+        let hasOldMovies = defaults.data(forKey: GroupScopedStorage.UserDefaultsKey.legacyMovies) != nil
+        let hasOldBacklog = defaults.data(forKey: GroupScopedStorage.UserDefaultsKey.legacyBacklogMovies) != nil
+        let hasOldUsersV1 = defaults.data(forKey: GroupScopedStorage.UserDefaultsKey.legacyUsersV1) != nil
 
         // Users_... Keys (UserStore)
         let hasAnyOldUserKey = defaults.dictionaryRepresentation().keys.contains { $0.hasPrefix("Users_") }
@@ -266,13 +242,13 @@ final class PersistenceManager {
             return
         }
 
-        let currentGroupId = defaults.string(forKey: "CurrentGroupId")
+        let currentGroupId = defaults.string(forKey: GroupScopedStorage.UserDefaultsKey.currentGroupId)
         let targetGroupId = (currentGroupId?.isEmpty == false) ? currentGroupId : nil
 
         log.info("Migration: UserDefaults → Files (targetGroupId=\(targetGroupId ?? "nil", privacy: .public))")
 
         // Movies (global v1 → group-scoped file für aktuelle Gruppe)
-        if let data = defaults.data(forKey: "FilmFreaks.movies.v1") {
+        if let data = defaults.data(forKey: GroupScopedStorage.UserDefaultsKey.legacyMovies) {
             if read([Movie].self, from: fileURL(kind: .watchedMovies, groupId: targetGroupId)) == nil {
                 do {
                     let movies = try JSONDecoder().decode([Movie].self, from: data)
@@ -283,7 +259,7 @@ final class PersistenceManager {
             }
         }
 
-        if let data = defaults.data(forKey: "FilmFreaks.backlogMovies.v1") {
+        if let data = defaults.data(forKey: GroupScopedStorage.UserDefaultsKey.legacyBacklogMovies) {
             if read([Movie].self, from: fileURL(kind: .backlogMovies, groupId: targetGroupId)) == nil {
                 do {
                     let movies = try JSONDecoder().decode([Movie].self, from: data)
@@ -295,7 +271,7 @@ final class PersistenceManager {
         }
 
         // Users: einmal global v1 (falls noch verwendet wurde)
-        if let data = defaults.data(forKey: "FilmFreaks.users.v1") {
+        if let data = defaults.data(forKey: GroupScopedStorage.UserDefaultsKey.legacyUsersV1) {
             if read([User].self, from: fileURL(kind: .users, groupId: targetGroupId)) == nil {
                 do {
                     let users = try JSONDecoder().decode([User].self, from: data)
@@ -309,7 +285,7 @@ final class PersistenceManager {
         // Users_... Keys pro bekannte Gruppe
         var groupIdsToMigrate: Set<String?> = [nil, targetGroupId]
 
-        if let knownGroupsData = defaults.data(forKey: "KnownGroups") {
+        if let knownGroupsData = defaults.data(forKey: GroupScopedStorage.UserDefaultsKey.knownGroups) {
             if let known = try? JSONDecoder().decode([GroupInfo].self, from: knownGroupsData) {
                 for g in known {
                     groupIdsToMigrate.insert(g.id)
@@ -318,12 +294,7 @@ final class PersistenceManager {
         }
 
         for gid in groupIdsToMigrate {
-            let key: String
-            if let gid, !gid.isEmpty {
-                key = "Users_\(gid)"
-            } else {
-                key = "Users_Default"
-            }
+            let key = GroupScopedStorage.UserDefaultsKey.legacyUsers(groupId: gid)
 
             guard let data = defaults.data(forKey: key) else { continue }
             if read([User].self, from: fileURL(kind: .users, groupId: gid)) != nil { continue }
