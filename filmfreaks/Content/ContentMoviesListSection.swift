@@ -9,13 +9,13 @@ internal import SwiftUI
 
 /// Wiederverwendbarer Listen-Block für „Gesehen“ und „Backlog“.
 ///
-/// Erwartet bereits gefilterte + sortierte Items (mit Original-Index in der Source-Array),
-/// damit Delete korrekt in der Quelle landet.
+/// Erwartet bereits gefilterte + sortierte Items mit stabiler Movie-ID.
+/// Navigation, Binding und Delete werden gegen die aktuelle Source-Liste aufgelöst.
 struct ContentMoviesListSection: View {
 
     @EnvironmentObject private var displaySettings: DisplaySettings
 
-    let items: [IndexedMovie]
+    let items: [ContentMovieItem]
     @Binding var movies: [Movie]
     let isBacklog: Bool
     let selectedViewStyle: MovieViewStyle
@@ -47,15 +47,10 @@ struct ContentMoviesListSection: View {
                 .listRowSeparator(.hidden)
             } else {
                 ForEach(items) { item in
-                    // When groups switch or a new empty group is created, SwiftUI can briefly render
-                    // stale `items` while `movies` has already been cleared. Guard to prevent
-                    // out-of-range crashes (movies[item.index]).
-                    if movies.indices.contains(item.index) {
-                        let movie = movies[item.index]
-
+                    if let movie = sourceMovie(for: item) {
                         NavigationLink {
                             MovieDetailView(
-                                movie: $movies[item.index],
+                                movie: movieBinding(for: item),
                                 isBacklog: isBacklog
                             )
                         } label: {
@@ -89,27 +84,29 @@ struct ContentMoviesListSection: View {
         }
     }
 
+    private func sourceMovie(for item: ContentMovieItem) -> Movie? {
+        ContentMovieSourceLookup.movie(in: movies, matching: item)
+    }
+
+    private func movieBinding(for item: ContentMovieItem) -> Binding<Movie> {
+        Binding(
+            get: {
+                sourceMovie(for: item) ?? item.movie
+            },
+            set: { updatedMovie in
+                guard let sourceIndex = movies.firstIndex(where: { $0.id == item.movieId }) else { return }
+                movies[sourceIndex] = updatedMovie
+            }
+        )
+    }
+
     private func requestDelete(_ indexSet: IndexSet) {
-        // Convert the displayed indices into stable movie IDs.
-        var ids: [UUID] = []
-        var titles: [String] = []
-
-        for displayedIndex in indexSet {
-            guard items.indices.contains(displayedIndex) else { continue }
-            let originalIndex = items[displayedIndex].index
-            guard movies.indices.contains(originalIndex) else { continue }
-
-            let movie = movies[originalIndex]
-            ids.append(movie.id)
-            titles.append(movie.title)
-        }
-
-        // Avoid empty alert (can happen when stale items render briefly during group switches).
-        guard !ids.isEmpty else { return }
-
-        // De-dupe just in case.
-        let uniqueIds = Array(Set(ids))
-        pendingDelete = MovieDeleteConfirmation(movieIds: uniqueIds, movieTitles: titles, isBacklog: isBacklog)
+        pendingDelete = ContentMovieSourceLookup.deleteConfirmation(
+            for: indexSet,
+            items: items,
+            movies: movies,
+            isBacklog: isBacklog
+        )
     }
 
     private func confirmDelete(_ pending: MovieDeleteConfirmation) {

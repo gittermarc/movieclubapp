@@ -17,10 +17,10 @@ struct ContentMainAreaView: View {
     @Binding var selectedMode: MovieListMode
     let selectedViewStyle: MovieViewStyle
 
-    let watchedListItems: [IndexedMovie]
-    let backlogListItems: [IndexedMovie]
-    let watchedGridItems: [IndexedMovie]
-    let backlogGridItems: [IndexedMovie]
+    let watchedListItems: [ContentMovieItem]
+    let backlogListItems: [ContentMovieItem]
+    let watchedGridItems: [ContentMovieItem]
+    let backlogGridItems: [ContentMovieItem]
 
     @Binding var watchedSearchText: String
     @Binding var backlogSearchText: String
@@ -202,7 +202,7 @@ struct ContentMainAreaView: View {
     // MARK: - Grid (Cover-Only)
 
     @ViewBuilder
-    private func posterGrid(items: [IndexedMovie], isBacklog: Bool) -> some View {
+    private func posterGrid(items: [ContentMovieItem], isBacklog: Bool) -> some View {
         let query = (isBacklog ? backlogSearchText : watchedSearchText)
             .trimmingCharacters(in: .whitespacesAndNewlines)
 
@@ -241,46 +241,21 @@ struct ContentMainAreaView: View {
 
             LazyVGrid(columns: columns, spacing: g.spacing) {
                 ForEach(items) { item in
-                    // When switching groups, SwiftUI can briefly render stale `items`.
-                    // Guard indices to prevent out-of-range crashes.
-                    if isBacklog {
-                        if movieStore.backlogMovies.indices.contains(item.index) {
-                            let movie = movieStore.backlogMovies[item.index]
-                            NavigationLink {
-                                MovieDetailView(
-                                    movie: $movieStore.backlogMovies[item.index],
-                                    isBacklog: true
-                                )
-                            } label: {
-                                ContentPosterGridCellView(movie: movie)
-                            }
-                            .buttonStyle(.plain)
-                            .contextMenu {
-                                Button(role: .destructive) {
-                                    requestGridDelete(movie: movie, isBacklog: true)
-                                } label: {
-                                    Label("Löschen", systemImage: "trash")
-                                }
-                            }
+                    if let movie = sourceMovie(for: item, isBacklog: isBacklog) {
+                        NavigationLink {
+                            MovieDetailView(
+                                movie: movieBinding(for: item, isBacklog: isBacklog),
+                                isBacklog: isBacklog
+                            )
+                        } label: {
+                            ContentPosterGridCellView(movie: movie)
                         }
-                    } else {
-                        if movieStore.movies.indices.contains(item.index) {
-                            let movie = movieStore.movies[item.index]
-                            NavigationLink {
-                                MovieDetailView(
-                                    movie: $movieStore.movies[item.index],
-                                    isBacklog: false
-                                )
+                        .buttonStyle(.plain)
+                        .contextMenu {
+                            Button(role: .destructive) {
+                                requestGridDelete(movie: movie, isBacklog: isBacklog)
                             } label: {
-                                ContentPosterGridCellView(movie: movie)
-                            }
-                            .buttonStyle(.plain)
-                            .contextMenu {
-                                Button(role: .destructive) {
-                                    requestGridDelete(movie: movie, isBacklog: false)
-                                } label: {
-                                    Label("Löschen", systemImage: "trash")
-                                }
+                                Label("Löschen", systemImage: "trash")
                             }
                         }
                     }
@@ -290,6 +265,36 @@ struct ContentMainAreaView: View {
             .padding(.top, 10)
             .padding(.bottom, 18)
         }
+    }
+
+    private func sourceMovie(
+        for item: ContentMovieItem,
+        isBacklog: Bool
+    ) -> Movie? {
+        if isBacklog {
+            return ContentMovieSourceLookup.movie(in: movieStore.backlogMovies, matching: item)
+        }
+        return ContentMovieSourceLookup.movie(in: movieStore.movies, matching: item)
+    }
+
+    private func movieBinding(
+        for item: ContentMovieItem,
+        isBacklog: Bool
+    ) -> Binding<Movie> {
+        Binding(
+            get: {
+                sourceMovie(for: item, isBacklog: isBacklog) ?? item.movie
+            },
+            set: { updatedMovie in
+                if isBacklog {
+                    guard let sourceIndex = movieStore.backlogMovies.firstIndex(where: { $0.id == item.movieId }) else { return }
+                    movieStore.backlogMovies[sourceIndex] = updatedMovie
+                } else {
+                    guard let sourceIndex = movieStore.movies.firstIndex(where: { $0.id == item.movieId }) else { return }
+                    movieStore.movies[sourceIndex] = updatedMovie
+                }
+            }
+        )
     }
 
     // MARK: - Deletion confirmation (Grid)

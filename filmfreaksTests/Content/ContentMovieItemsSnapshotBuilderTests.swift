@@ -4,18 +4,22 @@ import Testing
 
 struct ContentMovieItemsSnapshotBuilderTests {
 
-    @Test func watchedListSortsByNewestWatchedDateAndPreservesSourceIndices() {
+    @Test func watchedListSortsByNewestWatchedDateAndPreservesStableMovieIds() {
+        let olderId = UUID(uuidString: "11111111-1111-1111-1111-111111111111") ?? UUID()
+        let newestId = UUID(uuidString: "22222222-2222-2222-2222-222222222222") ?? UUID()
+        let middleId = UUID(uuidString: "33333333-3333-3333-3333-333333333333") ?? UUID()
+
         let snapshot = makeSnapshot(
             watchedMovies: [
-                makeMovie(title: "Older", watchedDate: makeDate(year: 2024, month: 3, day: 5)),
-                makeMovie(title: "Newest", watchedDate: makeDate(year: 2025, month: 7, day: 10)),
-                makeMovie(title: "Middle", watchedDate: makeDate(year: 2024, month: 11, day: 1))
+                makeMovie(id: olderId, title: "Older", watchedDate: makeDate(year: 2024, month: 3, day: 5)),
+                makeMovie(id: newestId, title: "Newest", watchedDate: makeDate(year: 2025, month: 7, day: 10)),
+                makeMovie(id: middleId, title: "Middle", watchedDate: makeDate(year: 2024, month: 11, day: 1))
             ],
             sort: .dateNewest
         )
 
         #expect(snapshot.watchedItems.map(\.movie.title) == ["Newest", "Middle", "Older"])
-        #expect(snapshot.watchedItems.map(\.index) == [1, 2, 0])
+        #expect(snapshot.watchedItems.map(\.movieId) == [newestId, middleId, olderId])
     }
 
     @Test func backlogUserFilterMatchesSuggestedByCaseInsensitively() {
@@ -131,6 +135,7 @@ struct ContentMovieItemsSnapshotBuilderTests {
     }
 
     private func makeMovie(
+        id: UUID = UUID(),
         title: String = "Movie",
         year: String = "2024",
         tmdbRating: Double? = nil,
@@ -142,6 +147,7 @@ struct ContentMovieItemsSnapshotBuilderTests {
         keywords: [String]? = nil
     ) -> Movie {
         Movie(
+            id: id,
             title: title,
             year: year,
             tmdbRating: tmdbRating,

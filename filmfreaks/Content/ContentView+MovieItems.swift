@@ -12,14 +12,14 @@ extension ContentView {
     // MARK: - List/Grid Items (gefiltert + sortiert)
 
     /// Grid: Gesehen
-    var watchedGridItems: [IndexedMovie] { movieItemsModel.watchedItems }
+    var watchedGridItems: [ContentMovieItem] { movieItemsModel.watchedItems }
 
     /// Grid: Backlog
-    var backlogGridItems: [IndexedMovie] { movieItemsModel.backlogItems }
+    var backlogGridItems: [ContentMovieItem] { movieItemsModel.backlogItems }
 
     /// Liste: Gesehen
-    var watchedListItems: [IndexedMovie] { movieItemsModel.watchedItems }
+    var watchedListItems: [ContentMovieItem] { movieItemsModel.watchedItems }
 
     /// Liste: Backlog
-    var backlogListItems: [IndexedMovie] { movieItemsModel.backlogItems }
+    var backlogListItems: [ContentMovieItem] { movieItemsModel.backlogItems }
 }

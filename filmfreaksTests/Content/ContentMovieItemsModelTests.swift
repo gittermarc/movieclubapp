@@ -7,11 +7,11 @@ struct ContentMovieItemsModelTests {
 
     @Test func latestUpdateWinsWhenInputsChangeQuickly() async {
         let firstSnapshot = ContentMovieItemsSnapshot(
-            watchedItems: [IndexedMovie(index: 0, movie: makeMovie(title: "First"))],
+            watchedItems: [ContentMovieItem(movie: makeMovie(title: "First"))],
             backlogItems: []
         )
         let secondSnapshot = ContentMovieItemsSnapshot(
-            watchedItems: [IndexedMovie(index: 0, movie: makeMovie(title: "Second"))],
+            watchedItems: [ContentMovieItem(movie: makeMovie(title: "Second"))],
             backlogItems: []
         )
 

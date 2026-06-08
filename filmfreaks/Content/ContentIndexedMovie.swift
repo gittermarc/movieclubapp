@@ -7,14 +7,20 @@
 
 import Foundation
 
-/// Ein Movie zusammen mit seinem Index im Quell-Array.
+/// Ein Content-Item für Grid und Liste mit stabiler Movie-Identität.
 ///
-/// Wir nutzen das für Grid **und** Liste, damit:
-/// - Navigation über Binding (`movies[item.index]`) sauber bleibt
-/// - Delete immer den richtigen Eintrag im Source-Array entfernt
-nonisolated struct IndexedMovie: Identifiable, Sendable {
-    let index: Int
+/// Das Item trägt bewusst keinen Source-Array-Index mehr. Navigation,
+/// Binding-Lookup und Delete werden über `movieId` gegen den aktuellen Store
+/// aufgelöst. So bleiben Filter, Sortierung, Deletes und Gruppenwechsel robust,
+/// auch wenn SwiftUI kurz ältere Snapshot-Items rendert.
+nonisolated struct ContentMovieItem: Identifiable, Sendable {
+    let movieId: UUID
     let movie: Movie
 
-    var id: UUID { movie.id }
+    init(movie: Movie) {
+        self.movieId = movie.id
+        self.movie = movie
+    }
+
+    var id: UUID { movieId }
 }

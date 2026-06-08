@@ -30,8 +30,8 @@ final class ContentMovieItemsModel: ObservableObject {
         let showTMDbRatingsInLists: Bool
     }
 
-    @Published private(set) var watchedItems: [IndexedMovie] = []
-    @Published private(set) var backlogItems: [IndexedMovie] = []
+    @Published private(set) var watchedItems: [ContentMovieItem] = []
+    @Published private(set) var backlogItems: [ContentMovieItem] = []
 
     let searchIndex: MovieSearchIndexCache
 

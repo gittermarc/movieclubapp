@@ -8,8 +8,8 @@
 import Foundation
 
 nonisolated struct ContentMovieItemsSnapshot: Sendable {
-    let watchedItems: [IndexedMovie]
-    let backlogItems: [IndexedMovie]
+    let watchedItems: [ContentMovieItem]
+    let backlogItems: [ContentMovieItem]
 }
 
 nonisolated enum ContentMovieItemsSnapshotBuilder {
@@ -33,7 +33,7 @@ nonisolated enum ContentMovieItemsSnapshotBuilder {
         let backlogTokens = searchIndex.normalizedTokens(for: input.backlogSearchText)
 
         return ContentMovieItemsSnapshot(
-            watchedItems: buildIndexedItems(
+            watchedItems: buildItems(
                 from: input.watchedMovies,
                 isBacklog: false,
                 filterByUser: input.filterByUser,
@@ -43,7 +43,7 @@ nonisolated enum ContentMovieItemsSnapshotBuilder {
                 showTMDbRatingsInLists: input.showTMDbRatingsInLists,
                 searchIndex: searchIndex
             ),
-            backlogItems: buildIndexedItems(
+            backlogItems: buildItems(
                 from: input.backlogMovies,
                 isBacklog: true,
                 filterByUser: input.filterByUser,
@@ -56,7 +56,7 @@ nonisolated enum ContentMovieItemsSnapshotBuilder {
         )
     }
 
-    private static func buildIndexedItems(
+    private static func buildItems(
         from movies: [Movie],
         isBacklog: Bool,
         filterByUser: User?,
@@ -65,9 +65,9 @@ nonisolated enum ContentMovieItemsSnapshotBuilder {
         ratingDisplayMode: RatingDisplayMode,
         showTMDbRatingsInLists: Bool,
         searchIndex: MovieSearchIndexCache
-    ) -> [IndexedMovie] {
-        let enumerated = Array(movies.enumerated())
-            .filter { _, movie in
+    ) -> [ContentMovieItem] {
+        let filtered = movies
+            .filter { movie in
                 if isBacklog {
                     return passesUserFilterForBacklog(movie, user: filterByUser)
                         && searchIndex.matches(movie: movie, tokens: tokens)
@@ -77,10 +77,10 @@ nonisolated enum ContentMovieItemsSnapshotBuilder {
                 }
             }
 
-        let sorted = enumerated.sorted { lhs, rhs in
+        let sorted = filtered.sorted { lhs, rhs in
             sortIsOrderedBefore(
-                lhs.element,
-                rhs.element,
+                lhs,
+                rhs,
                 isBacklog: isBacklog,
                 sort: sort,
                 ratingDisplayMode: ratingDisplayMode,
@@ -88,7 +88,7 @@ nonisolated enum ContentMovieItemsSnapshotBuilder {
             )
         }
 
-        return sorted.map { IndexedMovie(index: $0.offset, movie: $0.element) }
+        return sorted.map { ContentMovieItem(movie: $0) }
     }
 
     private static func displayScore(
