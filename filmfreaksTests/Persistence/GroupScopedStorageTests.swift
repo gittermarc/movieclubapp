@@ -45,6 +45,18 @@ struct GroupScopedStorageTests {
         #expect(local.deletingLastPathComponent().lastPathComponent == "default")
     }
 
+    @Test func movieNightCloudDirtyJournalURLIsGroupScoped() throws {
+        let tempDirectory = try TemporaryDirectory()
+
+        let groupA = GroupScopedStorage.movieNightCloudDirtyJournalURL(root: tempDirectory.url, groupId: "group-a")
+        let groupB = GroupScopedStorage.movieNightCloudDirtyJournalURL(root: tempDirectory.url, groupId: "group-b")
+
+        #expect(groupA.lastPathComponent == "movie_night_cloud_dirty_journal.json")
+        #expect(groupA != groupB)
+        #expect(groupA.deletingLastPathComponent().lastPathComponent == "group-a")
+        #expect(groupB.deletingLastPathComponent().lastPathComponent == "group-b")
+    }
+
     @Test func movieNightSnapshotURLPreservesLegacyLowercaseFolder() throws {
         let tempDirectory = try TemporaryDirectory()
 

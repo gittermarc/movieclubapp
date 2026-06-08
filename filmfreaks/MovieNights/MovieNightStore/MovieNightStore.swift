@@ -107,6 +107,7 @@ final class MovieNightStore: ObservableObject {
                     self?.markCloudSyncFailure(error, forGroupId: groupId)
                 }
             )
+            self.cloudSyncCoordinator?.restorePendingChangesFromJournal()
         }
 
         setupNetworkReconnectHandling()

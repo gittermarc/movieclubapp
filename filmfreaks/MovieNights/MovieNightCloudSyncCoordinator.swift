@@ -10,7 +10,7 @@ import Foundation
 /// Debounced + batched CloudKit writer for movie night changes.
 ///
 /// Mirrors the approach used for Movies (`MovieCloudSyncCoordinator`) but
-/// supports multiple record types (events, responses, activity).
+/// supports multiple record types (events, responses, activity, presets).
 @MainActor
 final class MovieNightCloudSyncCoordinator {
 
@@ -59,6 +59,7 @@ final class MovieNightCloudSyncCoordinator {
     private let pendingCountDidChange: (_ count: Int, _ groupId: String) -> Void
     private let batchDidSucceed: (_ groupId: String) -> Void
     private let batchDidFail: (_ error: Error, _ groupId: String) -> Void
+    private let dirtyJournal: MovieNightCloudDirtyJournal
 
     private let debounceNanoseconds: UInt64
 
@@ -85,7 +86,8 @@ final class MovieNightCloudSyncCoordinator {
         networkIsAvailable: @escaping () -> Bool,
         pendingCountDidChange: @escaping (_ count: Int, _ groupId: String) -> Void,
         batchDidSucceed: @escaping (_ groupId: String) -> Void,
-        batchDidFail: @escaping (_ error: Error, _ groupId: String) -> Void
+        batchDidFail: @escaping (_ error: Error, _ groupId: String) -> Void,
+        dirtyJournal: MovieNightCloudDirtyJournal = .shared
     ) {
         self.cloudStore = cloudStore
         self.beginSync = beginSync
@@ -94,6 +96,7 @@ final class MovieNightCloudSyncCoordinator {
         self.pendingCountDidChange = pendingCountDidChange
         self.batchDidSucceed = batchDidSucceed
         self.batchDidFail = batchDidFail
+        self.dirtyJournal = dirtyJournal
 
         let ns = max(0.05, debounce) * 1_000_000_000
         self.debounceNanoseconds = UInt64(ns)
@@ -104,7 +107,9 @@ final class MovieNightCloudSyncCoordinator {
     func queueEventSave(_ event: MovieNightEvent, groupId: String) {
         let gid = groupId.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !gid.isEmpty else { return }
-        pendingEventSaves[event.id] = PendingEventSave(groupId: gid, event: event, token: UUID())
+        let token = UUID()
+        dirtyJournal.recordEventSave(event, groupId: gid, token: token)
+        pendingEventSaves[event.id] = PendingEventSave(groupId: gid, event: event, token: token)
         pendingEventDeletes.removeValue(forKey: event.id)
         publishPendingCount(for: gid)
         scheduleFlush()
@@ -113,8 +118,10 @@ final class MovieNightCloudSyncCoordinator {
     func queueEventDelete(eventId: UUID, groupId: String) {
         let gid = groupId.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !gid.isEmpty else { return }
+        let token = UUID()
+        dirtyJournal.recordEventDelete(eventId: eventId, groupId: gid, token: token)
         pendingEventSaves.removeValue(forKey: eventId)
-        pendingEventDeletes[eventId] = PendingDelete(groupId: gid, token: UUID())
+        pendingEventDeletes[eventId] = PendingDelete(groupId: gid, token: token)
         publishPendingCount(for: gid)
         scheduleFlush()
     }
@@ -122,7 +129,9 @@ final class MovieNightCloudSyncCoordinator {
     func queueResponseSave(_ response: MovieNightResponse, groupId: String) {
         let gid = groupId.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !gid.isEmpty else { return }
-        pendingResponseSaves[response.id] = PendingResponseSave(groupId: gid, response: response, token: UUID())
+        let token = UUID()
+        dirtyJournal.recordResponseSave(response, groupId: gid, token: token)
+        pendingResponseSaves[response.id] = PendingResponseSave(groupId: gid, response: response, token: token)
         pendingResponseDeletes.removeValue(forKey: response.id)
         publishPendingCount(for: gid)
         scheduleFlush()
@@ -132,8 +141,10 @@ final class MovieNightCloudSyncCoordinator {
         let gid = groupId.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !gid.isEmpty else { return }
         let key = compositeResponseKey(eventId: eventId, userId: userId)
+        let token = UUID()
+        dirtyJournal.recordResponseDelete(eventId: eventId, userId: userId, groupId: gid, token: token)
         pendingResponseSaves.removeValue(forKey: key)
-        pendingResponseDeletes[key] = PendingResponseDelete(groupId: gid, eventId: eventId, userId: userId, token: UUID())
+        pendingResponseDeletes[key] = PendingResponseDelete(groupId: gid, eventId: eventId, userId: userId, token: token)
         publishPendingCount(for: gid)
         scheduleFlush()
     }
@@ -141,7 +152,9 @@ final class MovieNightCloudSyncCoordinator {
     func queueActivitySave(_ activity: MovieNightActivityEvent, groupId: String) {
         let gid = groupId.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !gid.isEmpty else { return }
-        pendingActivitySaves[activity.id] = PendingActivitySave(groupId: gid, activity: activity, token: UUID())
+        let token = UUID()
+        dirtyJournal.recordActivitySave(activity, groupId: gid, token: token)
+        pendingActivitySaves[activity.id] = PendingActivitySave(groupId: gid, activity: activity, token: token)
         pendingActivityDeletes.removeValue(forKey: activity.id)
         publishPendingCount(for: gid)
         scheduleFlush()
@@ -150,8 +163,10 @@ final class MovieNightCloudSyncCoordinator {
     func queueActivityDelete(activityId: UUID, groupId: String) {
         let gid = groupId.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !gid.isEmpty else { return }
+        let token = UUID()
+        dirtyJournal.recordActivityDelete(activityId: activityId, groupId: gid, token: token)
         pendingActivitySaves.removeValue(forKey: activityId)
-        pendingActivityDeletes[activityId] = PendingDelete(groupId: gid, token: UUID())
+        pendingActivityDeletes[activityId] = PendingDelete(groupId: gid, token: token)
         publishPendingCount(for: gid)
         scheduleFlush()
     }
@@ -160,7 +175,9 @@ final class MovieNightCloudSyncCoordinator {
     func queuePresetSave(_ preset: MovieRoulettePreset, groupId: String) {
         let gid = groupId.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !gid.isEmpty else { return }
-        pendingPresetSaves[preset.id] = PendingPresetSave(groupId: gid, preset: preset, token: UUID())
+        let token = UUID()
+        dirtyJournal.recordPresetSave(preset, groupId: gid, token: token)
+        pendingPresetSaves[preset.id] = PendingPresetSave(groupId: gid, preset: preset, token: token)
         pendingPresetDeletes.removeValue(forKey: preset.id)
         publishPendingCount(for: gid)
         scheduleFlush()
@@ -169,10 +186,81 @@ final class MovieNightCloudSyncCoordinator {
     func queuePresetDelete(presetId: UUID, groupId: String) {
         let gid = groupId.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !gid.isEmpty else { return }
+        let token = UUID()
+        dirtyJournal.recordPresetDelete(presetId: presetId, groupId: gid, token: token)
         pendingPresetSaves.removeValue(forKey: presetId)
-        pendingPresetDeletes[presetId] = PendingDelete(groupId: gid, token: UUID())
+        pendingPresetDeletes[presetId] = PendingDelete(groupId: gid, token: token)
         publishPendingCount(for: gid)
         scheduleFlush()
+    }
+
+    func restorePendingChangesFromJournal() {
+        let entries = dirtyJournal.entriesForAllGroups()
+        guard !entries.isEmpty else { return }
+
+        var touchedGroupIds: Set<String> = []
+
+        for entry in entries {
+            let gid = entry.groupId.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !gid.isEmpty else { continue }
+            touchedGroupIds.insert(gid)
+
+            switch (entry.recordType, entry.operation) {
+            case (.event, .save):
+                guard let event = entry.event else { continue }
+                pendingEventSaves[event.id] = PendingEventSave(groupId: gid, event: event, token: entry.token)
+                pendingEventDeletes.removeValue(forKey: event.id)
+
+            case (.event, .delete):
+                guard let eventId = UUID(uuidString: entry.recordId) else { continue }
+                pendingEventSaves.removeValue(forKey: eventId)
+                pendingEventDeletes[eventId] = PendingDelete(groupId: gid, token: entry.token)
+
+            case (.response, .save):
+                guard let response = entry.response else { continue }
+                pendingResponseSaves[response.id] = PendingResponseSave(groupId: gid, response: response, token: entry.token)
+                pendingResponseDeletes.removeValue(forKey: response.id)
+
+            case (.response, .delete):
+                guard let eventId = entry.responseEventId, let userId = entry.responseUserId else { continue }
+                let key = compositeResponseKey(eventId: eventId, userId: userId)
+                pendingResponseSaves.removeValue(forKey: key)
+                pendingResponseDeletes[key] = PendingResponseDelete(
+                    groupId: gid,
+                    eventId: eventId,
+                    userId: userId,
+                    token: entry.token
+                )
+
+            case (.activity, .save):
+                guard let activity = entry.activity else { continue }
+                pendingActivitySaves[activity.id] = PendingActivitySave(groupId: gid, activity: activity, token: entry.token)
+                pendingActivityDeletes.removeValue(forKey: activity.id)
+
+            case (.activity, .delete):
+                guard let activityId = UUID(uuidString: entry.recordId) else { continue }
+                pendingActivitySaves.removeValue(forKey: activityId)
+                pendingActivityDeletes[activityId] = PendingDelete(groupId: gid, token: entry.token)
+
+            case (.preset, .save):
+                guard let preset = entry.preset else { continue }
+                pendingPresetSaves[preset.id] = PendingPresetSave(groupId: gid, preset: preset, token: entry.token)
+                pendingPresetDeletes.removeValue(forKey: preset.id)
+
+            case (.preset, .delete):
+                guard let presetId = UUID(uuidString: entry.recordId) else { continue }
+                pendingPresetSaves.removeValue(forKey: presetId)
+                pendingPresetDeletes[presetId] = PendingDelete(groupId: gid, token: entry.token)
+            }
+        }
+
+        for groupId in touchedGroupIds.sorted() {
+            publishPendingCount(for: groupId)
+        }
+
+        if !pendingGroupIds().isEmpty {
+            scheduleFlush()
+        }
     }
 
     /// Useful for "I just did a bulk change, please push now" moments.
@@ -417,44 +505,92 @@ final class MovieNightCloudSyncCoordinator {
         for (id, sent) in snapshot.eventSaves {
             if let current = pendingEventSaves[id], current.token == sent.token {
                 pendingEventSaves.removeValue(forKey: id)
+                dirtyJournal.remove(
+                    recordType: .event,
+                    recordId: id.uuidString,
+                    matchingToken: sent.token,
+                    groupId: sent.groupId
+                )
             }
         }
         for (id, sent) in snapshot.eventDeletes {
             if let current = pendingEventDeletes[id], current.token == sent.token {
                 pendingEventDeletes.removeValue(forKey: id)
+                dirtyJournal.remove(
+                    recordType: .event,
+                    recordId: id.uuidString,
+                    matchingToken: sent.token,
+                    groupId: sent.groupId
+                )
             }
         }
 
         for (key, sent) in snapshot.responseSaves {
             if let current = pendingResponseSaves[key], current.token == sent.token {
                 pendingResponseSaves.removeValue(forKey: key)
+                dirtyJournal.remove(
+                    recordType: .response,
+                    recordId: key,
+                    matchingToken: sent.token,
+                    groupId: sent.groupId
+                )
             }
         }
         for (key, sent) in snapshot.responseDeletes {
             if let current = pendingResponseDeletes[key], current.token == sent.token {
                 pendingResponseDeletes.removeValue(forKey: key)
+                dirtyJournal.remove(
+                    recordType: .response,
+                    recordId: key,
+                    matchingToken: sent.token,
+                    groupId: sent.groupId
+                )
             }
         }
 
         for (id, sent) in snapshot.activitySaves {
             if let current = pendingActivitySaves[id], current.token == sent.token {
                 pendingActivitySaves.removeValue(forKey: id)
+                dirtyJournal.remove(
+                    recordType: .activity,
+                    recordId: id.uuidString,
+                    matchingToken: sent.token,
+                    groupId: sent.groupId
+                )
             }
         }
         for (id, sent) in snapshot.activityDeletes {
             if let current = pendingActivityDeletes[id], current.token == sent.token {
                 pendingActivityDeletes.removeValue(forKey: id)
+                dirtyJournal.remove(
+                    recordType: .activity,
+                    recordId: id.uuidString,
+                    matchingToken: sent.token,
+                    groupId: sent.groupId
+                )
             }
         }
 
         for (id, sent) in snapshot.presetSaves {
             if let current = pendingPresetSaves[id], current.token == sent.token {
                 pendingPresetSaves.removeValue(forKey: id)
+                dirtyJournal.remove(
+                    recordType: .preset,
+                    recordId: id.uuidString,
+                    matchingToken: sent.token,
+                    groupId: sent.groupId
+                )
             }
         }
         for (id, sent) in snapshot.presetDeletes {
             if let current = pendingPresetDeletes[id], current.token == sent.token {
                 pendingPresetDeletes.removeValue(forKey: id)
+                dirtyJournal.remove(
+                    recordType: .preset,
+                    recordId: id.uuidString,
+                    matchingToken: sent.token,
+                    groupId: sent.groupId
+                )
             }
         }
     }
