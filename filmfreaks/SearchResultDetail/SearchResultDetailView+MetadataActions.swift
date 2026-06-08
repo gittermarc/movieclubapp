@@ -51,13 +51,6 @@ extension SearchResultDetailView {
     }
 
     private func metadataMovie(_ existing: Movie, matches candidate: Movie) -> Bool {
-        if let existingTMDbId = existing.tmdbId,
-           let candidateTMDbId = candidate.tmdbId,
-           existingTMDbId == candidateTMDbId {
-            return true
-        }
-
-        return existing.title.caseInsensitiveCompare(candidate.title) == .orderedSame
-            && existing.year == candidate.year
+        MovieStore.metadataMovie(existing, matches: candidate)
     }
 }

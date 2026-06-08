@@ -166,64 +166,18 @@ private struct ContentRoutingModifier: ViewModifier {
     }
 
     private func addMovieToWatched(_ newMovie: Movie) {
-        // Film mit Gruppen-Infos „anreichern“
-        var movieWithGroup = newMovie
-        movieWithGroup.groupId = movieStore.currentGroupId
-        movieWithGroup.groupName = movieStore.currentGroupName
-
-        // Activity-Meta: wer hat hinzugefuegt + wann.
-        if movieWithGroup.addedAt == nil {
-            movieWithGroup.addedAt = Date()
-        }
-        if (movieWithGroup.addedByName?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true) {
-            if let u = userStore.selectedUser {
-                movieWithGroup.addedById = u.id
-                movieWithGroup.addedByName = u.name
-            }
-        }
-
-        // Eindeutigkeit weiterhin über Titel + Jahr
-        let isSame: (Movie) -> Bool = { movie in
-            movie.title == movieWithGroup.title && movie.year == movieWithGroup.year
-        }
-
-        // Wenn noch nicht in „Gesehen“, hinzufügen
-        if !movieStore.movies.contains(where: isSame) {
-            movieStore.movies.append(movieWithGroup)
-        }
-
-        // Falls im Backlog vorhanden, dort entfernen
-        movieStore.backlogMovies.removeAll(where: isSame)
+        movieStore.addMovie(
+            newMovie,
+            to: .watched,
+            selectedUser: userStore.selectedUser
+        )
     }
 
     private func addMovieToBacklog(_ newMovie: Movie) {
-        var movieWithGroup = newMovie
-        movieWithGroup.groupId = movieStore.currentGroupId
-        movieWithGroup.groupName = movieStore.currentGroupName
-
-        // Activity-Meta: wer hat hinzugefuegt + wann.
-        if movieWithGroup.addedAt == nil {
-            movieWithGroup.addedAt = Date()
-        }
-        if (movieWithGroup.addedByName?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true) {
-            if let u = userStore.selectedUser {
-                movieWithGroup.addedById = u.id
-                movieWithGroup.addedByName = u.name
-            }
-        }
-
-        let isSame: (Movie) -> Bool = { movie in
-            movie.title == movieWithGroup.title && movie.year == movieWithGroup.year
-        }
-
-        // Wenn der Film schon als gesehen markiert ist → nicht in den Backlog aufnehmen
-        guard !movieStore.movies.contains(where: isSame) else {
-            return
-        }
-
-        // Nur hinzufügen, wenn noch nicht im Backlog
-        if !movieStore.backlogMovies.contains(where: isSame) {
-            movieStore.backlogMovies.append(movieWithGroup)
-        }
+        movieStore.addMovie(
+            newMovie,
+            to: .backlog,
+            selectedUser: userStore.selectedUser
+        )
     }
 }

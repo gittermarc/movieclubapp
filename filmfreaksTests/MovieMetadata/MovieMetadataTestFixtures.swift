@@ -148,6 +148,33 @@ nonisolated enum MovieMetadataTestFixtures {
         )
     }
 
+    static func makeCompleteMovie(
+        id: UUID = UUID(),
+        title: String = "Arrival",
+        year: String = "2016",
+        tmdbId: Int = 42
+    ) -> Movie {
+        Movie(
+            id: id,
+            title: title,
+            year: year,
+            tmdbRating: 8.4,
+            posterPath: "/poster.jpg",
+            tmdbId: tmdbId,
+            genres: ["Science Fiction", "Drama"],
+            genreIds: [1, 2],
+            keywords: ["First Contact", "Arrival"],
+            keywordIds: [10, 11],
+            cast: [
+                CastMember(personId: 100, name: "Amy Adams"),
+                CastMember(personId: 101, name: "Jeremy Renner")
+            ],
+            directors: [
+                CastMember(personId: 200, name: "Denis Villeneuve")
+            ]
+        )
+    }
+
     static func makeSearchResponse(results: [TMDbMovieResult]) -> TMDbSearchResponse {
         TMDbSearchResponse(
             page: 1,

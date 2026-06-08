@@ -1,5 +1,6 @@
 import Testing
 @testable import filmfreaks
+import Foundation
 
 struct MovieMetadataLoadedMoviePatchTests {
 
@@ -52,5 +53,40 @@ struct MovieMetadataLoadedMoviePatchTests {
         #expect(movie.directors?.map(\.name) == ["Legacy Director"])
         #expect(movie.tmdbRating == 8.4)
         #expect(movie.posterPath == "/poster.jpg")
+    }
+
+    @Test func patchKeepsLocalUserFieldsUntouched() {
+        let watchedDate = Date(timeIntervalSince1970: 1_700_000_000)
+        let addedAt = Date(timeIntervalSince1970: 1_700_100_000)
+        let addedById = UUID()
+        let patch = MovieMetadataLoadedMoviePatch(details: MovieMetadataTestFixtures.makeDetails())
+
+        var movie = Movie(
+            title: "Arrival",
+            year: "2016",
+            tmdbRating: nil,
+            posterPath: nil,
+            watchedDate: watchedDate,
+            watchedLocation: "München",
+            tmdbId: 42,
+            suggestedBy: "Michi",
+            addedAt: addedAt,
+            addedById: addedById,
+            addedByName: "Marc"
+        )
+        movie.groupId = "group-1"
+        movie.groupName = "Filmclub"
+
+        patch.apply(to: &movie)
+
+        #expect(movie.watchedDate == watchedDate)
+        #expect(movie.watchedLocation == "München")
+        #expect(movie.suggestedBy == "Michi")
+        #expect(movie.addedAt == addedAt)
+        #expect(movie.addedById == addedById)
+        #expect(movie.addedByName == "Marc")
+        #expect(movie.groupId == "group-1")
+        #expect(movie.groupName == "Filmclub")
+        #expect(movie.genres == ["Science Fiction", "Drama"])
     }
 }

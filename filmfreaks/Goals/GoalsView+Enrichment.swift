@@ -45,11 +45,7 @@ extension GoalsView {
         // weil wir damit alle Goal-Typen in einem Request abdecken.
         struct Update {
             let movieId: UUID
-            let genreNames: [String]?
-            let genreIds: [Int]?
-            let keywordNames: [String]?
-            let keywordIds: [Int]?
-            let directors: [CastMember]?
+            let patch: MovieMetadataLoadedMoviePatch
             let popularitySeeds: [PersonPopularityStore.Seed]
         }
 
@@ -81,32 +77,9 @@ extension GoalsView {
                             return out
                         }()
 
-                        let gNames = details.genres?
-                            .map { $0.name.trimmingCharacters(in: .whitespacesAndNewlines) }
-                            .filter { !$0.isEmpty }
-                        let gIds = details.genres?.map { $0.id }
-
-                        // NOTE: Avoid accessing `allKeywords` here.
-                        // In Swift 6 language mode this can become a hard error if `allKeywords`
-                        // is main-actor-isolated. We can safely merge the two possible arrays.
-                        let kws = (details.keywords?.keywords ?? []) + (details.keywords?.results ?? [])
-                        let kNames = kws
-                            .map { $0.name.trimmingCharacters(in: .whitespacesAndNewlines) }
-                            .filter { !$0.isEmpty }
-                        let kIds = kws.map { $0.id }
-
-                        let directors = details.credits?.crew
-                            .filter { ($0.job ?? "").lowercased() == "director" }
-                            .map { CastMember(personId: $0.id, name: $0.name.trimmingCharacters(in: .whitespacesAndNewlines)) }
-                            .filter { !$0.name.isEmpty }
-
                         return Update(
                             movieId: movieId,
-                            genreNames: gNames,
-                            genreIds: gIds,
-                            keywordNames: kNames,
-                            keywordIds: kIds,
-                            directors: directors,
+                            patch: MovieMetadataLoadedMoviePatch(details: details),
                             popularitySeeds: seeds
                         )
                     } catch {
@@ -134,13 +107,13 @@ extension GoalsView {
             guard let idx = updatedList.firstIndex(where: { $0.id == u.movieId }) else { continue }
 
             if typesNeeded.contains(.genre) {
-                if let names = u.genreNames, !names.isEmpty {
+                if let names = u.patch.genres, !names.isEmpty {
                     if updatedList[idx].genres != names {
                         updatedList[idx].genres = names
                         didChange = true
                     }
                 }
-                if let ids = u.genreIds, !ids.isEmpty {
+                if let ids = u.patch.genreIds, !ids.isEmpty {
                     if updatedList[idx].genreIds != ids {
                         updatedList[idx].genreIds = ids
                         didChange = true
@@ -149,13 +122,13 @@ extension GoalsView {
             }
 
             if typesNeeded.contains(.keyword) {
-                if let names = u.keywordNames, !names.isEmpty {
+                if let names = u.patch.keywords, !names.isEmpty {
                     if updatedList[idx].keywords != names {
                         updatedList[idx].keywords = names
                         didChange = true
                     }
                 }
-                if let ids = u.keywordIds, !ids.isEmpty {
+                if let ids = u.patch.keywordIds, !ids.isEmpty {
                     if updatedList[idx].keywordIds != ids {
                         updatedList[idx].keywordIds = ids
                         didChange = true
@@ -164,7 +137,7 @@ extension GoalsView {
             }
 
             if typesNeeded.contains(.director) {
-                if let directors = u.directors, !directors.isEmpty {
+                if let directors = u.patch.directors, !directors.isEmpty {
                     if updatedList[idx].directors != directors {
                         updatedList[idx].directors = directors
                         didChange = true

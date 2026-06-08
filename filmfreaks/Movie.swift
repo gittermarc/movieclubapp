@@ -9,7 +9,7 @@ import Foundation
 
 // MARK: - Kriterien
 
-enum RatingCriterion: String, CaseIterable, Identifiable, Codable, Hashable {
+nonisolated enum RatingCriterion: String, CaseIterable, Identifiable, Codable, Hashable, Sendable {
     case action = "Action"
     case suspense = "Spannung"
     case emotion = "Emotion"
@@ -23,7 +23,7 @@ enum RatingCriterion: String, CaseIterable, Identifiable, Codable, Hashable {
 
 // MARK: - Rating
 
-struct Rating: Identifiable, Codable, Equatable {
+nonisolated struct Rating: Identifiable, Codable, Equatable, Sendable {
     var id = UUID()
 
     /// Stable identity of the reviewer (stored; does not change when the name changes).
@@ -63,7 +63,7 @@ struct Rating: Identifiable, Codable, Equatable {
 
 // MARK: - Person Reference (Cast/Director)
 
-struct CastMember: Identifiable, Codable, Hashable, Sendable {
+nonisolated struct CastMember: Identifiable, Codable, Hashable, Sendable {
     /// TMDb Person ID (positiv) – eindeutig.
     /// Für Legacy-Daten können temporär negative IDs vorkommen (Migration ersetzt sie, wenn tmdbId vorhanden).
     let personId: Int
@@ -74,7 +74,7 @@ struct CastMember: Identifiable, Codable, Hashable, Sendable {
 
 // MARK: - Movie
 
-struct Movie: Identifiable, Codable, Equatable {
+nonisolated struct Movie: Identifiable, Codable, Equatable, Sendable {
     var id: UUID
     var title: String
     var year: String
