@@ -58,7 +58,15 @@ extension CloudKitMovieNightStore {
         let namespace = "movieNights"
         let previous = CloudKitZoneChangeTokenStore.token(namespace: namespace, scope: scope, zoneID: zoneID)
 
-        let result = try await CloudKitZoneChanges.fetchAllChanges(database: route.db, zoneID: zoneID, previousToken: previous)
+        let fetchResult = try await CloudKitTokenRecovery.fetchZoneChangesWithSingleRecovery(
+            database: route.db,
+            zoneID: zoneID,
+            previousToken: previous,
+            clearToken: {
+                CloudKitZoneChangeTokenStore.clear(namespace: namespace, scope: scope, zoneID: zoneID)
+            }
+        )
+        let result = fetchResult.changes
         CloudKitZoneChangeTokenStore.setToken(result.newChangeToken, namespace: namespace, scope: scope, zoneID: zoneID)
 
         var changedEvents: [MovieNightEvent] = []
@@ -131,7 +139,7 @@ extension CloudKitMovieNightStore {
             deletedActivityIDs: deletedActivityIDs,
             changedPresets: changedPresets,
             deletedPresetIDs: deletedPresetIDs,
-            isInitial: (previous == nil)
+            isInitial: !fetchResult.usedPreviousToken
         )
     }
 }

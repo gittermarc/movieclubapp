@@ -37,7 +37,15 @@ extension CloudKitMovieStore {
         let namespace = "movies"
         let previous = CloudKitZoneChangeTokenStore.token(namespace: namespace, scope: scope, zoneID: zoneID)
 
-        let result = try await CloudKitZoneChanges.fetchAllChanges(database: route.db, zoneID: zoneID, previousToken: previous)
+        let fetchResult = try await CloudKitTokenRecovery.fetchZoneChangesWithSingleRecovery(
+            database: route.db,
+            zoneID: zoneID,
+            previousToken: previous,
+            clearToken: {
+                CloudKitZoneChangeTokenStore.clear(namespace: namespace, scope: scope, zoneID: zoneID)
+            }
+        )
+        let result = fetchResult.changes
 
         // Persist new token (even if nil; best-effort)
         CloudKitZoneChangeTokenStore.setToken(result.newChangeToken, namespace: namespace, scope: scope, zoneID: zoneID)
@@ -61,6 +69,6 @@ extension CloudKitMovieStore {
             }
         }
 
-        return MovieChanges(changed: changed, deletedMovieIDs: deleted, isInitial: (previous == nil))
+        return MovieChanges(changed: changed, deletedMovieIDs: deleted, isInitial: !fetchResult.usedPreviousToken)
     }
 }

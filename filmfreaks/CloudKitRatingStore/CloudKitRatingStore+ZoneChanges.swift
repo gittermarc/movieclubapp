@@ -36,7 +36,15 @@ extension CloudKitRatingStore {
         let namespace = "ratings"
         let previous = CloudKitZoneChangeTokenStore.token(namespace: namespace, scope: scope, zoneID: zoneID)
 
-        let result = try await CloudKitZoneChanges.fetchAllChanges(database: route.db, zoneID: zoneID, previousToken: previous)
+        let fetchResult = try await CloudKitTokenRecovery.fetchZoneChangesWithSingleRecovery(
+            database: route.db,
+            zoneID: zoneID,
+            previousToken: previous,
+            clearToken: {
+                CloudKitZoneChangeTokenStore.clear(namespace: namespace, scope: scope, zoneID: zoneID)
+            }
+        )
+        let result = fetchResult.changes
         CloudKitZoneChangeTokenStore.setToken(result.newChangeToken, namespace: namespace, scope: scope, zoneID: zoneID)
 
         // Decode changed ratings
@@ -80,6 +88,6 @@ extension CloudKitRatingStore {
             }
         }
 
-        return RatingChanges(changedByMovieId: changed, deletedKeys: deleted, isInitial: (previous == nil))
+        return RatingChanges(changedByMovieId: changed, deletedKeys: deleted, isInitial: !fetchResult.usedPreviousToken)
     }
 }
