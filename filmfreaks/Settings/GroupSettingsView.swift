@@ -22,6 +22,7 @@ struct GroupSettingsView: View {
 
     @State private var pendingGroupAction: GroupSettingsPendingAction?
     @State private var isPerformingGroupAction = false
+    @StateObject private var activeCardModel = GroupSettingsActiveCardSnapshotModel()
 
     private var activeContext: GroupContext? {
         guard let gid = movieStore.currentGroupId, !gid.isEmpty else { return nil }
@@ -47,16 +48,6 @@ struct GroupSettingsView: View {
             memberCount: userStore.users.count,
             watchedCount: movieStore.movies.count,
             backlogCount: movieStore.backlogMovies.count
-        )
-    }
-
-    private var activeCardSnapshot: GroupSettingsActiveCardSnapshot {
-        GroupSettingsActiveCardSnapshotBuilder.build(
-            users: userStore.users,
-            movieEvents: movieStore.activityEvents(displayMode: displaySettings.ratingDisplayMode, limit: 24),
-            movieNightEvents: movieNightStore.activityEvents(for: normalizedCurrentGroupId),
-            movies: movieStore.movies,
-            backlogMovies: movieStore.backlogMovies
         )
     }
 
@@ -89,7 +80,7 @@ struct GroupSettingsView: View {
                     activeGroupBadgeText: activeGroupBadgeText,
                     detailText: activeGroupDescription,
                     summaryText: activeGroupSummaryText,
-                    snapshot: activeCardSnapshot,
+                    snapshot: activeCardModel.snapshot,
                     canShareActiveGroup: canShareActiveGroup,
                     canSwitchToLocalGroup: canSwitchToLocalGroup,
                     isPerformingGroupAction: isPerformingGroupAction,
@@ -190,10 +181,31 @@ struct GroupSettingsView: View {
         .navigationTitle("Gruppen")
         .navigationBarTitleDisplayMode(.inline)
         .task {
+            updateActiveCardSnapshot()
             await refreshScreen(forceMovieNightRefresh: false)
+            updateActiveCardSnapshot()
         }
         .refreshable {
             await refreshScreen(forceMovieNightRefresh: true)
+            updateActiveCardSnapshot()
+        }
+        .onReceive(userStore.$users) { _ in
+            updateActiveCardSnapshot()
+        }
+        .onReceive(movieStore.$movies) { _ in
+            updateActiveCardSnapshot()
+        }
+        .onReceive(movieStore.$backlogMovies) { _ in
+            updateActiveCardSnapshot()
+        }
+        .onReceive(movieStore.$currentGroupId) { _ in
+            updateActiveCardSnapshot()
+        }
+        .onReceive(movieNightStore.$activityByGroup) { _ in
+            updateActiveCardSnapshot()
+        }
+        .onReceive(displaySettings.$ratingDisplayMode) { _ in
+            updateActiveCardSnapshot()
         }
         .sheet(
             isPresented: Binding(
@@ -254,6 +266,19 @@ struct GroupSettingsView: View {
         } message: {
             Text(migrateError ?? "")
         }
+    }
+
+
+    private func updateActiveCardSnapshot() {
+        activeCardModel.update(
+            input: GroupSettingsActiveCardSnapshotInput(
+                users: userStore.users,
+                movieEvents: movieStore.activityEvents(displayMode: displaySettings.ratingDisplayMode, limit: 24),
+                movieNightEvents: movieNightStore.activityEvents(for: normalizedCurrentGroupId),
+                movies: movieStore.movies,
+                backlogMovies: movieStore.backlogMovies
+            )
+        )
     }
 
     private func createCloudGroup() {
