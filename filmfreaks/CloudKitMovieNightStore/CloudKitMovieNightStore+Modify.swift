@@ -146,8 +146,14 @@ extension CloudKitMovieNightStore {
             recordIDsToDelete.append(rid)
         }
 
-        if recordsToSave.isEmpty, recordIDsToDelete.isEmpty { return }
-        try await movieNight_modifyRecords(database: route.db, saving: recordsToSave, deleting: recordIDsToDelete)
+        let batches = MovieNightCloudKitModificationBatcher.modificationBatches(
+            saves: recordsToSave,
+            deletes: recordIDsToDelete
+        )
+
+        for batch in batches {
+            try await movieNight_modifyRecords(database: route.db, saving: batch.saves, deleting: batch.deletes)
+        }
     }
 }
 

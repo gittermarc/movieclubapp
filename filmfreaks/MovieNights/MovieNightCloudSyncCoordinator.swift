@@ -50,6 +50,8 @@ final class MovieNightCloudSyncCoordinator {
         var token: UUID
     }
 
+    private static let maxCloudKitModificationsPerOperation = MovieNightCloudKitModificationBatcher.defaultMaxItemsPerBatch
+
     private let cloudStore: CloudKitMovieNightStore
     private let beginSync: () -> Void
     private let endSync: () -> Void
@@ -229,68 +231,32 @@ final class MovieNightCloudSyncCoordinator {
             }
 
             do {
-                try await cloudStore.modifyBatch(
-                    groupId: gid,
-                    saveEvents: snapshot.eventsToSave,
-                    deleteEventIDs: snapshot.eventIDsToDelete,
-                    saveResponses: snapshot.responsesToSave,
-                    deleteResponses: snapshot.responsesToDelete,
-                    saveActivity: snapshot.activityToSave,
-                    deleteActivityIDs: snapshot.activityIDsToDelete,
-                    savePresets: snapshot.presetsToSave,
-                    deletePresetIDs: snapshot.presetIDsToDelete
+                let batches = snapshot.cloudKitModificationBatches(
+                    maxItemsPerBatch: Self.maxCloudKitModificationsPerOperation
                 )
 
-                // Only remove entries that haven't been superseded during the flush.
-                for (id, sent) in snapshot.eventSaves {
-                    if let current = pendingEventSaves[id], current.token == sent.token {
-                        pendingEventSaves.removeValue(forKey: id)
-                    }
-                }
-                for (id, sent) in snapshot.eventDeletes {
-                    if let current = pendingEventDeletes[id], current.token == sent.token {
-                        pendingEventDeletes.removeValue(forKey: id)
-                    }
+                for batch in batches {
+                    try await cloudStore.modifyBatch(
+                        groupId: gid,
+                        saveEvents: batch.eventsToSave,
+                        deleteEventIDs: batch.eventIDsToDelete,
+                        saveResponses: batch.responsesToSave,
+                        deleteResponses: batch.responsesToDelete,
+                        saveActivity: batch.activityToSave,
+                        deleteActivityIDs: batch.activityIDsToDelete,
+                        savePresets: batch.presetsToSave,
+                        deletePresetIDs: batch.presetIDsToDelete
+                    )
+
+                    removePendingEntries(from: batch)
+                    publishPendingCount(for: gid)
                 }
 
-                for (key, sent) in snapshot.responseSaves {
-                    if let current = pendingResponseSaves[key], current.token == sent.token {
-                        pendingResponseSaves.removeValue(forKey: key)
-                    }
-                }
-                for (key, sent) in snapshot.responseDeletes {
-                    if let current = pendingResponseDeletes[key], current.token == sent.token {
-                        pendingResponseDeletes.removeValue(forKey: key)
-                    }
-                }
-
-                for (id, sent) in snapshot.activitySaves {
-                    if let current = pendingActivitySaves[id], current.token == sent.token {
-                        pendingActivitySaves.removeValue(forKey: id)
-                    }
-                }
-                for (id, sent) in snapshot.activityDeletes {
-                    if let current = pendingActivityDeletes[id], current.token == sent.token {
-                        pendingActivityDeletes.removeValue(forKey: id)
-                    }
-                }
-
-                for (id, sent) in snapshot.presetSaves {
-                    if let current = pendingPresetSaves[id], current.token == sent.token {
-                        pendingPresetSaves.removeValue(forKey: id)
-                    }
-                }
-                for (id, sent) in snapshot.presetDeletes {
-                    if let current = pendingPresetDeletes[id], current.token == sent.token {
-                        pendingPresetDeletes.removeValue(forKey: id)
-                    }
-                }
-
-                publishPendingCount(for: gid)
                 batchDidSucceed(gid)
 
             } catch {
-                // Keep pending changes so the UI can show "ausstehend" and we can retry later.
+                // Keep failed and superseded pending changes so the UI can show "ausstehend"
+                // and the next flush can retry only what is still locally pending.
                 publishPendingCount(for: gid)
                 batchDidFail(error, gid)
                 break
@@ -307,6 +273,17 @@ final class MovieNightCloudSyncCoordinator {
 
     // MARK: - Pending snapshots
 
+    private enum GroupSnapshotItem {
+        case eventSave(UUID, PendingEventSave)
+        case eventDelete(UUID, PendingDelete)
+        case responseSave(String, PendingResponseSave)
+        case responseDelete(String, PendingResponseDelete)
+        case activitySave(UUID, PendingActivitySave)
+        case activityDelete(UUID, PendingDelete)
+        case presetSave(UUID, PendingPresetSave)
+        case presetDelete(UUID, PendingDelete)
+    }
+
     private struct GroupSnapshot {
         var eventSaves: [UUID: PendingEventSave]
         var eventDeletes: [UUID: PendingDelete]
@@ -316,6 +293,60 @@ final class MovieNightCloudSyncCoordinator {
         var activityDeletes: [UUID: PendingDelete]
         var presetSaves: [UUID: PendingPresetSave]
         var presetDeletes: [UUID: PendingDelete]
+
+        init(
+            eventSaves: [UUID: PendingEventSave],
+            eventDeletes: [UUID: PendingDelete],
+            responseSaves: [String: PendingResponseSave],
+            responseDeletes: [String: PendingResponseDelete],
+            activitySaves: [UUID: PendingActivitySave],
+            activityDeletes: [UUID: PendingDelete],
+            presetSaves: [UUID: PendingPresetSave],
+            presetDeletes: [UUID: PendingDelete]
+        ) {
+            self.eventSaves = eventSaves
+            self.eventDeletes = eventDeletes
+            self.responseSaves = responseSaves
+            self.responseDeletes = responseDeletes
+            self.activitySaves = activitySaves
+            self.activityDeletes = activityDeletes
+            self.presetSaves = presetSaves
+            self.presetDeletes = presetDeletes
+        }
+
+        init(items: [GroupSnapshotItem]) {
+            self.init(
+                eventSaves: [:],
+                eventDeletes: [:],
+                responseSaves: [:],
+                responseDeletes: [:],
+                activitySaves: [:],
+                activityDeletes: [:],
+                presetSaves: [:],
+                presetDeletes: [:]
+            )
+
+            for item in items {
+                switch item {
+                case .eventSave(let id, let save):
+                    eventSaves[id] = save
+                case .eventDelete(let id, let pendingDelete):
+                    eventDeletes[id] = pendingDelete
+                case .responseSave(let key, let save):
+                    responseSaves[key] = save
+                case .responseDelete(let key, let pendingDelete):
+                    responseDeletes[key] = pendingDelete
+                case .activitySave(let id, let save):
+                    activitySaves[id] = save
+                case .activityDelete(let id, let pendingDelete):
+                    activityDeletes[id] = pendingDelete
+                case .presetSave(let id, let save):
+                    presetSaves[id] = save
+                case .presetDelete(let id, let pendingDelete):
+                    presetDeletes[id] = pendingDelete
+                }
+            }
+        }
 
         var isEmpty: Bool {
             eventSaves.isEmpty && eventDeletes.isEmpty && responseSaves.isEmpty && responseDeletes.isEmpty && activitySaves.isEmpty && activityDeletes.isEmpty && presetSaves.isEmpty && presetDeletes.isEmpty
@@ -332,6 +363,100 @@ final class MovieNightCloudSyncCoordinator {
 
         var presetsToSave: [MovieRoulettePreset] { presetSaves.values.map { $0.preset } }
         var presetIDsToDelete: [UUID] { Array(presetDeletes.keys) }
+
+        func cloudKitModificationBatches(maxItemsPerBatch: Int) -> [GroupSnapshot] {
+            MovieNightCloudKitModificationBatcher
+                .chunks(items: modificationItems, maxItemsPerBatch: maxItemsPerBatch)
+                .map { GroupSnapshot(items: $0) }
+        }
+
+        private var modificationItems: [GroupSnapshotItem] {
+            var items: [GroupSnapshotItem] = []
+            items.reserveCapacity(
+                eventSaves.count
+                + eventDeletes.count
+                + responseSaves.count
+                + responseDeletes.count
+                + activitySaves.count
+                + activityDeletes.count
+                + presetSaves.count
+                + presetDeletes.count
+            )
+
+            for (id, save) in eventSaves.sorted(by: { $0.key.uuidString < $1.key.uuidString }) {
+                items.append(.eventSave(id, save))
+            }
+            for (id, pendingDelete) in eventDeletes.sorted(by: { $0.key.uuidString < $1.key.uuidString }) {
+                items.append(.eventDelete(id, pendingDelete))
+            }
+            for (key, save) in responseSaves.sorted(by: { $0.key < $1.key }) {
+                items.append(.responseSave(key, save))
+            }
+            for (key, pendingDelete) in responseDeletes.sorted(by: { $0.key < $1.key }) {
+                items.append(.responseDelete(key, pendingDelete))
+            }
+            for (id, save) in activitySaves.sorted(by: { $0.key.uuidString < $1.key.uuidString }) {
+                items.append(.activitySave(id, save))
+            }
+            for (id, pendingDelete) in activityDeletes.sorted(by: { $0.key.uuidString < $1.key.uuidString }) {
+                items.append(.activityDelete(id, pendingDelete))
+            }
+            for (id, save) in presetSaves.sorted(by: { $0.key.uuidString < $1.key.uuidString }) {
+                items.append(.presetSave(id, save))
+            }
+            for (id, pendingDelete) in presetDeletes.sorted(by: { $0.key.uuidString < $1.key.uuidString }) {
+                items.append(.presetDelete(id, pendingDelete))
+            }
+
+            return items
+        }
+    }
+
+    private func removePendingEntries(from snapshot: GroupSnapshot) {
+        // Only remove entries that have not been superseded during the flush.
+        for (id, sent) in snapshot.eventSaves {
+            if let current = pendingEventSaves[id], current.token == sent.token {
+                pendingEventSaves.removeValue(forKey: id)
+            }
+        }
+        for (id, sent) in snapshot.eventDeletes {
+            if let current = pendingEventDeletes[id], current.token == sent.token {
+                pendingEventDeletes.removeValue(forKey: id)
+            }
+        }
+
+        for (key, sent) in snapshot.responseSaves {
+            if let current = pendingResponseSaves[key], current.token == sent.token {
+                pendingResponseSaves.removeValue(forKey: key)
+            }
+        }
+        for (key, sent) in snapshot.responseDeletes {
+            if let current = pendingResponseDeletes[key], current.token == sent.token {
+                pendingResponseDeletes.removeValue(forKey: key)
+            }
+        }
+
+        for (id, sent) in snapshot.activitySaves {
+            if let current = pendingActivitySaves[id], current.token == sent.token {
+                pendingActivitySaves.removeValue(forKey: id)
+            }
+        }
+        for (id, sent) in snapshot.activityDeletes {
+            if let current = pendingActivityDeletes[id], current.token == sent.token {
+                pendingActivityDeletes.removeValue(forKey: id)
+            }
+        }
+
+        for (id, sent) in snapshot.presetSaves {
+            if let current = pendingPresetSaves[id], current.token == sent.token {
+                pendingPresetSaves.removeValue(forKey: id)
+            }
+        }
+        for (id, sent) in snapshot.presetDeletes {
+            if let current = pendingPresetDeletes[id], current.token == sent.token {
+                pendingPresetDeletes.removeValue(forKey: id)
+            }
+        }
     }
 
     private func snapshotForGroup(_ groupId: String) -> GroupSnapshot {
