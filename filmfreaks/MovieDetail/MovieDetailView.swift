@@ -88,16 +88,26 @@ struct MovieDetailView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
 
-                    MovieDetailHeroHeaderView(movie: movie)
+                    MovieMetadataHeroHeaderView(
+                        posterURL: heroPosterURL,
+                        backdropURL: heroBackdropURL,
+                        posterFallbackBackgroundURL: heroPosterFallbackBackgroundURL,
+                        title: movie.title,
+                        yearText: movie.year,
+                        tmdbRating: movie.tmdbRating,
+                        groupRating: movie.groupAverage(for: displaySettings.ratingDisplayMode),
+                        runtimeText: runtimeText,
+                        certificationText: certificationText
+                    )
 
                     // Titel & Basisinfos
                     MovieDetailTitleSectionView(
                         title: movie.title,
                         year: movie.year,
                         taglineText: taglineText,
-                        releaseDateText: releaseDateText,
-                        originalTitleText: originalTitleText,
-                        originalLanguageText: originalLanguageText,
+                        releaseDateText: nil,
+                        originalTitleText: nil,
+                        originalLanguageText: nil,
                         tmdbRating: movie.tmdbRating
                     )
 
@@ -111,6 +121,12 @@ struct MovieDetailView: View {
                         isAutomatic: isWatchProvidersRegionAutomatic
                     ) {
                         showWatchProvidersRegionPicker = true
+                    }
+
+                    if let factsPresentation {
+                        MovieDetailSectionCard(title: "Fakten") {
+                            MovieFactsGridView(presentation: factsPresentation)
+                        }
                     }
 
                     // Handlung
@@ -153,8 +169,7 @@ struct MovieDetailView: View {
                     }
 
                     // Infos
-                    if runtimeText != nil
-                        || director != nil
+                    if director != nil
                         || !castList.isEmpty
                         || !keywordNames.isEmpty
                         || trailerKey != nil
@@ -163,12 +178,13 @@ struct MovieDetailView: View {
                         MovieDetailSectionCard(title: "Infos zum Film") {
                             MovieDetailFilmInfoSectionView(
                                 movie: movie,
-                                runtimeText: runtimeText,
+                                runtimeText: nil,
                                 genreNames: genreNames,
                                 director: director,
                                 castList: castList,
                                 keywordNames: keywordNames,
                                 trailerKey: trailerKey,
+                                trailerPreviewURL: trailerPreviewURL,
                                 trailerWatchURL: trailerWatchURL,
                                 selectedPerson: $selectedPerson,
                                 isTrailerSafariShown: $isTrailerSafariShown

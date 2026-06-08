@@ -74,10 +74,7 @@ extension SearchResultDetailView {
     }
 
     var runtimeText: String? {
-        if let runtime = details?.runtime {
-            return "\(runtime) Minuten"
-        }
-        return nil
+        MovieFactsValuePresentation.runtimeText(details?.runtime)
     }
 
     var taglineText: String? {
@@ -91,7 +88,15 @@ extension SearchResultDetailView {
     }
 
     var releaseDateText: String? {
-        MovieMetadataPresentation.formattedReleaseDate(details?.release_date ?? result.release_date)
+        guard let details else {
+            return MovieMetadataPresentation.formattedReleaseDate(result.release_date)
+        }
+
+        return MovieReleaseDatePresentation.preferredReleaseDateText(
+            releaseDates: details.release_dates,
+            regionCode: effectiveWatchProvidersRegionCode,
+            fallbackReleaseDate: details.release_date ?? result.release_date
+        )
     }
 
     var originalTitleText: String? {
@@ -104,10 +109,7 @@ extension SearchResultDetailView {
     }
 
     var originalLanguageText: String? {
-        let code = (details?.original_language ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !code.isEmpty else { return nil }
-        let locale = Locale(identifier: "de_DE")
-        return locale.localizedString(forLanguageCode: code)?.capitalized ?? code.uppercased()
+        MovieFactsValuePresentation.originalLanguageText(details?.original_language)
     }
 
     var titleText: String {
@@ -116,6 +118,43 @@ extension SearchResultDetailView {
 
     var yearText: String? {
         releaseYear(from: details?.release_date ?? result.release_date)
+    }
+
+    var certificationText: String? {
+        certificationPresentation?.text
+    }
+
+    var certificationPresentation: MovieCertificationPresentation? {
+        MovieCertificationPresentation.make(
+            releaseDates: details?.release_dates,
+            regionCode: effectiveWatchProvidersRegionCode
+        )
+    }
+
+    var factsPresentation: MovieFactsPresentation? {
+        guard let details else { return nil }
+        return MovieFactsPresentation.make(
+            details: details,
+            fallbackReleaseDate: details.release_date ?? result.release_date,
+            displayTitle: result.title,
+            regionCode: effectiveWatchProvidersRegionCode
+        )
+    }
+
+    var heroBackdropURL: URL? {
+        MovieMetadataPresentation.bestBackdropURL(
+            backdropPath: details?.backdrop_path ?? result.backdrop_path,
+            images: details?.images,
+            width: .w1280
+        )
+    }
+
+    var trailerPreviewURL: URL? {
+        MovieMetadataPresentation.trailerPreviewURL(
+            backdropPath: details?.backdrop_path ?? result.backdrop_path,
+            images: details?.images,
+            posterPath: details?.poster_path ?? result.poster_path
+        )
     }
 
     // MARK: - Trailer

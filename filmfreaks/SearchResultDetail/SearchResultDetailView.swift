@@ -73,7 +73,10 @@ struct SearchResultDetailView: View {
                         posterURL: posterURL,
                         title: titleText,
                         yearText: yearText,
-                        tmdbRating: details?.vote_average ?? result.vote_average
+                        tmdbRating: details?.vote_average ?? result.vote_average,
+                        backdropURL: heroBackdropURL,
+                        runtimeText: runtimeText,
+                        certificationText: certificationText
                     )
 
                     // Titel & Basisinfos (wie MovieDetailView)
@@ -97,6 +100,12 @@ struct SearchResultDetailView: View {
                         isAutomatic: isWatchProvidersRegionAutomatic
                     ) {
                         showWatchProvidersRegionPicker = true
+                    }
+
+                    if let factsPresentation {
+                        SearchResultDetailSectionCard(title: "Fakten") {
+                            MovieFactsGridView(presentation: factsPresentation)
+                        }
                     }
 
                     // ✅ Handlung (wie MovieDetailView) – ohne „Beschreibung“-Card
@@ -141,7 +150,7 @@ struct SearchResultDetailView: View {
                             castList: castList,
                             keywordNames: keywordNames,
                             shouldShowTrailer: trailerKey != nil,
-                            posterURL: posterURL,
+                            trailerPreviewURL: trailerPreviewURL,
                             trailerWatchURL: trailerWatchURL,
                             isTrailerSafariShown: $isTrailerSafariShown
                         ) { personId, name, role in

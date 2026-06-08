@@ -11,7 +11,7 @@ struct SearchResultDetailTrailerInlineBlockView: View {
 
     @EnvironmentObject private var displaySettings: DisplaySettings
 
-    let posterURL: URL?
+    let previewURL: URL?
     let trailerWatchURL: URL?
     @Binding var isTrailerSafariShown: Bool
 
@@ -101,7 +101,7 @@ struct SearchResultDetailTrailerInlineBlockView: View {
 
     @ViewBuilder
     private var posterPreview: some View {
-        if let url = posterURL {
+        if let url = previewURL {
             CachedAsyncImage(url: url) { phase in
                 switch phase {
                 case .empty:

@@ -17,6 +17,7 @@ struct MovieDetailFilmInfoSectionView: View {
     let castList: [TMDbCast]
     let keywordNames: [String]
     let trailerKey: String?
+    let trailerPreviewURL: URL?
     let trailerWatchURL: URL?
 
     @Binding var selectedPerson: SelectedPerson?
@@ -75,6 +76,7 @@ struct MovieDetailFilmInfoSectionView: View {
                 MovieDetailTrailerSectionView(
                     movie: movie,
                     trailerKey: key,
+                    previewURL: trailerPreviewURL,
                     trailerWatchURL: trailerWatchURL,
                     isTrailerSafariShown: $isTrailerSafariShown
                 )

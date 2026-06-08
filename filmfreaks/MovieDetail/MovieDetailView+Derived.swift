@@ -51,10 +51,7 @@ extension MovieDetailView {
     }
 
     var runtimeText: String? {
-        if let runtime = loadCoordinator.details?.runtime {
-            return "\(runtime) Minuten"
-        }
-        return nil
+        MovieFactsValuePresentation.runtimeText(loadCoordinator.details?.runtime)
     }
 
     var taglineText: String? {
@@ -68,7 +65,12 @@ extension MovieDetailView {
     }
 
     var releaseDateText: String? {
-        MovieMetadataPresentation.formattedReleaseDate(loadCoordinator.details?.release_date)
+        guard let details = loadCoordinator.details else { return nil }
+        return MovieReleaseDatePresentation.preferredReleaseDateText(
+            releaseDates: details.release_dates,
+            regionCode: effectiveWatchProvidersRegionCode,
+            fallbackReleaseDate: details.release_date
+        )
     }
 
     var originalTitleText: String? {
@@ -80,10 +82,58 @@ extension MovieDetailView {
     }
 
     var originalLanguageText: String? {
-        let code = (loadCoordinator.details?.original_language ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !code.isEmpty else { return nil }
-        let locale = Locale(identifier: "de_DE")
-        return locale.localizedString(forLanguageCode: code)?.capitalized ?? code.uppercased()
+        MovieFactsValuePresentation.originalLanguageText(loadCoordinator.details?.original_language)
+    }
+
+    var certificationText: String? {
+        certificationPresentation?.text
+    }
+
+    var certificationPresentation: MovieCertificationPresentation? {
+        MovieCertificationPresentation.make(
+            releaseDates: loadCoordinator.details?.release_dates,
+            regionCode: effectiveWatchProvidersRegionCode
+        )
+    }
+
+    var factsPresentation: MovieFactsPresentation? {
+        guard let details = loadCoordinator.details else { return nil }
+        return MovieFactsPresentation.make(
+            details: details,
+            fallbackReleaseDate: details.release_date,
+            displayTitle: movie.title,
+            regionCode: effectiveWatchProvidersRegionCode
+        )
+    }
+
+    var heroPosterURL: URL? {
+        MovieMetadataPresentation.posterURL(
+            path: loadCoordinator.details?.poster_path ?? movie.posterPath,
+            width: .w500
+        )
+    }
+
+    var heroBackdropURL: URL? {
+        MovieMetadataPresentation.bestBackdropURL(
+            backdropPath: loadCoordinator.details?.backdrop_path,
+            images: loadCoordinator.details?.images,
+            width: .w1280
+        )
+    }
+
+    var heroPosterFallbackBackgroundURL: URL? {
+        MovieMetadataPresentation.posterURL(
+            path: loadCoordinator.details?.poster_path ?? movie.posterPath,
+            width: .w342
+        )
+    }
+
+    var trailerPreviewURL: URL? {
+        MovieMetadataPresentation.trailerPreviewURL(
+            backdropPath: loadCoordinator.details?.backdrop_path,
+            images: loadCoordinator.details?.images,
+            posterPath: loadCoordinator.details?.poster_path ?? movie.posterPath
+        )
     }
 
     // MARK: - Bewertungen (Übersicht)

@@ -17,7 +17,7 @@ struct SearchResultDetailFilmInfoSectionView: View {
     let castList: [TMDbCast]
     let keywordNames: [String]
     let shouldShowTrailer: Bool
-    let posterURL: URL?
+    let trailerPreviewURL: URL?
     let trailerWatchURL: URL?
     @Binding var isTrailerSafariShown: Bool
     let onTapPerson: (_ personId: Int, _ name: String, _ role: String?) -> Void
@@ -74,7 +74,7 @@ struct SearchResultDetailFilmInfoSectionView: View {
 
                 if shouldShowTrailer {
                     SearchResultDetailTrailerInlineBlockView(
-                        posterURL: posterURL,
+                        previewURL: trailerPreviewURL,
                         trailerWatchURL: trailerWatchURL,
                         isTrailerSafariShown: $isTrailerSafariShown
                     )

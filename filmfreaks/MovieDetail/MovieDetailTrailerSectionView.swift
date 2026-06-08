@@ -12,6 +12,7 @@ struct MovieDetailTrailerSectionView: View {
     @EnvironmentObject private var displaySettings: DisplaySettings
     let movie: Movie
     let trailerKey: String
+    let previewURL: URL?
     let trailerWatchURL: URL?
 
     @Binding var isTrailerSafariShown: Bool
@@ -26,9 +27,8 @@ struct MovieDetailTrailerSectionView: View {
                     isTrailerSafariShown = true
                 } label: {
                     ZStack {
-                        // Preview: Poster (kein Backdrop vorhanden)
                         Group {
-                            if let url = movie.posterURL {
+                            if let url = previewURL ?? movie.posterURL {
                                 CachedAsyncImage(url: url) { phase in
                                     switch phase {
                                     case .empty:
