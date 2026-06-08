@@ -31,7 +31,7 @@ extension GoalsView {
     }
 
     func loadYearlyGoals() {
-        goalsStore.loadYearlyGoals()
+        goalsStore.loadYearlyGoals(groupId: movieStore.currentGroupId)
     }
 
     func loadCustomGoals() {

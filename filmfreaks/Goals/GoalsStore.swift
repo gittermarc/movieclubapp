@@ -26,9 +26,10 @@ final class GoalsStore: ObservableObject {
 
     var isSyncingGoals: Bool { syncCount > 0 }
 
-    let yearlyGoalsStorageKey = GroupScopedStorage.UserDefaultsKey.yearlyGoals
+    let legacyYearlyGoalsStorageKey = GroupScopedStorage.UserDefaultsKey.legacyYearlyGoals
     let defaultYearlyGoal = 50
 
+    private let yearlyGoalsLegacyMigrationOwnerKey = GroupScopedStorage.UserDefaultsKey.yearlyGoalsLegacyMigrationOwner
     private let userDefaults: UserDefaults
     private let cloudStore: any GoalsCloudSyncing
 
@@ -40,23 +41,37 @@ final class GoalsStore: ObservableObject {
         self.cloudStore = cloudStore ?? CloudKitGoalStore.shared
     }
 
+    func yearlyGoalsStorageKey(for groupId: String?) -> String {
+        GroupScopedStorage.UserDefaultsKey.yearlyGoals(groupId: groupId)
+    }
+
     func customGoalsStorageKey(for groupId: String?) -> String {
         GroupScopedStorage.UserDefaultsKey.customGoals(groupId: groupId)
     }
 
-    func loadYearlyGoals() {
-        if let data = userDefaults.data(forKey: yearlyGoalsStorageKey),
-           let decoded = try? JSONDecoder().decode([Int: Int].self, from: data) {
+    func loadYearlyGoals(groupId: String?) {
+        let storageKey = yearlyGoalsStorageKey(for: groupId)
+        if let decoded = decodeYearlyGoals(forKey: storageKey) {
             goalsByYear = decoded
-        } else {
-            goalsByYear = [:]
+            return
         }
+
+        if let migrated = migrateLegacyYearlyGoalsIfNeeded(groupId: groupId) {
+            goalsByYear = migrated
+            return
+        }
+
+        goalsByYear = [:]
+    }
+
+    func loadYearlyGoals() {
+        loadYearlyGoals(groupId: nil)
     }
 
     func setYearlyTarget(_ target: Int, selectedYear: Int, groupId: String?) {
         let clamped = max(1, target)
         goalsByYear[selectedYear] = clamped
-        persistYearlyGoals()
+        persistYearlyGoals(groupId: groupId)
         Task { await syncYearlyGoalToCloud(year: selectedYear, target: clamped, groupId: groupId) }
     }
 
@@ -102,16 +117,12 @@ final class GoalsStore: ObservableObject {
 
         do {
             let remoteYearly = try await cloudStore.fetchGoals(forGroupId: groupId)
-            if !remoteYearly.isEmpty {
-                goalsByYear = remoteYearly
-                persistYearlyGoals()
-            }
+            goalsByYear = remoteYearly
+            persistYearlyGoals(groupId: groupId)
 
             let remoteCustom = try await cloudStore.fetchCustomGoals(forGroupId: groupId)
-            if !remoteCustom.goals.isEmpty {
-                customGoals = stableDedupe(remoteCustom.goals)
-                persistCustomGoals(groupId: groupId)
-            }
+            customGoals = stableDedupe(remoteCustom.goals)
+            persistCustomGoals(groupId: groupId)
         } catch {
             print("CloudKit syncFromCloud error: \(error)")
         }
@@ -146,9 +157,9 @@ final class GoalsStore: ObservableObject {
         return out
     }
 
-    private func persistYearlyGoals() {
+    private func persistYearlyGoals(groupId: String?) {
         if let data = try? JSONEncoder().encode(goalsByYear) {
-            userDefaults.set(data, forKey: yearlyGoalsStorageKey)
+            userDefaults.set(data, forKey: yearlyGoalsStorageKey(for: groupId))
         }
     }
 
@@ -157,6 +168,29 @@ final class GoalsStore: ObservableObject {
         if let data = try? JSONEncoder().encode(payload) {
             userDefaults.set(data, forKey: customGoalsStorageKey(for: groupId))
         }
+    }
+
+    private func decodeYearlyGoals(forKey key: String) -> [Int: Int]? {
+        guard let data = userDefaults.data(forKey: key) else { return nil }
+        return try? JSONDecoder().decode([Int: Int].self, from: data)
+    }
+
+    private func migrateLegacyYearlyGoalsIfNeeded(groupId: String?) -> [Int: Int]? {
+        guard userDefaults.string(forKey: yearlyGoalsLegacyMigrationOwnerKey) == nil else {
+            return nil
+        }
+
+        guard let data = userDefaults.data(forKey: legacyYearlyGoalsStorageKey),
+              let decoded = try? JSONDecoder().decode([Int: Int].self, from: data) else {
+            return nil
+        }
+
+        userDefaults.set(data, forKey: yearlyGoalsStorageKey(for: groupId))
+        userDefaults.set(
+            GroupScopedStorage.syncGroupKey(for: groupId),
+            forKey: yearlyGoalsLegacyMigrationOwnerKey
+        )
+        return decoded
     }
 
     private func syncYearlyGoalToCloud(year: Int, target: Int, groupId: String?) async {

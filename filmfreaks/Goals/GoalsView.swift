@@ -179,6 +179,7 @@ struct GoalsView: View {
                 Task { await triggerMetadataEnrichmentIfNeeded() }
             }
             .onChange(of: movieStore.currentGroupId) { _, _ in
+                loadYearlyGoals()
                 loadCustomGoals()
                 Task { await syncFromCloud() }
             }

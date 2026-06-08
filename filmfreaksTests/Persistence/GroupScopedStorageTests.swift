@@ -45,7 +45,10 @@ struct GroupScopedStorageTests {
         #expect(GroupScopedStorage.UserDefaultsKey.currentGroupId == "CurrentGroupId")
         #expect(GroupScopedStorage.UserDefaultsKey.currentGroupName == "CurrentGroupName")
         #expect(GroupScopedStorage.UserDefaultsKey.knownGroups == "KnownGroups")
-        #expect(GroupScopedStorage.UserDefaultsKey.yearlyGoals == "ViewingGoalsByYear.v1")
+        #expect(GroupScopedStorage.UserDefaultsKey.legacyYearlyGoals == "ViewingGoalsByYear.v1")
+        #expect(GroupScopedStorage.UserDefaultsKey.yearlyGoals(groupId: nil) == "ViewingGoalsByYear.v2.__default__")
+        #expect(GroupScopedStorage.UserDefaultsKey.yearlyGoals(groupId: "group-a") == "ViewingGoalsByYear.v2.group-a")
+        #expect(GroupScopedStorage.UserDefaultsKey.yearlyGoalsLegacyMigrationOwner == "ViewingGoalsByYear.v2.legacyMigrationOwner")
         #expect(GroupScopedStorage.UserDefaultsKey.customGoals(groupId: nil) == "ViewingCustomGoals.v3.")
         #expect(GroupScopedStorage.UserDefaultsKey.customGoals(groupId: "group-a") == "ViewingCustomGoals.v3.group-a")
     }

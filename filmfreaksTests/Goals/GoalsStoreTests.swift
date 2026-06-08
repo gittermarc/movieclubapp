@@ -5,18 +5,22 @@ import Testing
 @MainActor
 struct GoalsStoreTests {
 
-    @Test func loadsYearlyGoalsFromLocalStorage() throws {
+    @Test func loadsYearlyGoalsFromGroupScopedLocalStorage() throws {
         let suite = try TestUserDefaultsSuite(prefix: "GoalsStoreTests.yearly")
         let expected = [2026: 42]
-        suite.defaults.set(try JSONEncoder().encode(expected), forKey: "ViewingGoalsByYear.v1")
-
         let store = GoalsStore(userDefaults: suite.defaults, cloudStore: GoalsCloudStoreMock())
-        store.loadYearlyGoals()
+
+        suite.defaults.set(
+            try JSONEncoder().encode(expected),
+            forKey: store.yearlyGoalsStorageKey(for: "group-a")
+        )
+
+        store.loadYearlyGoals(groupId: "group-a")
 
         #expect(store.goalsByYear == expected)
     }
 
-    @Test func setYearlyTargetPersistsClampedValue() throws {
+    @Test func setYearlyTargetPersistsClampedValueInGroupScopedStorage() throws {
         let suite = try TestUserDefaultsSuite(prefix: "GoalsStoreTests.clamp")
         let store = GoalsStore(userDefaults: suite.defaults, cloudStore: GoalsCloudStoreMock())
 
@@ -24,9 +28,54 @@ struct GoalsStoreTests {
 
         #expect(store.goalsByYear[2026] == 1)
 
-        let data = try #require(suite.defaults.data(forKey: store.yearlyGoalsStorageKey))
+        let data = try #require(suite.defaults.data(forKey: store.yearlyGoalsStorageKey(for: "group-a")))
         let decoded = try JSONDecoder().decode([Int: Int].self, from: data)
         #expect(decoded[2026] == 1)
+        #expect(suite.defaults.data(forKey: store.legacyYearlyGoalsStorageKey) == nil)
+    }
+
+    @Test func yearlyGoalsAreSeparatedByGroup() throws {
+        let suite = try TestUserDefaultsSuite(prefix: "GoalsStoreTests.yearlyGroups")
+        let store = GoalsStore(userDefaults: suite.defaults, cloudStore: GoalsCloudStoreMock())
+
+        suite.defaults.set(
+            try JSONEncoder().encode([2026: 12]),
+            forKey: store.yearlyGoalsStorageKey(for: "group-a")
+        )
+        suite.defaults.set(
+            try JSONEncoder().encode([2026: 34]),
+            forKey: store.yearlyGoalsStorageKey(for: "group-b")
+        )
+
+        store.loadYearlyGoals(groupId: "group-a")
+        #expect(store.goalsByYear == [2026: 12])
+
+        store.loadYearlyGoals(groupId: "group-b")
+        #expect(store.goalsByYear == [2026: 34])
+    }
+
+    @Test func migratesLegacyYearlyGoalsOnlyOnceWithoutDeletingLegacyData() throws {
+        let suite = try TestUserDefaultsSuite(prefix: "GoalsStoreTests.legacyMigration")
+        let legacy = [2026: 42]
+        let store = GoalsStore(userDefaults: suite.defaults, cloudStore: GoalsCloudStoreMock())
+
+        suite.defaults.set(
+            try JSONEncoder().encode(legacy),
+            forKey: store.legacyYearlyGoalsStorageKey
+        )
+
+        store.loadYearlyGoals(groupId: "group-a")
+
+        #expect(store.goalsByYear == legacy)
+        #expect(suite.defaults.data(forKey: store.legacyYearlyGoalsStorageKey) != nil)
+
+        let migratedData = try #require(suite.defaults.data(forKey: store.yearlyGoalsStorageKey(for: "group-a")))
+        let migrated = try JSONDecoder().decode([Int: Int].self, from: migratedData)
+        #expect(migrated == legacy)
+
+        store.loadYearlyGoals(groupId: "group-b")
+        #expect(store.goalsByYear == [:])
+        #expect(suite.defaults.data(forKey: store.yearlyGoalsStorageKey(for: "group-b")) == nil)
     }
 
     @Test func loadCustomGoalsUsesGroupSpecificStorageKey() throws {
@@ -106,19 +155,57 @@ struct GoalsStoreTests {
         #expect(store.customGoals.map(\.id) == [second.id])
     }
 
-    @Test func syncFromCloudDoesNotOverwriteLocalStateWithEmptyRemotePayloads() async throws {
+    @Test func syncFromCloudAppliesEmptyRemotePayloads() async throws {
         let suite = try TestUserDefaultsSuite(prefix: "GoalsStoreTests.emptyRemote")
         let remote = GoalsCloudStoreMock()
         let store = GoalsStore(userDefaults: suite.defaults, cloudStore: remote)
         let localGoal = makeDecadeGoal(decade: 1980, startYear: 2026)
 
-        store.setYearlyTarget(23, selectedYear: 2026, groupId: "group-a")
-        store.upsertCustomGoal(localGoal, groupId: "group-a")
+        suite.defaults.set(
+            try JSONEncoder().encode([2026: 23]),
+            forKey: store.yearlyGoalsStorageKey(for: "group-a")
+        )
+        suite.defaults.set(
+            try JSONEncoder().encode(ViewingCustomGoalsPayload(goals: [localGoal])),
+            forKey: store.customGoalsStorageKey(for: "group-a")
+        )
+        store.loadYearlyGoals(groupId: "group-a")
+        store.loadCustomGoals(groupId: "group-a")
 
         await store.syncFromCloud(groupId: "group-a")
 
-        #expect(store.goalsByYear[2026] == 23)
-        #expect(store.customGoals.map(\.id) == [localGoal.id])
+        #expect(store.goalsByYear == [:])
+        #expect(store.customGoals == [])
+
+        let yearlyData = try #require(suite.defaults.data(forKey: store.yearlyGoalsStorageKey(for: "group-a")))
+        let yearly = try JSONDecoder().decode([Int: Int].self, from: yearlyData)
+        #expect(yearly == [:])
+
+        let customData = try #require(suite.defaults.data(forKey: store.customGoalsStorageKey(for: "group-a")))
+        let custom = try JSONDecoder().decode(ViewingCustomGoalsPayload.self, from: customData)
+        #expect(custom.goals == [])
+    }
+
+    @Test func emptyRemoteYearlyGoalsPreventLegacyZombieRehydration() async throws {
+        let suite = try TestUserDefaultsSuite(prefix: "GoalsStoreTests.emptyRemoteLegacy")
+        let legacy = [2026: 42]
+        let remote = GoalsCloudStoreMock()
+        let store = GoalsStore(userDefaults: suite.defaults, cloudStore: remote)
+
+        suite.defaults.set(
+            try JSONEncoder().encode(legacy),
+            forKey: store.legacyYearlyGoalsStorageKey
+        )
+
+        store.loadYearlyGoals(groupId: "group-a")
+        #expect(store.goalsByYear == legacy)
+
+        await store.syncFromCloud(groupId: "group-a")
+        #expect(store.goalsByYear == [:])
+
+        let reloadedStore = GoalsStore(userDefaults: suite.defaults, cloudStore: remote)
+        reloadedStore.loadYearlyGoals(groupId: "group-a")
+        #expect(reloadedStore.goalsByYear == [:])
     }
 
     @Test func syncFromCloudPersistsStableDedupeForRemoteCustomGoals() async throws {
@@ -154,6 +241,10 @@ struct GoalsStoreTests {
         #expect(store.customGoals.count == 1)
         #expect(store.customGoals[0].id == first.id)
         #expect(store.customGoals[0].target == first.target)
+
+        let yearlyData = try #require(suite.defaults.data(forKey: store.yearlyGoalsStorageKey(for: "group-a")))
+        let yearly = try JSONDecoder().decode([Int: Int].self, from: yearlyData)
+        #expect(yearly[2026] == 15)
 
         let data = try #require(suite.defaults.data(forKey: store.customGoalsStorageKey(for: "group-a")))
         let payload = try JSONDecoder().decode(ViewingCustomGoalsPayload.self, from: data)

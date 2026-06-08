@@ -28,7 +28,9 @@ enum GroupScopedStorage {
         static let selectedUserByGroup = "ff.selectedUser.byGroup.v1"
         static let userStoreSyncStatusByGroup = "UserStore_SyncStatusByGroup"
 
-        static let yearlyGoals = "ViewingGoalsByYear.v1"
+        static let legacyYearlyGoals = "ViewingGoalsByYear.v1"
+        static let yearlyGoalsPrefix = "ViewingGoalsByYear.v2."
+        static let yearlyGoalsLegacyMigrationOwner = "ViewingGoalsByYear.v2.legacyMigrationOwner"
         static let customGoalsPrefix = "ViewingCustomGoals.v3."
 
         static let movieStoreSyncMetaPrefix = "MovieStore.SyncMeta."
@@ -40,6 +42,10 @@ enum GroupScopedStorage {
             }
 
             return "Users_Default"
+        }
+
+        static func yearlyGoals(groupId: String?) -> String {
+            yearlyGoalsPrefix + GroupScopedStorage.syncGroupKey(for: groupId)
         }
 
         static func customGoals(groupId: String?) -> String {
