@@ -63,7 +63,7 @@ struct Rating: Identifiable, Codable, Equatable {
 
 // MARK: - Person Reference (Cast/Director)
 
-struct CastMember: Identifiable, Codable, Hashable {
+struct CastMember: Identifiable, Codable, Hashable, Sendable {
     /// TMDb Person ID (positiv) – eindeutig.
     /// Für Legacy-Daten können temporär negative IDs vorkommen (Migration ersetzt sie, wenn tmdbId vorhanden).
     let personId: Int

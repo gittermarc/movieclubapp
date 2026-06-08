@@ -7,6 +7,7 @@
 
 internal import SwiftUI
 
+@MainActor
 struct SearchResultDetailView: View {
 
     let result: TMDbMovieResult
@@ -23,16 +24,7 @@ struct SearchResultDetailView: View {
     @AppStorage(WatchProvidersRegionSettings.storageKey)
     var watchProvidersRegionCode: String = WatchProvidersRegionSettings.deviceRegionCode()
 
-    @State var details: TMDbMovieDetails?
-    @State var isLoading: Bool = false
-    @State var errorMessage: String?
-
-    // ✅ NEU: Streaming-Anbieter (Watch Providers)
-    @State var watchProviders: [TMDbWatchProvider] = []
-    @State var watchProvidersCountry: TMDbWatchProvidersCountry? = nil
-    @State var watchProvidersLink: URL? = nil
-    @State var isLoadingWatchProviders: Bool = false
-    @State var didLoadWatchProviders: Bool = false
+    @StateObject var loadCoordinator = MovieMetadataLoadCoordinator()
 
     @State var showWatchProvidersRegionPicker: Bool = false
 
@@ -204,23 +196,12 @@ struct SearchResultDetailView: View {
             }
         }
         .onAppear {
-            if details == nil {
-                isLoading = true
-                errorMessage = nil
+            if loadCoordinator.details == nil {
                 Task { await loadDetails() }
             }
         }
         .onChange(of: result.id) { _, _ in
-            isLoading = true
-            errorMessage = nil
-            details = nil
             isOverviewExpanded = false
-
-            isLoadingWatchProviders = true
-            didLoadWatchProviders = false
-            watchProviders = []
-            watchProvidersCountry = nil
-            watchProvidersLink = nil
             Task { await loadDetails() }
         }
         .onChange(of: watchProvidersRegionCode) { _, _ in

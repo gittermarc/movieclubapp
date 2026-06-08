@@ -142,7 +142,7 @@ internal extension MovieStore {
 
     @discardableResult
     func applyLoadedMoviePatch(
-        _ patch: MovieDetailLoadedMoviePatch,
+        _ patch: MovieMetadataLoadedMoviePatch,
         toMovieId movieId: UUID,
         isBacklog: Bool
     ) -> Bool {

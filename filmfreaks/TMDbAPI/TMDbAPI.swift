@@ -16,7 +16,7 @@ import Foundation
 /// - TMDbAPI+Search.swift
 /// - TMDbAPI+Details.swift
 /// - TMDbAPI+PeopleAndMeta.swift
-final class TMDbAPI {
+final class TMDbAPI: @unchecked Sendable {
 
     static let shared = TMDbAPI()
 

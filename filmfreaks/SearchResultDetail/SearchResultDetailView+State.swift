@@ -21,6 +21,35 @@ extension SearchResultDetailView {
         watchProvidersRegionCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+
+    var details: TMDbMovieDetails? {
+        loadCoordinator.details
+    }
+
+    var isLoading: Bool {
+        loadCoordinator.isLoadingDetails
+    }
+
+    var errorMessage: String? {
+        loadCoordinator.detailsError
+    }
+
+    var watchProvidersCountry: TMDbWatchProvidersCountry? {
+        loadCoordinator.watchProvidersCountry
+    }
+
+    var watchProvidersLink: URL? {
+        loadCoordinator.watchProvidersLink
+    }
+
+    var isLoadingWatchProviders: Bool {
+        loadCoordinator.isLoadingWatchProviders
+    }
+
+    var didLoadWatchProviders: Bool {
+        loadCoordinator.didLoadWatchProviders
+    }
+
     // MARK: - Metadaten aus TMDb (wie MovieDetailView)
 
     var director: String? {
@@ -113,9 +142,10 @@ extension SearchResultDetailView {
     // MARK: - Helper
 
     var posterURL: URL? {
-        let path = details?.poster_path ?? result.poster_path
-        guard let path else { return nil }
-        return URL(string: "https://image.tmdb.org/t/p/w500\(path)")
+        MovieMetadataPresentation.posterURL(
+            path: details?.poster_path ?? result.poster_path,
+            width: .w500
+        )
     }
 
     func releaseYear(from dateString: String?) -> String? {

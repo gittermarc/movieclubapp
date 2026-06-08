@@ -13,7 +13,7 @@ extension TMDbAPI {
         let items: [URLQueryItem] = [
             try apiKeyQueryItem(),
             URLQueryItem(name: "language", value: "de-DE"),
-            URLQueryItem(name: "append_to_response", value: "credits,keywords,videos")
+            URLQueryItem(name: "append_to_response", value: "credits,keywords,videos,images,release_dates,external_ids")
         ]
 
         return try await requestJSON(path: "movie/\(id)", queryItems: items, type: TMDbMovieDetails.self)

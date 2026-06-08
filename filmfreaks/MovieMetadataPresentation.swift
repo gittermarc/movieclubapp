@@ -16,6 +16,24 @@ enum MovieMetadataPresentation {
         case w500
     }
 
+    enum BackdropWidth: String {
+        case w300
+        case w780
+        case w1280
+        case original
+    }
+
+    enum ImageWidth: String {
+        case w92
+        case w185
+        case w300
+        case w342
+        case w500
+        case w780
+        case w1280
+        case original
+    }
+
     private static let releaseDateInputFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
@@ -44,7 +62,19 @@ enum MovieMetadataPresentation {
     }
 
     static func posterURL(path: String?, width: PosterWidth) -> URL? {
+        imageURL(path: path, width: width.rawValue)
+    }
+
+    static func backdropURL(path: String?, width: BackdropWidth) -> URL? {
+        imageURL(path: path, width: width.rawValue)
+    }
+
+    static func imageURL(path: String?, width: ImageWidth) -> URL? {
+        imageURL(path: path, width: width.rawValue)
+    }
+
+    private static func imageURL(path: String?, width: String) -> URL? {
         guard let path else { return nil }
-        return URL(string: "https://image.tmdb.org/t/p/\(width.rawValue)\(path)")
+        return URL(string: "https://image.tmdb.org/t/p/\(width)\(path)")
     }
 }
