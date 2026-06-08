@@ -172,7 +172,8 @@ final class MovieRouletteViewModel: ObservableObject {
         let previousGroupId = activeGroupId
         let previousSelectedPresetId = selectedPresetId
 
-        backlogCandidates = MovieRouletteCandidate.buildBacklogCandidates(from: backlogMovies, activeGroupId: normalizedGroupId)
+        let backlogIndex = MovieRouletteBacklogIndex(backlogMovies: backlogMovies, activeGroupId: normalizedGroupId)
+        backlogCandidates = backlogIndex.candidates
 
         if normalizedGroupId != activeGroupId {
             selectedSource = .backlog
