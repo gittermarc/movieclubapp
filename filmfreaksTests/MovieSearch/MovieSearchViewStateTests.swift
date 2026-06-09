@@ -68,6 +68,7 @@ struct MovieSearchViewStateTests {
         )
 
         #expect(state.primaryContent == .idlePlaceholder)
+        #expect(state.showsIdleSurface)
     }
 
     @Test func focusedEmptySearchDoesNotShowIdlePlaceholder() {
@@ -81,5 +82,34 @@ struct MovieSearchViewStateTests {
         )
 
         #expect(state.primaryContent == .none)
+        #expect(!state.showsIdleSurface)
+    }
+
+    @Test func discoveryUsesIdleSurface() {
+        let state = MovieSearchViewState.resolve(
+            query: "",
+            recentQueries: [],
+            isLoading: false,
+            hasResults: false,
+            isSearchFieldFocused: false,
+            shouldShowRecommendations: true
+        )
+
+        #expect(state.showsDiscovery)
+        #expect(state.showsIdleSurface)
+    }
+
+    @Test func searchResultsDoNotUseIdleSurface() {
+        let state = MovieSearchViewState.resolve(
+            query: "Dune",
+            recentQueries: ["Alien"],
+            isLoading: false,
+            hasResults: true,
+            isSearchFieldFocused: false,
+            shouldShowRecommendations: false
+        )
+
+        #expect(state.primaryContent == .results)
+        #expect(!state.showsIdleSurface)
     }
 }

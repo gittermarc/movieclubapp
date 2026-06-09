@@ -19,30 +19,36 @@ struct MovieSearchIdleContentView: View {
     let onAddToBacklog: (TMDbMovieResult) -> Void
 
     var body: some View {
-        Group {
-            if viewState.showsRecentQueries {
-                MovieSearchRecentQueriesView(
-                    recentQueries: recentQueries,
-                    onTap: onRecentQueryTap,
-                    onClearHistory: onClearHistory
-                )
-            }
-
-            if viewState.showsDiscovery {
-                discoveryContent
-            }
-
-            if viewState.primaryContent == .idlePlaceholder {
-                VStack(spacing: 8) {
-                    Image(systemName: "magnifyingglass")
-                        .font(.largeTitle)
-                        .foregroundStyle(.secondary)
-                    Text("Suche nach Filmtiteln auf TMDb")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+        ScrollView(.vertical, showsIndicators: true) {
+            VStack(spacing: 16) {
+                if viewState.showsRecentQueries {
+                    MovieSearchRecentQueriesView(
+                        recentQueries: recentQueries,
+                        onTap: onRecentQueryTap,
+                        onClearHistory: onClearHistory
+                    )
                 }
-                .padding(.top, 40)
+
+                if viewState.showsDiscovery {
+                    discoveryContent
+                }
+
+                if viewState.primaryContent == .idlePlaceholder {
+                    VStack(spacing: 8) {
+                        Image(systemName: "magnifyingglass")
+                            .font(.largeTitle)
+                            .foregroundStyle(.secondary)
+                        Text("Suche nach Filmtiteln auf TMDb")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 40)
+                }
             }
+            .frame(maxWidth: .infinity, alignment: .top)
+            .padding(.top, 8)
+            .padding(.bottom, 28)
         }
     }
 

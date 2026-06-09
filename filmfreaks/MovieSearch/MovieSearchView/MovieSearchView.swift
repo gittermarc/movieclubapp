@@ -93,43 +93,48 @@ struct MovieSearchView: View {
                 )
                 .ignoresSafeArea()
 
-                VStack(spacing: 12) {
-                    MovieSearchIdleContentView(
-                        viewState: viewState,
-                        recentQueries: viewModel.recentQueries,
-                        discoveryShelves: viewModel.discoveryShelves,
-                        isLoadingDiscovery: viewModel.isLoadingDiscovery,
-                        discoveryError: viewModel.discoveryError,
-                        skeletonPulse: $skeletonPulse,
-                        membershipState: membershipState(for:),
-                        onRecentQueryTap: handleRecentQueryTap,
-                        onClearHistory: handleClearHistory,
-                        onRefreshDiscovery: handleDiscoveryRefresh,
-                        onOpenDetail: openDetail,
-                        onAddToWatched: handleAddToWatched,
-                        onAddToBacklog: handleAddToBacklog
-                    )
+                VStack(spacing: 0) {
+                    stickySearchHeader
 
-                    MovieSearchResultsContentView(
-                        viewState: viewState,
-                        errorMessage: errorMessage,
-                        results: resultsModel.sortedResults,
-                        canLoadMore: canLoadMore,
-                        isLoadingMore: viewModel.isLoadingMore,
-                        totalResults: viewModel.totalResults,
-                        keyboardHeight: keyboard.height,
-                        keyboardAnimationDuration: keyboard.animationDuration,
-                        skeletonPulse: $skeletonPulse,
-                        membershipState: membershipState(for:),
-                        onLoadMore: startLoadMore,
-                        onOpenDetail: openDetail,
-                        onAddToWatched: handleAddToWatched,
-                        onAddToBacklog: handleAddToBacklog
-                    )
-
-                    Spacer(minLength: 0)
+                    Group {
+                        if viewState.showsIdleSurface {
+                            MovieSearchIdleContentView(
+                                viewState: viewState,
+                                recentQueries: viewModel.recentQueries,
+                                discoveryShelves: viewModel.discoveryShelves,
+                                isLoadingDiscovery: viewModel.isLoadingDiscovery,
+                                discoveryError: viewModel.discoveryError,
+                                skeletonPulse: $skeletonPulse,
+                                membershipState: membershipState(for:),
+                                onRecentQueryTap: handleRecentQueryTap,
+                                onClearHistory: handleClearHistory,
+                                onRefreshDiscovery: handleDiscoveryRefresh,
+                                onOpenDetail: openDetail,
+                                onAddToWatched: handleAddToWatched,
+                                onAddToBacklog: handleAddToBacklog
+                            )
+                        } else {
+                            MovieSearchResultsContentView(
+                                viewState: viewState,
+                                errorMessage: errorMessage,
+                                results: resultsModel.sortedResults,
+                                canLoadMore: canLoadMore,
+                                isLoadingMore: viewModel.isLoadingMore,
+                                totalResults: viewModel.totalResults,
+                                keyboardHeight: keyboard.height,
+                                keyboardAnimationDuration: keyboard.animationDuration,
+                                skeletonPulse: $skeletonPulse,
+                                membershipState: membershipState(for:),
+                                onLoadMore: startLoadMore,
+                                onOpenDetail: openDetail,
+                                onAddToWatched: handleAddToWatched,
+                                onAddToBacklog: handleAddToBacklog
+                            )
+                        }
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 }
-                .padding(.top, 6)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             }
             .navigationTitle("Film suchen")
             .navigationBarTitleDisplayMode(.inline)
@@ -142,10 +147,6 @@ struct MovieSearchView: View {
                         dismiss()
                     }
                 }
-            }
-            // Sticky Header
-            .safeAreaInset(edge: .top, spacing: 0) {
-                stickySearchHeader
             }
             .sheet(item: $detailResult) { result in
                 let key = MovieSearchMapper.key(for: result)

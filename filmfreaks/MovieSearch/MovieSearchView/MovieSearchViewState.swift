@@ -21,6 +21,10 @@ struct MovieSearchViewState: Equatable {
 
     var showsRecommendations: Bool { showsDiscovery }
 
+    var showsIdleSurface: Bool {
+        showsRecentQueries || showsDiscovery || primaryContent == .idlePlaceholder
+    }
+
     static func resolve(
         query: String,
         recentQueries: [String],
