@@ -13,11 +13,15 @@ struct WatchProvidersAvailabilityView: View {
 
     let country: TMDbWatchProvidersCountry
     let link: URL?
+    var preferredProviderIDs: Set<Int> = []
 
     @State private var showDetails: Bool = false
 
     private var bestEffort: [TMDbWatchProvider] {
-        country.bestEffortProviders
+        WatchProvidersAvailabilityPresentation.sortedDeduplicated(
+            country.bestEffortProviders,
+            preferredProviderIDs: preferredProviderIDs
+        )
     }
 
     private var free: [TMDbWatchProvider] { sortedDedup(country.free ?? []) }
@@ -26,9 +30,30 @@ struct WatchProvidersAvailabilityView: View {
     private var rent: [TMDbWatchProvider] { sortedDedup(country.rent ?? []) }
     private var buy: [TMDbWatchProvider] { sortedDedup(country.buy ?? []) }
 
+    private var preferredSummary: String? {
+        WatchProvidersAvailabilityPresentation.preferredSummaryText(
+            in: country,
+            preferredProviderIDs: preferredProviderIDs
+        )
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            WatchProvidersIconsRow(providers: bestEffort)
+            if let preferredSummary {
+                Label(preferredSummary, systemImage: "checkmark.circle.fill")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tint)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 7)
+                    .background(Color.accentColor.opacity(0.10))
+                    .clipShape(Capsule())
+                    .accessibilityLabel(preferredSummary)
+            }
+
+            WatchProvidersIconsRow(
+                providers: bestEffort,
+                preferredProviderIDs: preferredProviderIDs
+            )
 
             DisclosureGroup(isExpanded: $showDetails) {
                 VStack(alignment: .leading, spacing: 14) {
@@ -89,17 +114,10 @@ struct WatchProvidersAvailabilityView: View {
     // MARK: - Helpers
 
     private func sortedDedup(_ providers: [TMDbWatchProvider]) -> [TMDbWatchProvider] {
-        var seen = Set<Int>()
-        let sorted = providers.sorted {
-            ($0.display_priority ?? Int.max) < ($1.display_priority ?? Int.max)
-        }
-
-        var output: [TMDbWatchProvider] = []
-        for p in sorted where !seen.contains(p.provider_id) {
-            seen.insert(p.provider_id)
-            output.append(p)
-        }
-        return output
+        WatchProvidersAvailabilityPresentation.sortedDeduplicated(
+            providers,
+            preferredProviderIDs: preferredProviderIDs
+        )
     }
 
     @ViewBuilder
@@ -119,7 +137,10 @@ struct WatchProvidersAvailabilityView: View {
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
 
-            WatchProvidersIconsRow(providers: providers)
+            WatchProvidersIconsRow(
+                providers: providers,
+                preferredProviderIDs: preferredProviderIDs
+            )
         }
     }
 }
@@ -135,7 +156,11 @@ struct WatchProvidersAvailabilityView: View {
     )
 
     return ScrollView {
-        WatchProvidersAvailabilityView(country: sample, link: URL(string: sample.link ?? ""))
-            .padding()
+        WatchProvidersAvailabilityView(
+            country: sample,
+            link: URL(string: sample.link ?? ""),
+            preferredProviderIDs: [1, 4]
+        )
+        .padding()
     }
 }

@@ -7,6 +7,7 @@ import Foundation
 
 nonisolated enum MovieDiscoveryShelfKind: String, Codable, CaseIterable, Sendable, Hashable, Identifiable {
     case personalizedRecommendations
+    case preferredProviders
     case trending
     case topRated
     case nowPlaying
@@ -18,6 +19,8 @@ nonisolated enum MovieDiscoveryShelfKind: String, Codable, CaseIterable, Sendabl
         switch self {
         case .personalizedRecommendations:
             return "Für euch empfohlen"
+        case .preferredProviders:
+            return "Auf deinen Diensten"
         case .trending:
             return "Gerade angesagt"
         case .topRated:
@@ -36,6 +39,12 @@ nonisolated enum MovieDiscoveryShelfKind: String, Codable, CaseIterable, Sendabl
                 return "Basierend auf „\(seedTitle)“ und ähnlichen Filmen"
             }
             return "Aus eurer Filmhistorie abgeleitet"
+        case .preferredProviders:
+            let region = regionCode.flatMap { WatchProvidersRegionSettings.normalizedRegionCode($0) }
+            guard let region else { return "Streaming auf deinen bevorzugten Anbietern" }
+            let name = WatchProvidersRegionSettings.germanDisplayName(for: region)
+            let flag = WatchProvidersRegionSettings.flagEmoji(for: region)
+            return "Streaming in \(flag) \(name)"
         case .trending:
             return "Was TMDb diese Woche bewegt"
         case .topRated:
@@ -55,6 +64,8 @@ nonisolated enum MovieDiscoveryShelfKind: String, Codable, CaseIterable, Sendabl
         switch self {
         case .personalizedRecommendations:
             return "sparkles"
+        case .preferredProviders:
+            return "play.tv.fill"
         case .trending:
             return "flame.fill"
         case .topRated:

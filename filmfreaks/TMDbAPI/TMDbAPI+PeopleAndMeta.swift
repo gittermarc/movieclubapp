@@ -31,6 +31,28 @@ nonisolated extension TMDbAPI {
         return nil
     }
 
+
+    /// Liefert den Katalog der verfügbaren Movie Watch Provider für eine optionale Region.
+    func fetchMovieWatchProviderCatalog(region: String? = nil) async throws -> [TMDbWatchProvider] {
+        let normalizedRegion = region.flatMap { WatchProvidersRegionSettings.normalizedRegionCode($0) }
+
+        var items: [URLQueryItem] = [
+            try apiKeyQueryItem(),
+            URLQueryItem(name: "language", value: "de-DE")
+        ]
+
+        if let normalizedRegion {
+            items.append(URLQueryItem(name: "watch_region", value: normalizedRegion))
+        }
+
+        let decoded = try await requestJSON(
+            path: "watch/providers/movie",
+            queryItems: items,
+            type: TMDbWatchProvidersListResponse.self
+        )
+        return decoded.results
+    }
+
     static func preferredRegionCode() -> String {
         if #available(iOS 16.0, *) {
             if let region = Locale.current.region?.identifier,

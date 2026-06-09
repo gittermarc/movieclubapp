@@ -56,6 +56,11 @@ nonisolated struct TMDbMetadataCacheKey: Codable, Hashable, Sendable {
         TMDbMetadataCacheKey(namespace: "watchProviders", movieID: movieID, regionCode: regionCode)
     }
 
+
+    static func watchProviderCatalog(regionCode: String?) -> TMDbMetadataCacheKey {
+        TMDbMetadataCacheKey(namespace: "watchProviderCatalog", regionCode: regionCode)
+    }
+
     static func collectionDetails(collectionID: Int) -> TMDbMetadataCacheKey {
         TMDbMetadataCacheKey(namespace: "collectionDetails", collectionID: collectionID)
     }

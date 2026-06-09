@@ -343,6 +343,10 @@ nonisolated struct TMDbWatchProvidersResponse: Codable, Sendable {
     let results: [String: TMDbWatchProvidersCountry]
 }
 
+nonisolated struct TMDbWatchProvidersListResponse: Codable, Sendable {
+    let results: [TMDbWatchProvider]
+}
+
 // MARK: - Personen
 
 nonisolated struct TMDbPersonSearchResponse: Decodable, Sendable {

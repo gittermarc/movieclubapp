@@ -13,6 +13,7 @@ actor MovieDiscoveryService {
         var fetchPopularMovies: (Int) async throws -> TMDbSearchResponse
         var fetchMovieRecommendations: (Int, Int) async throws -> TMDbSearchResponse
         var fetchMovieSimilar: (Int, Int) async throws -> TMDbSearchResponse
+        var fetchDiscoverMoviesWithWatchProviders: (String?, [Int], [String], Int) async throws -> TMDbSearchResponse
         var now: () -> Date
 
         init(
@@ -22,6 +23,9 @@ actor MovieDiscoveryService {
             fetchPopularMovies: @escaping (Int) async throws -> TMDbSearchResponse,
             fetchMovieRecommendations: @escaping (Int, Int) async throws -> TMDbSearchResponse,
             fetchMovieSimilar: @escaping (Int, Int) async throws -> TMDbSearchResponse,
+            fetchDiscoverMoviesWithWatchProviders: @escaping (String?, [Int], [String], Int) async throws -> TMDbSearchResponse = { _, _, _, _ in
+                TMDbSearchResponse(page: 1, results: [], total_pages: 1, total_results: 0)
+            },
             now: @escaping () -> Date = { Date() }
         ) {
             self.fetchTrendingMovies = fetchTrendingMovies
@@ -30,6 +34,7 @@ actor MovieDiscoveryService {
             self.fetchPopularMovies = fetchPopularMovies
             self.fetchMovieRecommendations = fetchMovieRecommendations
             self.fetchMovieSimilar = fetchMovieSimilar
+            self.fetchDiscoverMoviesWithWatchProviders = fetchDiscoverMoviesWithWatchProviders
             self.now = now
         }
 
@@ -52,6 +57,14 @@ actor MovieDiscoveryService {
                 },
                 fetchMovieSimilar: { id, page in
                     try await TMDbAPI.shared.fetchMovieSimilar(id: id, page: page)
+                },
+                fetchDiscoverMoviesWithWatchProviders: { region, providerIDs, monetizationTypes, page in
+                    try await TMDbAPI.shared.fetchDiscoverMoviesWithWatchProviders(
+                        region: region,
+                        providerIDs: providerIDs,
+                        monetizationTypes: monetizationTypes,
+                        page: page
+                    )
                 },
                 now: { Date() }
             )
@@ -201,6 +214,23 @@ actor MovieDiscoveryService {
                 aggregated = response.results
             }
             results = aggregated
+
+        case .preferredProviders:
+            seedTitle = nil
+            guard !request.preferredProviderIDs.isEmpty else {
+                return MovieDiscoveryResponse(
+                    kind: kind,
+                    results: [],
+                    seedTitle: nil,
+                    generatedAt: dependencies.now()
+                )
+            }
+            results = try await dependencies.fetchDiscoverMoviesWithWatchProviders(
+                request.regionCode,
+                request.preferredProviderIDs.sorted(),
+                ["flatrate", "free", "ads"],
+                1
+            ).results
 
         case .trending:
             seedTitle = nil

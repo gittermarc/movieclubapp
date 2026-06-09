@@ -7,6 +7,10 @@ extension MovieSearchView {
         ?? WatchProvidersRegionSettings.deviceRegionCode()
     }
 
+    var preferredDiscoveryProviderIDs: Set<Int> {
+        WatchProviderPreferencesStore().preferredProviderIDs(regionCode: effectiveDiscoveryRegionCode)
+    }
+
     func loadDiscoveryIfNeeded(force: Bool = false) async {
         await viewModel.loadDiscoveryIfNeeded(
             query: query,
@@ -14,6 +18,7 @@ extension MovieSearchView {
             localWatchedKeys: localWatchedKeys,
             localBacklogKeys: localBacklogKeys,
             regionCode: effectiveDiscoveryRegionCode,
+            preferredProviderIDs: preferredDiscoveryProviderIDs,
             force: force
         )
     }

@@ -103,6 +103,41 @@ nonisolated extension TMDbAPI {
         return try await requestJSON(path: "movie/top_rated", queryItems: items, type: TMDbSearchResponse.self)
     }
 
+
+    /// Discover-Feed nach Watch-Providern und Monetization-Typen.
+    func fetchDiscoverMoviesWithWatchProviders(
+        region: String?,
+        providerIDs: [Int],
+        monetizationTypes: [String] = ["flatrate", "free", "ads"],
+        page: Int = 1
+    ) async throws -> TMDbSearchResponse {
+        let normalizedRegion = region.flatMap { WatchProvidersRegionSettings.normalizedRegionCode($0) }
+        let sortedProviderIDs = Array(Set(providerIDs)).sorted()
+        guard let normalizedRegion, !sortedProviderIDs.isEmpty else {
+            return TMDbSearchResponse(page: 1, results: [], total_pages: 1, total_results: 0)
+        }
+
+        let safePage = max(1, page)
+        let monetization = monetizationTypes
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+            .filter { !$0.isEmpty }
+
+        var items: [URLQueryItem] = [
+            try apiKeyQueryItem(),
+            URLQueryItem(name: "language", value: "de-DE"),
+            URLQueryItem(name: "include_adult", value: "false"),
+            URLQueryItem(name: "page", value: String(safePage)),
+            URLQueryItem(name: "watch_region", value: normalizedRegion),
+            URLQueryItem(name: "with_watch_providers", value: sortedProviderIDs.map(String.init).joined(separator: "|"))
+        ]
+
+        if !monetization.isEmpty {
+            items.append(URLQueryItem(name: "with_watch_monetization_types", value: monetization.joined(separator: "|")))
+        }
+
+        return try await requestJSON(path: "discover/movie", queryItems: items, type: TMDbSearchResponse.self)
+    }
+
     /// Empfehlungen basierend auf einem Film (TMDb /recommendations).
     func fetchMovieRecommendations(id: Int, page: Int = 1) async throws -> TMDbSearchResponse {
         let safePage = max(1, page)

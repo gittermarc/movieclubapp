@@ -12,6 +12,8 @@ struct TMDbMetadataCachePolicyTests {
         #expect(TMDbMetadataCachePolicy.recommendations.staleDuration == 7 * 24 * 60 * 60)
         #expect(TMDbMetadataCachePolicy.watchProviders.freshDuration == 6 * 60 * 60)
         #expect(TMDbMetadataCachePolicy.watchProviders.staleDuration == 24 * 60 * 60)
+        #expect(TMDbMetadataCachePolicy.watchProviderCatalog.freshDuration == 30 * 24 * 60 * 60)
+        #expect(TMDbMetadataCachePolicy.watchProviderCatalog.staleDuration == 90 * 24 * 60 * 60)
         #expect(TMDbMetadataCachePolicy.negativeWatchProviders.freshDuration == 2 * 60 * 60)
         #expect(TMDbMetadataCachePolicy.negativeRecommendations.freshDuration == 6 * 60 * 60)
     }

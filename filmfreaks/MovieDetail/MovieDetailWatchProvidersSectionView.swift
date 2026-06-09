@@ -16,6 +16,10 @@ struct MovieDetailWatchProvidersSectionView: View {
     let isAutomatic: Bool
     let onPickRegion: () -> Void
 
+    private var preferredProviderIDs: Set<Int> {
+        WatchProviderPreferencesStore().preferredProviderIDs(regionCode: regionCode)
+    }
+
     var body: some View {
         Group {
             if isLoading {
@@ -31,7 +35,7 @@ struct MovieDetailWatchProvidersSectionView: View {
                 MovieDetailSectionCard(title: "Film ist verfügbar bei:") {
                     if let country,
                        !country.bestEffortProviders.isEmpty {
-                        WatchProvidersAvailabilityView(country: country, link: link)
+                        WatchProvidersAvailabilityView(country: country, link: link, preferredProviderIDs: preferredProviderIDs)
                     } else {
                         WatchProvidersNoDataHintView(
                             regionCode: regionCode,

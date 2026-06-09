@@ -10,12 +10,13 @@ nonisolated enum TMDbMetadataCachePolicy: Equatable, Sendable {
     case collectionDetails
     case recommendations
     case watchProviders
+    case watchProviderCatalog
     case negativeRecommendations
     case negativeWatchProviders
 
     var freshDuration: TimeInterval {
         switch self {
-        case .movieDetails, .collectionDetails:
+        case .movieDetails, .collectionDetails, .watchProviderCatalog:
             return 30 * 24 * 60 * 60
         case .recommendations:
             return 24 * 60 * 60
@@ -30,7 +31,7 @@ nonisolated enum TMDbMetadataCachePolicy: Equatable, Sendable {
 
     var staleDuration: TimeInterval {
         switch self {
-        case .movieDetails, .collectionDetails:
+        case .movieDetails, .collectionDetails, .watchProviderCatalog:
             return 90 * 24 * 60 * 60
         case .recommendations:
             return 7 * 24 * 60 * 60

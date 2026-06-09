@@ -8,6 +8,7 @@ extension MovieSearchViewModel {
         localWatchedKeys: Set<String>,
         localBacklogKeys: Set<String>,
         regionCode: String?,
+        preferredProviderIDs: Set<Int> = [],
         force: Bool = false
     ) async {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -31,7 +32,8 @@ extension MovieSearchViewModel {
             existingBacklog: existingBacklog,
             localWatchedKeys: localWatchedKeys,
             localBacklogKeys: localBacklogKeys,
-            regionCode: regionCode
+            regionCode: regionCode,
+            preferredProviderIDs: preferredProviderIDs
         )
 
         let result = await dependencies.loadDiscoveryShelves(request, force)

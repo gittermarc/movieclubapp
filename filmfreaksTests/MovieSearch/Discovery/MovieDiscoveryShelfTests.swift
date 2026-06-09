@@ -5,6 +5,7 @@ struct MovieDiscoveryShelfTests {
 
     @Test func shelfKindsHaveStableTitles() {
         #expect(MovieDiscoveryShelfKind.personalizedRecommendations.title == "Für euch empfohlen")
+        #expect(MovieDiscoveryShelfKind.preferredProviders.title == "Auf deinen Diensten")
         #expect(MovieDiscoveryShelfKind.trending.title == "Gerade angesagt")
         #expect(MovieDiscoveryShelfKind.topRated.title == "Top bewertet")
         #expect(MovieDiscoveryShelfKind.nowPlaying.title == "Neu im Kino")

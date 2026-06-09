@@ -16,7 +16,7 @@ nonisolated enum MovieDiscoveryCacheKey {
 
     private static func regionCode(for kind: MovieDiscoveryShelfKind, request: MovieDiscoveryRequest) -> String? {
         switch kind {
-        case .nowPlaying:
+        case .nowPlaying, .preferredProviders:
             return request.regionCode
         case .personalizedRecommendations, .trending, .topRated, .popular:
             return nil
@@ -32,6 +32,10 @@ nonisolated enum MovieDiscoveryCacheKey {
                 .map(String.init)
             guard !seedIDs.isEmpty else { return "no-seeds" }
             return "seeds-" + seedIDs.joined(separator: "-")
+        case .preferredProviders:
+            let ids = request.preferredProviderIDs.sorted().map(String.init)
+            guard !ids.isEmpty else { return "no-providers" }
+            return "providers-" + ids.joined(separator: "-") + "-flatrate-free-ads"
         case .trending:
             return TMDbTrendingTimeWindow.week.rawValue
         case .topRated, .popular, .nowPlaying:

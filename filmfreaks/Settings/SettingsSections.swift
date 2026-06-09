@@ -71,7 +71,13 @@ struct SettingsStreamingSectionView: View {
                 }
             }
 
-            Text("Dieses Land wird für die Streaming-Anbieter (TMDb Watch Providers) verwendet. Je Land kann die Verfügbarkeit stark variieren.")
+            NavigationLink {
+                WatchProviderPreferencesView()
+            } label: {
+                Label("Bevorzugte Anbieter", systemImage: "play.tv")
+            }
+
+            Text("Dieses Land wird für die Streaming-Anbieter (TMDb Watch Providers) verwendet. Bevorzugte Anbieter werden lokal pro Land gespeichert und in Details sowie Discovery hervorgehoben.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
         }

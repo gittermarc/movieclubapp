@@ -7,43 +7,18 @@
 
 internal import SwiftUI
 
-// MARK: - Helpers
-
-extension TMDbWatchProvidersCountry {
-    /// Best-effort Liste von Anbietern, in sinnvoller Priorität:
-    /// flatrate (Abo) -> free -> ads -> rent -> buy
-    /// Dedupe nach provider_id und sortiert nach display_priority.
-    var bestEffortProviders: [TMDbWatchProvider] {
-        let groups: [[TMDbWatchProvider]] = [
-            flatrate ?? [],
-            free ?? [],
-            ads ?? [],
-            rent ?? [],
-            buy ?? []
-        ]
-
-        var seen = Set<Int>()
-        var output: [TMDbWatchProvider] = []
-
-        for group in groups {
-            let sorted = group.sorted {
-                ($0.display_priority ?? Int.max) < ($1.display_priority ?? Int.max)
-            }
-
-            for p in sorted where !seen.contains(p.provider_id) {
-                output.append(p)
-                seen.insert(p.provider_id)
-            }
-        }
-
-        return output
-    }
-}
-
 // MARK: - UI
 
 struct WatchProvidersIconsRow: View {
     let providers: [TMDbWatchProvider]
+    var preferredProviderIDs: Set<Int> = []
+
+    private var sortedProviders: [TMDbWatchProvider] {
+        WatchProvidersAvailabilityPresentation.sortedDeduplicated(
+            providers,
+            preferredProviderIDs: preferredProviderIDs
+        )
+    }
 
     private var columns: [GridItem] {
         [GridItem(.adaptive(minimum: 72), spacing: 12, alignment: .top)]
@@ -51,10 +26,21 @@ struct WatchProvidersIconsRow: View {
 
     var body: some View {
         LazyVGrid(columns: columns, alignment: .leading, spacing: 12) {
-            ForEach(providers) { provider in
+            ForEach(sortedProviders) { provider in
                 VStack(spacing: 6) {
-                    providerLogo(provider)
-                        .frame(width: 30, height: 30)
+                    ZStack(alignment: .topTrailing) {
+                        providerLogo(provider)
+                            .frame(width: 30, height: 30)
+
+                        if preferredProviderIDs.contains(provider.provider_id) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.caption2.weight(.bold))
+                                .symbolRenderingMode(.palette)
+                                .foregroundStyle(.white, Color.accentColor)
+                                .offset(x: 5, y: -5)
+                                .accessibilityHidden(true)
+                        }
+                    }
 
                     Text(provider.provider_name)
                         .font(.caption2)
@@ -65,17 +51,23 @@ struct WatchProvidersIconsRow: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .top)
                 .accessibilityElement(children: .combine)
-                .accessibilityLabel(Text(provider.provider_name))
+                .accessibilityLabel(accessibilityLabel(for: provider))
             }
         }
         .padding(.vertical, 2)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    private func accessibilityLabel(for provider: TMDbWatchProvider) -> Text {
+        if preferredProviderIDs.contains(provider.provider_id) {
+            return Text("\(provider.provider_name), bevorzugter Anbieter")
+        }
+        return Text(provider.provider_name)
+    }
+
     @ViewBuilder
     private func providerLogo(_ provider: TMDbWatchProvider) -> some View {
-        if let path = provider.logo_path,
-           let url = URL(string: "https://image.tmdb.org/t/p/w92\(path)") {
+        if let url = MovieMetadataPresentation.imageURL(path: provider.logo_path, width: .w92) {
             CachedAsyncImage(url: url) { phase in
                 switch phase {
                 case .empty:
