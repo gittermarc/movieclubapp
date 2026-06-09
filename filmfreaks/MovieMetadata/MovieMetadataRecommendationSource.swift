@@ -5,7 +5,7 @@
 
 import Foundation
 
-nonisolated enum MovieMetadataRecommendationSource: Equatable, Sendable {
+nonisolated enum MovieMetadataRecommendationSource: String, Codable, Equatable, Sendable {
     case recommendations
     case similar
 }

@@ -14,7 +14,7 @@ final class MovieMetadataLoadCoordinator: ObservableObject {
 
         static var live: Dependencies {
             Dependencies(
-                repository: TMDbMetadataRepository(),
+                repository: TMDbMetadataRepository(cacheStore: TMDbMetadataCacheFileStore()),
                 ingestPopularityFromCredits: { credits in
                     PersonPopularityStore.shared.ingestPopularity(
                         fromCredits: credits.cast,
@@ -59,26 +59,29 @@ final class MovieMetadataLoadCoordinator: ObservableObject {
 
         beginFullLoad()
 
-        do {
-            let response = try await dependencies.repository.metadata(
-                for: movieID,
-                profile: .detailPage(regionCode: effectiveRegionCode)
-            )
-
-            if let credits = response.details.credits {
-                dependencies.ingestPopularityFromCredits(credits)
-            }
-
-            applyFullLoadSuccess(
-                details: response.details,
-                providersCountry: response.watchProvidersCountry,
-                collectionDetails: response.collectionDetails,
-                recommendations: response.recommendations,
-                recommendationsSource: response.recommendationsSource,
+        let profile = MovieMetadataRequestProfile.detailPage(regionCode: effectiveRegionCode)
+        if let cached = await dependencies.repository.cachedMetadata(for: movieID, profile: profile), cached.freshness.isUsable {
+            applyRepositoryResult(
+                cached,
                 movieId: movieID,
                 effectiveRegionCode: effectiveRegionCode
             )
-            return MovieMetadataLoadedMoviePatch(details: response.details)
+
+            if cached.freshness.shouldRevalidate {
+                scheduleMetadataRefresh(movieID: movieID, effectiveRegionCode: effectiveRegionCode)
+            }
+
+            return MovieMetadataLoadedMoviePatch(details: cached.response.details)
+        }
+
+        do {
+            let result = try await dependencies.repository.refreshMetadata(for: movieID, profile: profile)
+            applyRepositoryResult(
+                result,
+                movieId: movieID,
+                effectiveRegionCode: effectiveRegionCode
+            )
+            return MovieMetadataLoadedMoviePatch(details: result.response.details)
         } catch TMDbError.missingAPIKey {
             applyFullLoadFailure(
                 errorMessage: "TMDb API-Key fehlt. Bitte TMDB_API_KEY in der Info.plist setzen."
@@ -98,13 +101,28 @@ final class MovieMetadataLoadCoordinator: ObservableObject {
 
         beginWatchProvidersReload()
 
+        if let cached = await dependencies.repository.cachedWatchProviders(
+            for: movieId,
+            regionCode: effectiveRegionCode
+        ), cached.freshness.isUsable {
+            applyWatchProvidersSuccess(
+                providersCountry: cached.value,
+                movieId: movieId,
+                effectiveRegionCode: effectiveRegionCode
+            )
+            if cached.freshness.shouldRevalidate {
+                scheduleWatchProvidersRefresh(movieID: movieId, effectiveRegionCode: effectiveRegionCode)
+            }
+            return
+        }
+
         do {
-            let providersCountry = try await dependencies.repository.watchProviders(
+            let providers = try await dependencies.repository.refreshWatchProviders(
                 for: movieId,
                 regionCode: effectiveRegionCode
             )
             applyWatchProvidersSuccess(
-                providersCountry: providersCountry,
+                providersCountry: providers.value,
                 movieId: movieId,
                 effectiveRegionCode: effectiveRegionCode
             )
@@ -138,6 +156,26 @@ final class MovieMetadataLoadCoordinator: ObservableObject {
         watchProvidersLink = nil
     }
 
+    private func applyRepositoryResult(
+        _ result: MovieMetadataRepositoryResult,
+        movieId: Int,
+        effectiveRegionCode: String
+    ) {
+        if let credits = result.response.details.credits {
+            dependencies.ingestPopularityFromCredits(credits)
+        }
+
+        applyFullLoadSuccess(
+            details: result.response.details,
+            providersCountry: result.response.watchProvidersCountry,
+            collectionDetails: result.response.collectionDetails,
+            recommendations: result.response.recommendations,
+            recommendationsSource: result.response.recommendationsSource,
+            movieId: movieId,
+            effectiveRegionCode: effectiveRegionCode
+        )
+    }
+
     private func applyFullLoadSuccess(
         details: TMDbMovieDetails,
         providersCountry: TMDbWatchProvidersCountry?,
@@ -151,6 +189,7 @@ final class MovieMetadataLoadCoordinator: ObservableObject {
         self.collectionDetails = collectionDetails
         self.recommendations = recommendations
         self.recommendationsSource = recommendationsSource
+        detailsError = nil
         applyWatchProvidersSuccess(
             providersCountry: providersCountry,
             movieId: movieId,
@@ -188,5 +227,63 @@ final class MovieMetadataLoadCoordinator: ObservableObject {
     private func applyWatchProvidersFailure() {
         isLoadingWatchProviders = false
         didLoadWatchProviders = true
+    }
+
+    private func scheduleMetadataRefresh(movieID: Int, effectiveRegionCode: String) {
+        Task { [weak self] in
+            await self?.refreshMetadataIfStillCurrent(
+                movieID: movieID,
+                effectiveRegionCode: effectiveRegionCode
+            )
+        }
+    }
+
+    private func scheduleWatchProvidersRefresh(movieID: Int, effectiveRegionCode: String) {
+        Task { [weak self] in
+            await self?.refreshWatchProvidersIfStillCurrent(
+                movieID: movieID,
+                effectiveRegionCode: effectiveRegionCode
+            )
+        }
+    }
+
+    private func refreshMetadataIfStillCurrent(movieID: Int, effectiveRegionCode: String) async {
+        do {
+            let result = try await dependencies.repository.refreshMetadata(
+                for: movieID,
+                profile: .detailPage(regionCode: effectiveRegionCode)
+            )
+            guard lastLoadedMovieID == movieID,
+                  lastLoadedWatchProvidersRegionCode == effectiveRegionCode else {
+                return
+            }
+            applyRepositoryResult(
+                result,
+                movieId: movieID,
+                effectiveRegionCode: effectiveRegionCode
+            )
+        } catch {
+            return
+        }
+    }
+
+    private func refreshWatchProvidersIfStillCurrent(movieID: Int, effectiveRegionCode: String) async {
+        do {
+            let providers = try await dependencies.repository.refreshWatchProviders(
+                for: movieID,
+                regionCode: effectiveRegionCode
+            )
+            guard lastLoadedMovieID == movieID,
+                  lastLoadedWatchProvidersRegionCode == effectiveRegionCode else {
+                return
+            }
+            applyWatchProvidersSuccess(
+                providersCountry: providers.value,
+                movieId: movieID,
+                effectiveRegionCode: effectiveRegionCode
+            )
+        } catch {
+            return
+        }
     }
 }

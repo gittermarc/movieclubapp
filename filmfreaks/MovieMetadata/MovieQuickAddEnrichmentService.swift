@@ -8,7 +8,7 @@ import Foundation
 nonisolated struct MovieQuickAddEnrichmentService: Sendable {
     let repository: TMDbMetadataRepository
 
-    init(repository: TMDbMetadataRepository = TMDbMetadataRepository()) {
+    init(repository: TMDbMetadataRepository = TMDbMetadataRepository(cacheStore: TMDbMetadataCacheFileStore())) {
         self.repository = repository
     }
 

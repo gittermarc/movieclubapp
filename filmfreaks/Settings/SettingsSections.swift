@@ -112,7 +112,7 @@ struct SettingsCacheSectionView: View {
             }
             .disabled(isClearingCache)
 
-            Text("Löscht den lokal gespeicherten Bild-Cache (Filmcover). Dadurch werden beim nächsten Öffnen Cover erneut geladen.")
+            Text("Löscht lokal gespeicherte Filmcover und TMDb-Metadaten. Beim nächsten Öffnen werden Bilder und Filmdaten bei Bedarf neu geladen.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
         }

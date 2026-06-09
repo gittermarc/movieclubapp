@@ -109,7 +109,7 @@ struct SettingsView: View {
                     clearCache()
                 }
             } message: {
-                Text("Der lokale Bild-Cache wird entfernt. Das kann nicht rückgängig gemacht werden.")
+                Text("Löscht lokal gespeicherte Bilder und TMDb-Metadaten. Das kann nicht rückgängig gemacht werden.")
             }
         }
         .preferredColorScheme(displaySettings.preferredColorScheme)
@@ -121,6 +121,7 @@ struct SettingsView: View {
 
         Task {
             await ImageCacheStore.shared.removeAll()
+            await TMDbMetadataCacheFileStore().removeAll()
             URLCache.shared.removeAllCachedResponses()
 
             await refreshCacheSize()
@@ -142,7 +143,7 @@ struct SettingsView: View {
             isLoadingCacheSize = true
         }
 
-        let bytes = calculateImageCacheStoreBytes()
+        let bytes = SettingsCacheSizeCalculator().totalLocalCacheBytes()
 
         let formatter = ByteCountFormatter()
         formatter.allowedUnits = [.useKB, .useMB, .useGB]
@@ -153,32 +154,6 @@ struct SettingsView: View {
             cacheSizeText = text
             isLoadingCacheSize = false
         }
-    }
-
-    private func calculateImageCacheStoreBytes() -> Int {
-        let fm = FileManager.default
-        guard let base = fm.urls(for: .cachesDirectory, in: .userDomainMask).first else {
-            return 0
-        }
-
-        let dir = base.appendingPathComponent("ImageCacheStore", isDirectory: true)
-        guard fm.fileExists(atPath: dir.path) else {
-            return 0
-        }
-
-        let keys: Set<URLResourceKey> = [.isRegularFileKey, .fileSizeKey]
-        guard let enumerator = fm.enumerator(at: dir, includingPropertiesForKeys: Array(keys), options: [.skipsHiddenFiles]) else {
-            return 0
-        }
-
-        var total = 0
-        for case let url as URL in enumerator {
-            guard let values = try? url.resourceValues(forKeys: keys) else { continue }
-            guard values.isRegularFile == true else { continue }
-            total += values.fileSize ?? 0
-        }
-
-        return total
     }
 
     @MainActor
