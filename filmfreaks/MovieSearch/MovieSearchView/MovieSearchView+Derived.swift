@@ -12,8 +12,12 @@ extension MovieSearchView {
         resultsModel.update(results: viewModel.results, selectedSort: selectedSort)
     }
 
+    var shouldShowDiscovery: Bool {
+        viewModel.shouldShowDiscovery(query: query, isSearchFieldFocused: isSearchFieldFocused)
+    }
+
     var shouldShowRecommendations: Bool {
-        viewModel.shouldShowRecommendations(query: query, isSearchFieldFocused: isSearchFieldFocused)
+        shouldShowDiscovery
     }
 
     var baseHeaderSpacer: CGFloat { 22 }

@@ -30,9 +30,9 @@ extension MovieSearchView {
         viewModel.clearRecentQueries()
     }
 
-    func handleRecommendationsRefresh() {
+    func handleDiscoveryRefresh() {
         Task {
-            await loadRecommendationsIfNeeded(force: true)
+            await loadDiscoveryIfNeeded(force: true)
         }
     }
 

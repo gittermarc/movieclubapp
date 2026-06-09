@@ -5,47 +5,49 @@ import Testing
 @MainActor
 struct MovieSearchViewModelTests {
 
-    @Test func recommendationFallbackUsesPopularMoviesWhenNoSeedsExist() async {
-        var popularCalls = 0
+    @Test func discoveryLoadsShelvesWhenIdle() async {
+        var discoveryCalls = 0
         let now = makeDate(day: 9)
-        var savedCache: (String?, [TMDbMovieResult])?
 
         let viewModel = MovieSearchViewModel(
             existingWatched: [],
             dependencies: makeDependencies(
-                fetchPopularMovies: { page in
-                    popularCalls += 1
-                    #expect(page == 1)
-                    return self.makeResponse(
-                        page: 1,
-                        totalPages: 1,
-                        totalResults: 2,
-                        results: [
-                            self.makeResult(id: 10, title: "Popular One"),
-                            self.makeResult(id: 11, title: "Popular Two")
-                        ]
+                loadDiscoveryShelves: { request, force in
+                    discoveryCalls += 1
+                    #expect(request.localWatchedKeys.isEmpty)
+                    #expect(force == false)
+                    return MovieDiscoveryLoadResult(
+                        shelves: [
+                            MovieDiscoveryShelf(
+                                kind: .popular,
+                                subtitle: "Beliebt",
+                                results: [
+                                    self.makeResult(id: 10, title: "Popular One"),
+                                    self.makeResult(id: 11, title: "Popular Two")
+                                ],
+                                lastUpdated: now,
+                                freshness: .fresh
+                            )
+                        ],
+                        usedStaleCache: false
                     )
-                },
-                saveRecommendationsCache: { seedTitle, results in
-                    savedCache = (seedTitle, results)
                 },
                 now: { now }
             )
         )
 
-        await viewModel.loadRecommendationsIfNeeded(
+        await viewModel.loadDiscoveryIfNeeded(
             query: "",
             isSearchFieldFocused: false,
             localWatchedKeys: [],
-            localBacklogKeys: []
+            localBacklogKeys: [],
+            regionCode: "DE"
         )
 
-        #expect(popularCalls == 1)
-        #expect(viewModel.recommendations.map(\.id) == [10, 11])
-        #expect(viewModel.recommendationsSeedTitle == nil)
-        #expect(viewModel.recommendationsLastUpdated == now)
-        #expect(savedCache?.0 == nil)
-        #expect(savedCache?.1.map(\.id) == [10, 11])
+        #expect(discoveryCalls == 1)
+        #expect(viewModel.discoveryShelves.map(\.kind) == [.popular])
+        #expect(viewModel.discoveryShelves.first?.results.map(\.id) == [10, 11])
+        #expect(viewModel.discoveryShelves.first?.lastUpdated == now)
     }
 
     @Test func newSearchResetsResultsAndPaginationState() async {
@@ -192,36 +194,22 @@ struct MovieSearchViewModelTests {
 
     private func makeDependencies(
         searchMoviesPaged: ((String, Int) async throws -> TMDbSearchResponse)? = nil,
-        fetchPopularMovies: ((Int) async throws -> TMDbSearchResponse)? = nil,
-        fetchMovieRecommendations: ((Int, Int) async throws -> TMDbSearchResponse)? = nil,
-        fetchMovieSimilar: ((Int, Int) async throws -> TMDbSearchResponse)? = nil,
         loadRecentQueries: (() -> [String])? = nil,
         addRecentQuery: ((String) -> Void)? = nil,
         clearRecentQueries: (() -> Void)? = nil,
-        loadRecommendationsCache: ((TimeInterval) -> RecommendationsCacheManager.CachePayload?)? = nil,
-        saveRecommendationsCache: ((String?, [TMDbMovieResult]) -> Void)? = nil,
-        clearRecommendationsCache: (() -> Void)? = nil,
+        loadDiscoveryShelves: ((MovieDiscoveryRequest, Bool) async -> MovieDiscoveryLoadResult)? = nil,
         now: (() -> Date)? = nil
     ) -> MovieSearchViewModel.Dependencies {
         MovieSearchViewModel.Dependencies(
             searchMoviesPaged: searchMoviesPaged ?? { _, _ in
                 self.makeResponse(page: 1, totalPages: 1, totalResults: 0, results: [])
             },
-            fetchPopularMovies: fetchPopularMovies ?? { _ in
-                self.makeResponse(page: 1, totalPages: 1, totalResults: 0, results: [])
-            },
-            fetchMovieRecommendations: fetchMovieRecommendations ?? { _, _ in
-                self.makeResponse(page: 1, totalPages: 1, totalResults: 0, results: [])
-            },
-            fetchMovieSimilar: fetchMovieSimilar ?? { _, _ in
-                self.makeResponse(page: 1, totalPages: 1, totalResults: 0, results: [])
-            },
             loadRecentQueries: loadRecentQueries ?? { [] },
             addRecentQuery: addRecentQuery ?? { _ in },
             clearRecentQueries: clearRecentQueries ?? { },
-            loadRecommendationsCache: loadRecommendationsCache ?? { _ in nil },
-            saveRecommendationsCache: saveRecommendationsCache ?? { _, _ in },
-            clearRecommendationsCache: clearRecommendationsCache ?? { },
+            loadDiscoveryShelves: loadDiscoveryShelves ?? { _, _ in
+                MovieDiscoveryLoadResult(shelves: [], usedStaleCache: false)
+            },
             now: now ?? { Date() }
         )
     }

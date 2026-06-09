@@ -5,6 +5,11 @@
 
 import Foundation
 
+nonisolated enum TMDbTrendingTimeWindow: String, Codable, CaseIterable, Sendable {
+    case day
+    case week
+}
+
 nonisolated extension TMDbAPI {
 
     // MARK: - Film-Suche (paged)
@@ -48,6 +53,54 @@ nonisolated extension TMDbAPI {
         ]
 
         return try await requestJSON(path: "movie/popular", queryItems: items, type: TMDbSearchResponse.self)
+    }
+
+    /// Aktuelle Trends auf TMDb.
+    func fetchTrendingMovies(timeWindow: TMDbTrendingTimeWindow = .week, page: Int = 1) async throws -> TMDbSearchResponse {
+        let safePage = max(1, page)
+
+        let items: [URLQueryItem] = [
+            try apiKeyQueryItem(),
+            URLQueryItem(name: "language", value: "de-DE"),
+            URLQueryItem(name: "page", value: String(safePage))
+        ]
+
+        return try await requestJSON(
+            path: "trending/movie/\(timeWindow.rawValue)",
+            queryItems: items,
+            type: TMDbSearchResponse.self
+        )
+    }
+
+    /// Neue Filme im Kino für eine optionale Region.
+    func fetchNowPlayingMovies(region: String? = nil, page: Int = 1) async throws -> TMDbSearchResponse {
+        let safePage = max(1, page)
+        let normalizedRegion = region.flatMap { WatchProvidersRegionSettings.normalizedRegionCode($0) }
+
+        var items: [URLQueryItem] = [
+            try apiKeyQueryItem(),
+            URLQueryItem(name: "language", value: "de-DE"),
+            URLQueryItem(name: "page", value: String(safePage))
+        ]
+
+        if let normalizedRegion {
+            items.append(URLQueryItem(name: "region", value: normalizedRegion))
+        }
+
+        return try await requestJSON(path: "movie/now_playing", queryItems: items, type: TMDbSearchResponse.self)
+    }
+
+    /// Top-bewertete Filme auf TMDb.
+    func fetchTopRatedMovies(page: Int = 1) async throws -> TMDbSearchResponse {
+        let safePage = max(1, page)
+
+        let items: [URLQueryItem] = [
+            try apiKeyQueryItem(),
+            URLQueryItem(name: "language", value: "de-DE"),
+            URLQueryItem(name: "page", value: String(safePage))
+        ]
+
+        return try await requestJSON(path: "movie/top_rated", queryItems: items, type: TMDbSearchResponse.self)
     }
 
     /// Empfehlungen basierend auf einem Film (TMDb /recommendations).

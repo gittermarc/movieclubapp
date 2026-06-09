@@ -20,6 +20,9 @@ struct MovieSearchView: View {
     @State var query: String = ""
     @StateObject var viewModel: MovieSearchViewModel
 
+    @AppStorage(WatchProvidersRegionSettings.storageKey)
+    var watchProvidersRegionCode: String = WatchProvidersRegionSettings.deviceRegionCode()
+
     // Sortierung
     @State var selectedSort: MovieSearchSortOption = .relevance
     @State var resultsModel = MovieSearchResultsModel()
@@ -77,7 +80,7 @@ struct MovieSearchView: View {
             initialValue: Set(existingBacklog.map { MovieSearchMapper.key(for: $0) })
         )
         _viewModel = StateObject(
-            wrappedValue: MovieSearchViewModel(existingWatched: existingWatched)
+            wrappedValue: MovieSearchViewModel(existingWatched: existingWatched, existingBacklog: existingBacklog)
         )
     }
     var body: some View {
@@ -94,16 +97,14 @@ struct MovieSearchView: View {
                     MovieSearchIdleContentView(
                         viewState: viewState,
                         recentQueries: viewModel.recentQueries,
-                        recommendations: viewModel.recommendations,
-                        isLoadingRecommendations: viewModel.isLoadingRecommendations,
-                        recommendationsError: viewModel.recommendationsError,
-                        recommendationsSeedTitle: viewModel.recommendationsSeedTitle,
-                        recommendationsLastUpdated: viewModel.recommendationsLastUpdated,
+                        discoveryShelves: viewModel.discoveryShelves,
+                        isLoadingDiscovery: viewModel.isLoadingDiscovery,
+                        discoveryError: viewModel.discoveryError,
                         skeletonPulse: $skeletonPulse,
                         membershipState: membershipState(for:),
                         onRecentQueryTap: handleRecentQueryTap,
                         onClearHistory: handleClearHistory,
-                        onRefreshRecommendations: handleRecommendationsRefresh,
+                        onRefreshDiscovery: handleDiscoveryRefresh,
                         onOpenDetail: openDetail,
                         onAddToWatched: handleAddToWatched,
                         onAddToBacklog: handleAddToBacklog
@@ -243,13 +244,13 @@ struct MovieSearchView: View {
         }
         .ignoresSafeArea(.keyboard, edges: .bottom)
         .task {
-            await loadRecommendationsIfNeeded()
+            await loadDiscoveryIfNeeded()
         }
         .onChange(of: query) { _, newValue in
             // ✅ Sobald das Suchfeld wieder leer wird, können Empfehlungen erscheinen
             let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
             if trimmed.isEmpty {
-                Task { await loadRecommendationsIfNeeded() }
+                Task { await loadDiscoveryIfNeeded() }
             }
         }
         .onChange(of: viewModel.results) { _, _ in
@@ -263,9 +264,12 @@ struct MovieSearchView: View {
             if !focused {
                 let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
                 if trimmed.isEmpty {
-                    Task { await loadRecommendationsIfNeeded() }
+                    Task { await loadDiscoveryIfNeeded() }
                 }
             }
+        }
+        .onChange(of: watchProvidersRegionCode) { _, _ in
+            Task { await loadDiscoveryIfNeeded(force: true) }
         }
         .onDisappear {
             cancelSearchTasks()

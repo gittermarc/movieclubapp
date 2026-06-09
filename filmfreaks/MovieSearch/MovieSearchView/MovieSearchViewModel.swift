@@ -4,54 +4,40 @@ import Foundation
 @MainActor
 final class MovieSearchViewModel: ObservableObject {
 
-    struct Dependencies {
+    nonisolated struct Dependencies {
         var searchMoviesPaged: (String, Int) async throws -> TMDbSearchResponse
-        var fetchPopularMovies: (Int) async throws -> TMDbSearchResponse
-        var fetchMovieRecommendations: (Int, Int) async throws -> TMDbSearchResponse
-        var fetchMovieSimilar: (Int, Int) async throws -> TMDbSearchResponse
         var loadRecentQueries: () -> [String]
         var addRecentQuery: (String) -> Void
         var clearRecentQueries: () -> Void
-        var loadRecommendationsCache: (TimeInterval) -> RecommendationsCacheManager.CachePayload?
-        var saveRecommendationsCache: (String?, [TMDbMovieResult]) -> Void
-        var clearRecommendationsCache: () -> Void
+        var loadDiscoveryShelves: (MovieDiscoveryRequest, Bool) async -> MovieDiscoveryLoadResult
         var now: () -> Date
 
-        static let live = Dependencies(
-            searchMoviesPaged: { query, page in
-                try await TMDbAPI.shared.searchMoviesPaged(query: query, page: page)
-            },
-            fetchPopularMovies: { page in
-                try await TMDbAPI.shared.fetchPopularMovies(page: page)
-            },
-            fetchMovieRecommendations: { id, page in
-                try await TMDbAPI.shared.fetchMovieRecommendations(id: id, page: page)
-            },
-            fetchMovieSimilar: { id, page in
-                try await TMDbAPI.shared.fetchMovieSimilar(id: id, page: page)
-            },
-            loadRecentQueries: {
-                SearchHistoryManager.load()
-            },
-            addRecentQuery: { query in
-                SearchHistoryManager.add(query: query)
-            },
-            clearRecentQueries: {
-                SearchHistoryManager.clear()
-            },
-            loadRecommendationsCache: { maxAge in
-                RecommendationsCacheManager.load(maxAge: maxAge)
-            },
-            saveRecommendationsCache: { seedTitle, results in
-                RecommendationsCacheManager.save(seedTitle: seedTitle, results: results)
-            },
-            clearRecommendationsCache: {
-                RecommendationsCacheManager.clear()
-            },
-            now: {
-                Date()
-            }
-        )
+        nonisolated static var live: Dependencies {
+            let discoveryService = MovieDiscoveryService(
+                dependencies: .live,
+                cacheStore: TMDbMetadataCacheFileStore()
+            )
+            return Dependencies(
+                searchMoviesPaged: { query, page in
+                    try await TMDbAPI.shared.searchMoviesPaged(query: query, page: page)
+                },
+                loadRecentQueries: {
+                    SearchHistoryManager.load()
+                },
+                addRecentQuery: { query in
+                    SearchHistoryManager.add(query: query)
+                },
+                clearRecentQueries: {
+                    SearchHistoryManager.clear()
+                },
+                loadDiscoveryShelves: { request, forceRefresh in
+                    await discoveryService.loadShelves(request: request, forceRefresh: forceRefresh)
+                },
+                now: {
+                    Date()
+                }
+            )
+        }
     }
 
     @Published var isLoading: Bool = false
@@ -65,46 +51,41 @@ final class MovieSearchViewModel: ObservableObject {
 
     @Published var recentQueries: [String]
 
-    @Published var recommendations: [TMDbMovieResult] = []
-    @Published var isLoadingRecommendations: Bool = false
-    @Published var recommendationsError: String?
-    @Published var recommendationsSeedTitle: String?
-    @Published var recommendationsLastUpdated: Date?
-
-    let recommendationsCacheMaxAge: TimeInterval
-    let recommendationsFallbackToPopularIfNoSeeds: Bool
+    @Published var discoveryShelves: [MovieDiscoveryShelf] = []
+    @Published var isLoadingDiscovery: Bool = false
+    @Published var discoveryError: String?
 
     let existingWatched: [Movie]
+    let existingBacklog: [Movie]
 
     var searchTask: Task<Void, Never>?
     var paginationTask: Task<Void, Never>?
+    var discoveryTask: Task<Void, Never>?
+    var discoveryRefreshTask: Task<Void, Never>?
     var activeSearchToken: UUID = UUID()
     var activePaginationToken: UUID = UUID()
+    var activeDiscoveryToken: UUID = UUID()
 
     let dependencies: Dependencies
 
     init(
         existingWatched: [Movie],
-        recommendationsCacheMaxAge: TimeInterval = 60 * 60 * 24,
-        recommendationsFallbackToPopularIfNoSeeds: Bool = true,
+        existingBacklog: [Movie] = [],
         dependencies: Dependencies
     ) {
         self.existingWatched = existingWatched
-        self.recommendationsCacheMaxAge = recommendationsCacheMaxAge
-        self.recommendationsFallbackToPopularIfNoSeeds = recommendationsFallbackToPopularIfNoSeeds
+        self.existingBacklog = existingBacklog
         self.dependencies = dependencies
         self.recentQueries = dependencies.loadRecentQueries()
     }
 
     convenience init(
         existingWatched: [Movie],
-        recommendationsCacheMaxAge: TimeInterval = 60 * 60 * 24,
-        recommendationsFallbackToPopularIfNoSeeds: Bool = true
+        existingBacklog: [Movie] = []
     ) {
         self.init(
             existingWatched: existingWatched,
-            recommendationsCacheMaxAge: recommendationsCacheMaxAge,
-            recommendationsFallbackToPopularIfNoSeeds: recommendationsFallbackToPopularIfNoSeeds,
+            existingBacklog: existingBacklog,
             dependencies: .live
         )
     }
@@ -114,12 +95,17 @@ final class MovieSearchViewModel: ObservableObject {
         searchTask = nil
         paginationTask?.cancel()
         paginationTask = nil
+        discoveryTask?.cancel()
+        discoveryTask = nil
+        discoveryRefreshTask?.cancel()
+        discoveryRefreshTask = nil
         activeSearchToken = UUID()
         activePaginationToken = UUID()
+        activeDiscoveryToken = UUID()
     }
 
     func clearSearch() {
-        cancelTasks()
+        cancelSearchWork()
         results = []
         errorMessage = nil
         currentPage = 1
@@ -127,6 +113,15 @@ final class MovieSearchViewModel: ObservableObject {
         totalResults = 0
         isLoading = false
         isLoadingMore = false
+    }
+
+    func cancelSearchWork() {
+        searchTask?.cancel()
+        searchTask = nil
+        paginationTask?.cancel()
+        paginationTask = nil
+        activeSearchToken = UUID()
+        activePaginationToken = UUID()
     }
 
     func clearRecentQueries() {
@@ -141,8 +136,12 @@ final class MovieSearchViewModel: ObservableObject {
             && !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    func shouldShowRecommendations(query: String, isSearchFieldFocused: Bool) -> Bool {
+    func shouldShowDiscovery(query: String, isSearchFieldFocused: Bool) -> Bool {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty && results.isEmpty && !isLoading && !isSearchFieldFocused
+    }
+
+    func shouldShowRecommendations(query: String, isSearchFieldFocused: Bool) -> Bool {
+        shouldShowDiscovery(query: query, isSearchFieldFocused: isSearchFieldFocused)
     }
 }

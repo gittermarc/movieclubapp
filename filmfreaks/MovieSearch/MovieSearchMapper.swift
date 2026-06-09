@@ -6,7 +6,7 @@
 import Foundation
 
 /// Gemeinsame Helper für MovieSearch: Year-Parsing, Keys (Dedup/Presence) und Mapping.
-enum MovieSearchMapper {
+nonisolated enum MovieSearchMapper {
 
     static func releaseYear(from dateString: String?) -> String? {
         guard let dateString, dateString.count >= 4 else { return nil }

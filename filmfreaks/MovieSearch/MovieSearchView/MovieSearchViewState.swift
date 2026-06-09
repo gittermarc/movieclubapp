@@ -16,8 +16,10 @@ struct MovieSearchViewState: Equatable {
     }
 
     let showsRecentQueries: Bool
-    let showsRecommendations: Bool
+    let showsDiscovery: Bool
     let primaryContent: PrimaryContent
+
+    var showsRecommendations: Bool { showsDiscovery }
 
     static func resolve(
         query: String,
@@ -37,7 +39,7 @@ struct MovieSearchViewState: Equatable {
             primaryContent = .noResults
         } else if hasResults {
             primaryContent = .results
-        } else if !isLoading && trimmedQuery.isEmpty && recentQueries.isEmpty && !isSearchFieldFocused {
+        } else if !isLoading && trimmedQuery.isEmpty && recentQueries.isEmpty && !isSearchFieldFocused && !shouldShowRecommendations {
             primaryContent = .idlePlaceholder
         } else {
             primaryContent = .none
@@ -45,7 +47,7 @@ struct MovieSearchViewState: Equatable {
 
         return MovieSearchViewState(
             showsRecentQueries: showsRecentQueries,
-            showsRecommendations: shouldShowRecommendations,
+            showsDiscovery: shouldShowRecommendations,
             primaryContent: primaryContent
         )
     }

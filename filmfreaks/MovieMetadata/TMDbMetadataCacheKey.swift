@@ -64,6 +64,19 @@ nonisolated struct TMDbMetadataCacheKey: Codable, Hashable, Sendable {
         TMDbMetadataCacheKey(namespace: "recommendations", movieID: movieID)
     }
 
+    static func discoveryShelf(
+        kind: String,
+        regionCode: String? = nil,
+        variant: String? = nil
+    ) -> TMDbMetadataCacheKey {
+        TMDbMetadataCacheKey(
+            namespace: "discovery",
+            regionCode: regionCode,
+            profileName: kind,
+            variant: variant
+        )
+    }
+
     var rawValue: String {
         [
             "v1",
