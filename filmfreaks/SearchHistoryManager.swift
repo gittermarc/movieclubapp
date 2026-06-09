@@ -7,7 +7,7 @@ import Foundation
 
 // MARK: - Such-Historie (lokal per UserDefaults)
 
-struct SearchHistoryManager {
+nonisolated struct SearchHistoryManager {
     private static let key = "MovieSearchHistory"
     private static let maxEntries = 15
 

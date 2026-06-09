@@ -2,7 +2,7 @@
 //  MovieRouletteBacklogIndex.swift
 //  filmfreaks
 //
-//  Created by ChatGPT on 08.06.26.
+//  Created by Marc Fechner on 08.06.26.
 //
 
 import Foundation

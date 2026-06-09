@@ -5,7 +5,7 @@
 
 import Foundation
 
-nonisolated struct SettingsCacheSizeCalculator: Sendable {
+nonisolated struct SettingsCacheSizeCalculator {
     private let fileManager: FileManager
     private let cachesDirectory: URL?
 
