@@ -43,11 +43,14 @@ struct MovieDetailRatingsTeaserCardView: View {
                         }
 
                         if let f = averageFazit {
+                            let fazitColor = MovieRatingFazitScale.color(for: Int(f.rounded()))
+
                             Text(String(format: "Fazit Ø %.1f", f))
                                 .font(.caption.weight(.semibold))
                                 .padding(.horizontal, 10)
                                 .padding(.vertical, 6)
-                                .background(Color.green.opacity(0.14))
+                                .foregroundStyle(fazitColor)
+                                .background(fazitColor.opacity(0.14))
                                 .clipShape(Capsule())
                         }
 

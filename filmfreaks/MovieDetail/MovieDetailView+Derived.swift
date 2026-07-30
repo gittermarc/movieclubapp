@@ -158,8 +158,10 @@ extension MovieDetailView {
     // MARK: - Bewertungen (Übersicht)
 
     var sortedRatings: [Rating] {
-        movie.ratings.sorted {
-            $0.reviewerName.localizedCaseInsensitiveCompare($1.reviewerName) == .orderedAscending
-        }
+        MovieRatingPresentation.orderedRatings(
+            movie.ratings,
+            selectedUserID: userStore.selectedUser?.id,
+            selectedUserName: userStore.selectedUser?.name
+        )
     }
 }

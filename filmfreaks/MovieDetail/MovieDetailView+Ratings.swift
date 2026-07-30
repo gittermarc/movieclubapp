@@ -11,6 +11,10 @@ extension MovieDetailView {
 
     // MARK: - Rating Helpers
 
+    var ratingEligibility: MovieRatingEligibility {
+        MovieRatingEligibility(isBacklog: isBacklog)
+    }
+
     func normalizedScoresFromLocal() -> [RatingCriterion: Int] {
         var scores: [RatingCriterion: Int] = [:]
         for criterion in RatingCriterion.allCases {
@@ -30,6 +34,13 @@ extension MovieDetailView {
     }
 
     func saveRating() {
+        let eligibility = movieStore.ratingEligibility(for: movie.id)
+        guard eligibility.canSubmitRating else {
+            hapticWarning()
+            presentSaveToast(eligibility.feedbackText)
+            return
+        }
+
         guard let selectedUser = userStore.selectedUser else { return }
 
         let scores = normalizedScoresFromLocal()
@@ -86,6 +97,9 @@ extension MovieDetailView {
             if ok {
                 hapticSuccess()
                 presentSaveToast("Bewertung gespeichert")
+            } else if !movieStore.ratingEligibility(for: movie.id).canSubmitRating {
+                hapticWarning()
+                presentSaveToast(movieStore.ratingEligibility(for: movie.id).feedbackText)
             } else {
                 hapticWarning()
                 presentSaveToast("Bewertung gespeichert – iCloud Sync fehlgeschlagen")

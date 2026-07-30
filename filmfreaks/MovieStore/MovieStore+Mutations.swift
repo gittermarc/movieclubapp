@@ -19,6 +19,16 @@ internal extension MovieStore {
         isApplyingRatingUpdate = previous
     }
 
+    /// Ratings belong to watched movies only. Keeping this rule in the store
+    /// prevents stale sheets or secondary entry points from writing backlog ratings.
+    func ratingEligibility(for movieId: UUID) -> MovieRatingEligibility {
+        MovieRatingEligibility.evaluate(
+            movieID: movieId,
+            watchedMovies: movies,
+            backlogMovies: backlogMovies
+        )
+    }
+
     /// Stable reviewer identity key used to merge ratings.
     func reviewerKey(_ r: Rating) -> String {
         if let rid = r.reviewerId { return rid.uuidString.lowercased() }
@@ -55,6 +65,10 @@ internal extension MovieStore {
     /// Speichert/aktualisiert die Bewertung des aktuellen Users für einen Film.
     /// - Wichtig: Ratings werden in CloudKit als eigene Records gespeichert (MovieRating).
     func upsertRating(for movieId: UUID, rating: Rating) async -> Bool {
+        guard ratingEligibility(for: movieId).canSubmitRating else {
+            return false
+        }
+
         var stampedRating = rating
         stampedRating.updatedAt = Date()
 
@@ -85,6 +99,10 @@ internal extension MovieStore {
 
     /// Löscht eine Bewertung für einen Film anhand der stabilen Reviewer-ID.
     func deleteRating(for movieId: UUID, reviewerId: UUID) async -> Bool {
+        guard ratingEligibility(for: movieId).canSubmitRating else {
+            return false
+        }
+
         // Lokal entfernen
         func remove(from list: inout [Movie]) {
             guard let idx = list.firstIndex(where: { $0.id == movieId }) else { return }
@@ -119,6 +137,9 @@ internal extension MovieStore {
     func deleteRating(for movieId: UUID, reviewerName: String) async -> Bool {
         let trimmed = reviewerName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return true }
+        guard ratingEligibility(for: movieId).canSubmitRating else {
+            return false
+        }
 
         if let gid = currentGroupId, !gid.isEmpty {
             let rid = StableID.deterministicUUID(forName: trimmed, groupId: gid)

@@ -45,9 +45,6 @@ struct MovieDetailView: View {
         watchProvidersRegionCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    // Aufklapp-Status der Einzelbewertungen
-    @State var expandedRatingIds: Set<UUID> = []
-
     // Overview expand
     @State var isOverviewExpanded = false
 
@@ -211,17 +208,20 @@ struct MovieDetailView: View {
                         )
                     }
 
-                    // Bewertungen (Sheet)
-                    MovieDetailRatingsTeaserCardView(
-                        averageRating: movie.averageRating,
-                        averageFazit: movie.averageFazit,
-                        ratingsCount: movie.ratings.count,
-                        selectedUserName: userStore.selectedUser?.name,
-                        hasPendingChanges: hasPendingRatingChanges,
-                        ratingsPreview: Array(sortedRatings.prefix(2)),
-                        tintSoftBackground: displaySettings.tintSoftBackground
-                    ) {
-                        showRatingsSheet = true
+                    if ratingEligibility.canSubmitRating {
+                        MovieDetailRatingsTeaserCardView(
+                            averageRating: movie.averageRating,
+                            averageFazit: movie.averageFazit,
+                            ratingsCount: movie.ratings.count,
+                            selectedUserName: userStore.selectedUser?.name,
+                            hasPendingChanges: hasPendingRatingChanges,
+                            ratingsPreview: Array(sortedRatings.prefix(2)),
+                            tintSoftBackground: displaySettings.tintSoftBackground
+                        ) {
+                            showRatingsSheet = true
+                        }
+                    } else {
+                        MovieDetailRatingsLockedCardView(movieTitle: movie.title)
                     }
 
                     Spacer()
@@ -300,7 +300,6 @@ struct MovieDetailView: View {
                 localScores: $localScores,
                 localComment: $localComment,
                 localFazitScore: $localFazitScore,
-                expandedRatingIds: $expandedRatingIds,
                 hasPendingRatingChanges: $hasPendingRatingChanges
             ) {
                 saveRating()
@@ -395,5 +394,6 @@ struct MovieDetailView: View {
         )
         .environmentObject(UserStore())
         .environmentObject(MovieStore.preview())
+        .environmentObject(DisplaySettings())
     }
 }

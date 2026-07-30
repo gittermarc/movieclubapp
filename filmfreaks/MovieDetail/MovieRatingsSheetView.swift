@@ -18,19 +18,12 @@ struct MovieRatingsSheetView: View {
     @Binding var localScores: [RatingCriterion: Int]
     @Binding var localComment: String
     @Binding var localFazitScore: Int?
-    @Binding var expandedRatingIds: Set<UUID>
     @Binding var hasPendingRatingChanges: Bool
 
     let onSave: () -> Void
 
     @EnvironmentObject private var userStore: UserStore
     @Environment(\.dismiss) private var dismiss
-
-    private var sortedRatings: [Rating] {
-        movie.ratings.sorted {
-            $0.reviewerName.localizedCaseInsensitiveCompare($1.reviewerName) == .orderedAscending
-        }
-    }
 
     var body: some View {
         NavigationStack {
@@ -95,8 +88,9 @@ struct MovieRatingsSheetView: View {
 
                         MovieDetailSectionCard(title: "Alle Bewertungen") {
                             MovieDetailRatingsListSection(
-                                ratings: sortedRatings,
-                                expandedRatingIds: $expandedRatingIds
+                                ratings: movie.ratings,
+                                selectedUserID: userStore.selectedUser?.id,
+                                selectedUserName: userStore.selectedUser?.name
                             )
                         }
 
@@ -135,8 +129,18 @@ struct MovieRatingsSheetView: View {
                         .foregroundStyle(.secondary)
 
                     HStack(spacing: 8) {
-                        averageChip(title: "Bewertung Ø", value: movie.averageRating)
-                        averageChip(title: "Fazit Ø", value: movie.averageFazit)
+                        averageChip(
+                            title: "Bewertung Ø",
+                            value: movie.averageRating,
+                            color: displaySettings.tintColor
+                        )
+                        averageChip(
+                            title: "Fazit Ø",
+                            value: movie.averageFazit,
+                            color: MovieRatingFazitScale.color(
+                                for: movie.averageFazit.map { Int($0.rounded()) }
+                            )
+                        )
                         Spacer(minLength: 0)
                     }
 
@@ -201,13 +205,13 @@ struct MovieRatingsSheetView: View {
     }
 
     @ViewBuilder
-    private func averageChip(title: String, value: Double?) -> some View {
+    private func averageChip(title: String, value: Double?, color: Color) -> some View {
         if let value {
             Text(String(format: "\(title) %.1f", value))
                 .font(.caption.weight(.semibold))
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
-                .background(displaySettings.tintSoftBackground)
+                .background(color.opacity(0.14))
                 .clipShape(Capsule())
         } else {
             Text("\(title) –")
@@ -250,10 +254,10 @@ struct MovieRatingsSheetView: View {
         localScores: .constant([.action: 2]),
         localComment: .constant(""),
         localFazitScore: .constant(nil),
-        expandedRatingIds: .constant([]),
         hasPendingRatingChanges: .constant(false)
     ) {
         // no-op
     }
     .environmentObject(UserStore())
+    .environmentObject(DisplaySettings())
 }
