@@ -11,7 +11,9 @@ struct MovieDetailRatingsTeaserCardView: View {
     let averageRating: Double?
     let averageFazit: Double?
     let ratingsCount: Int
-    let selectedUserName: String?
+    let selectedUser: User?
+    let members: [User]
+    let groupId: String?
     let hasPendingChanges: Bool
     let ratingsPreview: [Rating]
     let tintSoftBackground: Color
@@ -71,8 +73,14 @@ struct MovieDetailRatingsTeaserCardView: View {
 
                         Spacer(minLength: 0)
 
-                        if let name = selectedUserName {
-                            Text("Als: \(name)")
+                        if let selectedUser {
+                            MemberAvatarView(
+                                member: selectedUser,
+                                groupId: groupId,
+                                size: 22
+                            )
+
+                            Text("Als: \(selectedUser.name)")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
@@ -93,6 +101,13 @@ struct MovieDetailRatingsTeaserCardView: View {
                         VStack(alignment: .leading, spacing: 8) {
                             ForEach(ratingsPreview) { rating in
                                 HStack(spacing: 10) {
+                                    MemberAvatarView(
+                                        member: MemberAvatarResolver.member(for: rating, in: members),
+                                        fallbackName: rating.reviewerName,
+                                        groupId: groupId,
+                                        size: 28
+                                    )
+
                                     Text(rating.reviewerName)
                                         .font(.subheadline.weight(.semibold))
                                         .lineLimit(1)
@@ -125,7 +140,9 @@ struct MovieDetailRatingsTeaserCardView: View {
         averageRating: 7.8,
         averageFazit: 8.2,
         ratingsCount: 2,
-        selectedUserName: "Marc",
+        selectedUser: sampleUsers.first,
+        members: sampleUsers,
+        groupId: "preview-group",
         hasPendingChanges: true,
         ratingsPreview: [
             Rating(reviewerName: "Marc", scores: [.action: 3, .suspense: 2], comment: nil, fazitScore: 9),

@@ -39,14 +39,11 @@ extension UserStore {
 
     // MARK: - Sync status recording
 
-    func recordCloudSyncSuccess() {
+    func recordCloudSyncSuccess(forGroupId groupId: String? = nil) {
         let now = Date()
-        lastCloudSyncSuccessAt = now
-        lastCloudSyncAttemptAt = now
-        lastCloudSyncErrorMessage = nil
-        lastCloudSyncErrorAt = nil
 
-        let key = syncKey(for: currentGroupId)
+        let resolvedGroupId = groupId ?? currentGroupId
+        let key = syncKey(for: resolvedGroupId)
         var status = syncStatusByGroup[key] ?? SyncStatus()
         status.lastSuccessAt = now
         status.lastAttemptAt = now
@@ -54,22 +51,30 @@ extension UserStore {
         status.lastErrorAt = nil
         syncStatusByGroup[key] = status
         persistSyncStatusByGroup()
+
+        guard key == syncKey(for: currentGroupId) else { return }
+        lastCloudSyncSuccessAt = now
+        lastCloudSyncAttemptAt = now
+        lastCloudSyncErrorMessage = nil
+        lastCloudSyncErrorAt = nil
     }
 
-    func recordCloudSyncError(_ error: Error) {
+    func recordCloudSyncError(_ error: Error, forGroupId groupId: String? = nil) {
         let now = Date()
         let msg = UserStoreCloudErrorFormatter.message(for: error)
 
-        lastCloudSyncAttemptAt = now
-        lastCloudSyncErrorAt = now
-        lastCloudSyncErrorMessage = msg
-
-        let key = syncKey(for: currentGroupId)
+        let resolvedGroupId = groupId ?? currentGroupId
+        let key = syncKey(for: resolvedGroupId)
         var status = syncStatusByGroup[key] ?? SyncStatus()
         status.lastAttemptAt = now
         status.lastErrorAt = now
         status.lastErrorMessage = msg
         syncStatusByGroup[key] = status
         persistSyncStatusByGroup()
+
+        guard key == syncKey(for: currentGroupId) else { return }
+        lastCloudSyncAttemptAt = now
+        lastCloudSyncErrorAt = now
+        lastCloudSyncErrorMessage = msg
     }
 }

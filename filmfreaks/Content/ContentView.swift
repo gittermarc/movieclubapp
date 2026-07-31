@@ -207,6 +207,8 @@ struct ContentView: View {
                             activeMemberDisplayName: activeMemberDisplayName,
                             activeMemberInitials: activeMemberInitials,
                             hasActiveMemberSelected: hasActiveMemberSelected,
+                            activeMember: userStore.selectedUser,
+                            activeMemberGroupId: movieStore.currentGroupId,
                             showsActivityButton: displaySettings.showGroupActivityCard,
                             activityNewEventsCount: activityNewEventsCount,
                             onTapGroup: { route = .groupSettings },
@@ -240,8 +242,8 @@ struct ContentView: View {
                             selectedViewStyle: selectedViewStyle,
                             isConnected: networkMonitor.isConnected,
                             isSyncing: movieStore.isSyncing || userStore.isSyncing,
-                            pendingChangesCount: movieStore.pendingCloudChangesCount,
-                            lastError: movieStore.lastCloudSyncError
+                            pendingChangesCount: movieStore.pendingCloudChangesCount + userStore.pendingCloudChangesCount,
+                            lastError: movieStore.lastCloudSyncError ?? userStore.lastCloudSyncErrorMessage
                         )
 
                         ContentMainAreaView(

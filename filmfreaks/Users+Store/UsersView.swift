@@ -12,10 +12,65 @@ struct UsersView: View {
     @EnvironmentObject var userStore: UserStore
     @EnvironmentObject var movieStore: MovieStore
     @State private var newUserName: String = ""
+    @State private var avatarEditorMember: User?
     
     var body: some View {
         NavigationStack {
             List {
+                if let selectedUser = userStore.selectedUser {
+                    Section("Dein Profil") {
+                        Button {
+                            avatarEditorMember = selectedUser
+                        } label: {
+                            HStack(spacing: 14) {
+                                MemberAvatarView(
+                                    member: selectedUser,
+                                    groupId: userStore.currentGroupId,
+                                    size: 52
+                                )
+
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("Profilbild bearbeiten")
+                                        .font(.subheadline.weight(.semibold))
+                                        .foregroundStyle(.primary)
+
+                                    Text("Als \(selectedUser.name) bewertest du Filme in dieser Gruppe.")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                        .multilineTextAlignment(.leading)
+                                }
+
+                                Spacer(minLength: 8)
+
+                                Image(systemName: "chevron.right")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.tertiary)
+                            }
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+
+                        if userStore.pendingCloudChangesCount > 0,
+                           CloudKitRouting.normalizedGroupId(userStore.currentGroupId) != nil {
+                            Label(
+                                "Mitgliederänderungen werden synchronisiert.",
+                                systemImage: "arrow.triangle.2.circlepath"
+                            )
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+
+                            if let errorMessage = userStore.lastCloudSyncErrorMessage {
+                                Label(
+                                    "Wird erneut versucht: \(errorMessage)",
+                                    systemImage: "exclamationmark.triangle.fill"
+                                )
+                                .font(.footnote)
+                                .foregroundStyle(.orange)
+                            }
+                        }
+                    }
+                }
+
                 // MARK: - Neue Person hinzufügen
                 Section("Neue Person hinzufügen") {
                     HStack {
@@ -38,10 +93,17 @@ struct UsersView: View {
                             .foregroundStyle(.secondary)
                     } else {
                         ForEach(userStore.users) { user in
-                            HStack {
+                            HStack(spacing: 12) {
+                                MemberAvatarView(
+                                    member: user,
+                                    groupId: userStore.currentGroupId,
+                                    size: 42
+                                )
+
                                 Text(user.name)
-                                
-                                if userStore.selectedUser == user {
+                                    .font(.body.weight(userStore.selectedUser?.id == user.id ? .semibold : .regular))
+
+                                if userStore.selectedUser?.id == user.id {
                                     Spacer()
                                     Text("Aktiv")
                                         .font(.caption)
@@ -91,6 +153,9 @@ struct UsersView: View {
                 ToolbarItem(placement: .topBarTrailing) {
                     EditButton()
                 }
+            }
+            .sheet(item: $avatarEditorMember) { member in
+                MemberAvatarEditorSheet(member: member)
             }
         }
     }

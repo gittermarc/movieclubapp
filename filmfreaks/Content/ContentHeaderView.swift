@@ -22,6 +22,8 @@ struct ContentHeaderView: View {
     let activeMemberDisplayName: String
     let activeMemberInitials: String
     let hasActiveMemberSelected: Bool
+    let activeMember: User?
+    let activeMemberGroupId: String?
 
     let showsActivityButton: Bool
     let activityNewEventsCount: Int
@@ -79,6 +81,8 @@ struct ContentHeaderView: View {
                     activeMemberDisplayName: activeMemberDisplayName,
                     activeMemberInitials: activeMemberInitials,
                     hasActiveMemberSelected: hasActiveMemberSelected,
+                    activeMember: activeMember,
+                    activeMemberGroupId: activeMemberGroupId,
                     showsActivityButton: showsActivityButton,
                     activityNewEventsCount: activityNewEventsCount,
                     onTapGroup: onTapGroup,

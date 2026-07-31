@@ -57,6 +57,26 @@ struct GroupScopedStorageTests {
         #expect(groupB.deletingLastPathComponent().lastPathComponent == "group-b")
     }
 
+    @Test func memberAvatarAndOutboxURLsAreGroupScoped() throws {
+        let tempDirectory = try TemporaryDirectory()
+        let memberId = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
+
+        let avatar = GroupScopedStorage.memberAvatarURL(
+            root: tempDirectory.url,
+            groupId: "group-a",
+            memberId: memberId
+        )
+        let journal = GroupScopedStorage.memberCloudDirtyJournalURL(
+            root: tempDirectory.url,
+            groupId: "group-a"
+        )
+
+        #expect(avatar.lastPathComponent == "11111111-1111-1111-1111-111111111111.jpg")
+        #expect(avatar.deletingLastPathComponent().lastPathComponent == "member_avatars")
+        #expect(journal.lastPathComponent == "member_cloud_dirty_journal.json")
+        #expect(journal.deletingLastPathComponent().lastPathComponent == "group-a")
+    }
+
     @Test func movieNightSnapshotURLPreservesLegacyLowercaseFolder() throws {
         let tempDirectory = try TemporaryDirectory()
 

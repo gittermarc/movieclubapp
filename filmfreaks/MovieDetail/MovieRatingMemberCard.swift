@@ -9,6 +9,8 @@ internal import SwiftUI
 
 struct MovieRatingMemberCard: View {
     let rating: Rating
+    let member: User?
+    let groupId: String?
     let isCurrentUser: Bool
     let tintColor: Color
 
@@ -43,11 +45,13 @@ struct MovieRatingMemberCard: View {
 
     private var reviewerHeader: some View {
         HStack(alignment: .center, spacing: 10) {
-            Text(initials)
-                .font(.subheadline.weight(.bold))
-                .foregroundStyle(tintColor)
-                .frame(width: 38, height: 38)
-                .background(tintColor.opacity(0.14), in: Circle())
+            MemberAvatarView(
+                member: member,
+                fallbackName: rating.reviewerName,
+                groupId: groupId,
+                size: 40,
+                tintColor: tintColor
+            )
 
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
@@ -171,16 +175,6 @@ struct MovieRatingMemberCard: View {
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(tintColor.opacity(score == 0 ? 0.045 : 0.09), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-    }
-
-    private var initials: String {
-        let characters = rating.reviewerName
-            .split(whereSeparator: { $0.isWhitespace })
-            .prefix(2)
-            .compactMap(\.first)
-            .map { String($0).uppercased() }
-
-        return characters.isEmpty ? "?" : characters.joined()
     }
 
     private var comment: String? {

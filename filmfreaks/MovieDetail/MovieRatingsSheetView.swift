@@ -45,12 +45,16 @@ struct MovieRatingsSheetView: View {
 
                         MovieDetailSectionCard(title: "Deine Bewertung") {
                             VStack(alignment: .leading, spacing: 10) {
-                                if let name = userStore.selectedUser?.name {
+                                if let selectedUser = userStore.selectedUser {
                                     HStack(spacing: 8) {
-                                        Image(systemName: "person.crop.circle")
-                                            .foregroundStyle(.secondary)
+                                        MemberAvatarView(
+                                            member: selectedUser,
+                                            groupId: userStore.currentGroupId,
+                                            size: 34,
+                                            tintColor: displaySettings.tintColor
+                                        )
 
-                                        Text("Als: \(name)")
+                                        Text("Als: \(selectedUser.name)")
                                             .font(.subheadline.weight(.semibold))
 
                                         Spacer(minLength: 0)

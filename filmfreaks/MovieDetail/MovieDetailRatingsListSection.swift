@@ -10,6 +10,7 @@ internal import SwiftUI
 struct MovieDetailRatingsListSection: View {
 
     @EnvironmentObject private var displaySettings: DisplaySettings
+    @EnvironmentObject private var userStore: UserStore
     let ratings: [Rating]
     let selectedUserID: UUID?
     let selectedUserName: String?
@@ -45,6 +46,8 @@ struct MovieDetailRatingsListSection: View {
                 ForEach(orderedRatings) { rating in
                     MovieRatingMemberCard(
                         rating: rating,
+                        member: MemberAvatarResolver.member(for: rating, in: userStore.users),
+                        groupId: userStore.currentGroupId,
                         isCurrentUser: MovieRatingPresentation.belongsToCurrentUser(
                             rating,
                             selectedUserID: selectedUserID,

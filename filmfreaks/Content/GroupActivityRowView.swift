@@ -93,7 +93,11 @@ struct GroupActivityRowView: View {
 
     private var rowContent: some View {
         HStack(spacing: 12) {
-            ActivityAvatarView(name: actorName, badgeSystemImage: kindBadgeSystemImage)
+            ActivityAvatarView(
+                name: actorName,
+                badgeSystemImage: kindBadgeSystemImage,
+                memberId: event.actorId
+            )
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(headlineAttributedText)

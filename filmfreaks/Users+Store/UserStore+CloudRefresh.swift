@@ -13,7 +13,7 @@ extension UserStore {
 
     /// Manuelles Refresh (z.B. Pull-to-refresh oder App-Resume)
     func refreshFromCloud(force: Bool = false) async {
-        guard let gid = currentGroupId, !gid.isEmpty else {
+        guard let gid = CloudKitRouting.normalizedGroupId(currentGroupId) else {
             // Standard-/Offline-Gruppe bleibt lokal.
             return
         }
@@ -23,41 +23,45 @@ extension UserStore {
         }
         lastRefreshAt = Date()
 
-        if isSyncing { return }
-        lastCloudSyncAttemptAt = Date()
-        isSyncing = true
-        defer { isSyncing = false }
+        if isRefreshingFromCloud { return }
+        isRefreshingFromCloud = true
+        beginCloudSync()
+        defer {
+            endCloudSync()
+            isRefreshingFromCloud = false
+        }
+
+        // Local-first member changes are submitted before the authoritative fetch. The pending
+        // journal still protects the change when this attempt cannot reach CloudKit.
+        flushPendingMemberCloudChanges()
 
         do {
             let members = try await cloudStore.fetchMembers(forGroupId: gid)
 
-            if !members.isEmpty {
-                applyCloudUsers(members: members, groupId: gid)
-                recordCloudSyncSuccess()
+            // A group switch during the fetch must never overwrite the members of the new group.
+            guard CloudKitRouting.normalizedGroupId(currentGroupId) == gid else { return }
+
+            let resolvedMembers = membersApplyingPendingCloudChanges(members, groupId: gid)
+
+            if !resolvedMembers.isEmpty {
+                applyCloudUsers(members: resolvedMembers, groupId: gid)
+                recordCloudSyncSuccess(forGroupId: gid)
             } else {
                 // Cloud leer → falls lokal bereits Users existieren, als „Initial-Seed“ hochladen.
-                // (So hat der Gruppenersteller sofort Members in der Cloud.)
+                // Die Outbox hält den Seed auch über einen App-Neustart hinweg fest.
                 if !users.isEmpty {
                     for user in users {
-                        do {
-                            try await cloudStore.upsertMember(id: user.id, name: user.name, groupId: gid)
-                        } catch {
-                            print("CloudKitUserStore upsert bootstrap error: \(error)")
-                        }
+                        queueMemberUpsertForCloud(user)
                     }
-
-                    let seededMembers = try await cloudStore.fetchMembers(forGroupId: gid)
-                    if !seededMembers.isEmpty {
-                        applyCloudUsers(members: seededMembers, groupId: gid)
-                        recordCloudSyncSuccess()
-                    }
+                    flushPendingMemberCloudChanges()
+                    recordCloudSyncSuccess(forGroupId: gid)
                 } else {
                     // Cloud fetch succeeded, just no members yet.
-                    recordCloudSyncSuccess()
+                    recordCloudSyncSuccess(forGroupId: gid)
                 }
             }
         } catch {
-            recordCloudSyncError(error)
+            recordCloudSyncError(error, forGroupId: gid)
             print("UserStore: Fehler beim Laden aus CloudKit: \(error)")
         }
     }

@@ -97,6 +97,24 @@ nonisolated enum GroupScopedStorage {
         )
     }
 
+    static func memberCloudDirtyJournalURL(root: URL, groupId: String?) -> URL {
+        groupJSONFileURL(
+            root: root,
+            groupId: groupId,
+            fileName: "member_cloud_dirty_journal.json"
+        )
+    }
+
+    static func memberAvatarDirectoryURL(root: URL, groupId: String?) -> URL {
+        groupDirectoryURL(root: root, groupId: groupId)
+            .appendingPathComponent("member_avatars", isDirectory: true)
+    }
+
+    static func memberAvatarURL(root: URL, groupId: String?, memberId: UUID) -> URL {
+        memberAvatarDirectoryURL(root: root, groupId: groupId)
+            .appendingPathComponent(memberId.uuidString.lowercased() + ".jpg")
+    }
+
     static func legacyMovieNightRootURL(
         baseDirectory: URL? = nil,
         fileManager: FileManager = .default

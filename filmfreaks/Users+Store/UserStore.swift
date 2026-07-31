@@ -51,6 +51,14 @@ class UserStore: ObservableObject {
     /// Wird gesetzt, während wir Members aus iCloud laden oder Änderungen pushen.
     @Published var isSyncing: Bool = false
 
+    /// Anzahl lokaler Mitgliederänderungen, die noch auf die Gruppe synchronisiert werden.
+    @Published private(set) var pendingCloudChangesCount: Int = 0
+
+    /// Aktualisiert den schreibgeschützten Queue-Zähler aus der Store-internen Sync-Pipeline.
+    func updatePendingCloudChangesCount(_ count: Int) {
+        pendingCloudChangesCount = max(0, count)
+    }
+
     // MARK: - Sync UX / Trust (subtle status indicators)
 
     /// Last time we successfully fetched or wrote members to iCloud.
@@ -75,12 +83,26 @@ class UserStore: ObservableObject {
     /// CloudKit-Backend (Members).
     let cloudStore = CloudKitUserStore()
 
+    /// Lokale, gruppenspezifische Ablage der komprimierten Profilbilder.
+    let avatarStorage = MemberAvatarStorage.shared
+
+    /// Persistente Outbox für Member- und Avatar-Änderungen.
+    var memberCloudSyncCoordinator: UserCloudSyncCoordinator!
+
     /// Verhindert didSet-Schleifen beim Cloud-Apply.
     var isApplyingCloudUpdate: Bool = false
 
     /// Throttle gegen „zu viele“ Fetches (z.B. App wird aktiv + Pull-to-refresh kurz hintereinander).
     var lastRefreshAt: Date?
     let minRefreshInterval: TimeInterval = 8
+    var isRefreshingFromCloud = false
+
+    /// Referenzzählung verhindert, dass paralleler Pull-to-Refresh und Outbox-Flush den Status verfälschen.
+    var activeCloudSyncOperationCount = 0
+
+    var networkCancellable: AnyCancellable?
+    var groupContextCancellable: AnyCancellable?
+    var lastNetworkConnected = true
 
     // MARK: - Init
 
@@ -99,6 +121,10 @@ class UserStore: ObservableObject {
 
         // Restore the previously selected user for this group (fallback: first user).
         restoreSelection(forGroupId: groupIdFromDefaults)
+
+        configureMemberCloudSync()
+        restorePendingMemberCloudWrites(forGroupId: groupIdFromDefaults)
+        setupMemberCloudRetryHandling()
 
         // Falls wir direkt in einer Gruppe sind: Members aus iCloud nachladen.
         if let gid = groupIdFromDefaults, !gid.isEmpty {

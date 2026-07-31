@@ -30,6 +30,8 @@ struct ContentContextBar: View {
     let activeMemberDisplayName: String
     let activeMemberInitials: String
     let hasActiveMemberSelected: Bool
+    let activeMember: User?
+    let activeMemberGroupId: String?
 
     let showsActivityButton: Bool
     let activityNewEventsCount: Int
@@ -105,15 +107,13 @@ struct ContentContextBar: View {
 
     private var activeMemberLabel: some View {
         HStack(spacing: 8) {
-            ZStack {
-                Circle()
-                    .fill((hasActiveMemberSelected ? tintColor : Color.secondary).opacity(0.18))
-
-                Text(activeMemberInitials)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(hasActiveMemberSelected ? tintColor : .secondary)
-            }
-            .frame(width: 26, height: 26)
+            MemberAvatarView(
+                member: activeMember,
+                fallbackName: activeMemberInitials,
+                groupId: activeMemberGroupId,
+                size: 26,
+                tintColor: hasActiveMemberSelected ? tintColor : .secondary
+            )
 
             ViewThatFits(in: .horizontal) {
                 Text(activeMemberDisplayName)

@@ -18,6 +18,8 @@ import CloudKit
 /// - groupId   (String)
 /// - memberId  (String, UUID)
 /// - name      (String)
+/// - avatarVersion (String, optional)
+/// - avatarAsset (CKAsset, optional)
 /// - updatedAt (Date)
 ///
 /// Neuer RecordName: "<groupId>|<memberId>"
@@ -29,6 +31,20 @@ struct CloudKitUserStore {
     struct CloudMember: Identifiable, Hashable {
         let id: UUID
         var name: String
+        var avatarVersion: String?
+        var avatarData: Data?
+
+        init(
+            id: UUID,
+            name: String,
+            avatarVersion: String? = nil,
+            avatarData: Data? = nil
+        ) {
+            self.id = id
+            self.name = name
+            self.avatarVersion = avatarVersion
+            self.avatarData = avatarData
+        }
     }
 
     private let container: CKContainer
@@ -41,6 +57,8 @@ struct CloudKitUserStore {
     private let groupIdKey = "groupId"
     private let memberIdKey = "memberId"
     private let nameKey = "name"
+    private let avatarVersionKey = "avatarVersion"
+    private let avatarAssetKey = "avatarAsset"
     private let updatedAtKey = "updatedAt"
 
     init(container: CKContainer = .default()) {
@@ -58,6 +76,71 @@ struct CloudKitUserStore {
         let recordName = groupId + "|" + memberId.uuidString.lowercased()
         if let zoneID { return CKRecord.ID(recordName: recordName, zoneID: zoneID) }
         return CKRecord.ID(recordName: recordName)
+    }
+
+    private func avatarVersion(from record: CKRecord) -> String? {
+        let value = (record[avatarVersionKey] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return (value?.isEmpty == false) ? value : nil
+    }
+
+    private func avatarData(from record: CKRecord) -> Data? {
+        guard let asset = record[avatarAssetKey] as? CKAsset,
+              let url = asset.fileURL else {
+            return nil
+        }
+
+        return try? Data(contentsOf: url)
+    }
+
+    private func makeTemporaryAvatarAssetURL(for data: Data?) throws -> URL? {
+        guard let data, data.isEmpty == false else { return nil }
+
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("filmfreaks-member-avatar-" + UUID().uuidString.lowercased())
+            .appendingPathExtension("jpg")
+        try data.write(to: url, options: [.atomic])
+        return url
+    }
+
+    private func removeTemporaryAvatarAsset(at url: URL?) {
+        guard let url else { return }
+        try? FileManager.default.removeItem(at: url)
+    }
+
+    private func applyFields(
+        on record: CKRecord,
+        member: CloudMember,
+        groupId: String,
+        route: (db: CKDatabase, zoneID: CKRecordZone.ID?),
+        avatarAssetURL: URL?,
+        clearsAvatar: Bool
+    ) -> CKRecord {
+        let trimmedName = member.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        record[groupIdKey] = groupId as CKRecordValue
+        record[memberIdKey] = member.id.uuidString.lowercased() as CKRecordValue
+        record[nameKey] = trimmedName as CKRecordValue
+        record[updatedAtKey] = Date() as CKRecordValue
+
+        if let avatarVersion = member.avatarVersion?.trimmingCharacters(in: .whitespacesAndNewlines),
+           avatarVersion.isEmpty == false {
+            record[avatarVersionKey] = avatarVersion as CKRecordValue
+            if let avatarAssetURL {
+                record[avatarAssetKey] = CKAsset(fileURL: avatarAssetURL)
+            }
+        } else if clearsAvatar {
+            record[avatarVersionKey] = nil
+            record[avatarAssetKey] = nil
+        }
+
+        if let zoneID = route.zoneID {
+            let rootID = CKRecord.ID(recordName: groupId, zoneID: zoneID)
+            record.parent = CKRecord.Reference(recordID: rootID, action: .none)
+        } else {
+            record.parent = nil
+        }
+
+        return record
     }
 
     // MARK: - Fetch
@@ -104,7 +187,14 @@ struct CloudKitUserStore {
                 }
             }
 
-            out.append(.init(id: memberId, name: trimmedName))
+            out.append(
+                .init(
+                    id: memberId,
+                    name: trimmedName,
+                    avatarVersion: avatarVersion(from: record),
+                    avatarData: avatarData(from: record)
+                )
+            )
         }
 
         // Dedupe by memberId and stable sort
@@ -140,6 +230,13 @@ struct CloudKitUserStore {
 
             var records: [CKRecord] = []
             records.reserveCapacity(slice.count)
+            var temporaryAvatarAssetURLs: [URL] = []
+
+            defer {
+                for url in temporaryAvatarAssetURLs {
+                    removeTemporaryAvatarAsset(at: url)
+                }
+            }
 
             for m in slice {
                 let trimmed = m.name.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -147,20 +244,21 @@ struct CloudKitUserStore {
 
                 let id = recordIDNew(groupId: groupId, memberId: m.id, zoneID: route.zoneID)
                 let record = CKRecord(recordType: recordType, recordID: id)
-                record[groupIdKey] = groupId as CKRecordValue
-                record[memberIdKey] = m.id.uuidString.lowercased() as CKRecordValue
-                record[nameKey] = trimmed as CKRecordValue
-                record[updatedAtKey] = Date() as CKRecordValue
-
-                // CloudKit Sharing: attach member record to the group root record.
-                if let zoneID = route.zoneID {
-                    let rootID = CKRecord.ID(recordName: groupId, zoneID: zoneID)
-                    record.parent = CKRecord.Reference(recordID: rootID, action: .none)
-                } else {
-                    record.parent = nil
+                let avatarAssetURL = try makeTemporaryAvatarAssetURL(for: m.avatarData)
+                if let avatarAssetURL {
+                    temporaryAvatarAssetURLs.append(avatarAssetURL)
                 }
 
-                records.append(record)
+                records.append(
+                    applyFields(
+                        on: record,
+                        member: m,
+                        groupId: groupId,
+                        route: route,
+                        avatarAssetURL: avatarAssetURL,
+                        clearsAvatar: m.avatarVersion == nil
+                    )
+                )
             }
 
             if !records.isEmpty {
@@ -172,26 +270,35 @@ struct CloudKitUserStore {
     }
 
     func upsertMember(id: UUID, name: String, groupId: String) async throws {
+        try await upsertMember(
+            id: id,
+            name: name,
+            avatarVersion: nil,
+            avatarData: nil,
+            clearsAvatar: false,
+            groupId: groupId
+        )
+    }
+
+    func upsertMember(
+        id: UUID,
+        name: String,
+        avatarVersion: String?,
+        avatarData: Data?,
+        clearsAvatar: Bool = true,
+        groupId: String
+    ) async throws {
         let route = try routedDatabase(forGroupId: groupId)
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-
-        func applyFields(on record: CKRecord) -> CKRecord {
-            record[groupIdKey] = groupId as CKRecordValue
-            record[memberIdKey] = id.uuidString.lowercased() as CKRecordValue
-            record[nameKey] = trimmed as CKRecordValue
-            record[updatedAtKey] = Date() as CKRecordValue
-
-            // CloudKit Sharing: attach member record to the group root record.
-            if let zoneID = route.zoneID {
-                let rootID = CKRecord.ID(recordName: groupId, zoneID: zoneID)
-                record.parent = CKRecord.Reference(recordID: rootID, action: .none)
-            } else {
-                record.parent = nil
-            }
-
-            return record
-        }
+        let member = CloudMember(
+            id: id,
+            name: trimmed,
+            avatarVersion: avatarVersion,
+            avatarData: avatarData
+        )
+        let avatarAssetURL = try makeTemporaryAvatarAssetURL(for: avatarData)
+        defer { removeTemporaryAvatarAsset(at: avatarAssetURL) }
 
         // 1) Fast path: try new recordID
         let newID = recordIDNew(groupId: groupId, memberId: id, zoneID: route.zoneID)
@@ -213,12 +320,30 @@ struct CloudKitUserStore {
                     base = CKRecord(recordType: recordType, recordID: newID)
                 }
             }
-            _ = try await route.db.save(applyFields(on: base))
+            _ = try await route.db.save(
+                applyFields(
+                    on: base,
+                    member: member,
+                    groupId: groupId,
+                    route: route,
+                    avatarAssetURL: avatarAssetURL,
+                    clearsAvatar: clearsAvatar
+                )
+            )
         } catch {
             if let ckError = error as? CKError,
                ckError.code == .serverRecordChanged,
                let serverRecord = ckError.userInfo[CKRecordChangedErrorServerRecordKey] as? CKRecord {
-                _ = try await route.db.save(applyFields(on: serverRecord))
+                _ = try await route.db.save(
+                    applyFields(
+                        on: serverRecord,
+                        member: member,
+                        groupId: groupId,
+                        route: route,
+                        avatarAssetURL: avatarAssetURL,
+                        clearsAvatar: clearsAvatar
+                    )
+                )
                 return
             }
             throw error

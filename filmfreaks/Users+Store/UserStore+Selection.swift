@@ -21,6 +21,9 @@ extension UserStore {
         // Erst lokal laden (schnelle UI), dann Cloud (Autorität für Gruppen).
         users = PersistenceManager.shared.loadUsers(groupId: groupId)
 
+        // Lokale Änderungen dürfen durch einen frühen Cloud-Fetch nicht wieder verschwinden.
+        restorePendingMemberCloudWrites(forGroupId: groupId)
+
         // Restore the previously selected user for this group (fallback: first user).
         restoreSelection(forGroupId: groupId)
 
@@ -35,9 +38,29 @@ extension UserStore {
     func applyCloudUsers(members: [CloudKitUserStore.CloudMember], groupId: String) {
         let previousSelectedId = selectedUser?.id
         let previousSelectedName = selectedUser?.name
+        let currentMemberIds = Set(members.map(\.id))
+
+        // A remotely deleted member must not leave an orphaned profile image behind locally.
+        for localMember in users where currentMemberIds.contains(localMember.id) == false {
+            try? avatarStorage.removeAvatar(memberId: localMember.id, groupId: groupId)
+        }
+
+        for member in members {
+            reconcileAvatarCache(
+                for: member,
+                previousAvatarVersion: users.first(where: { $0.id == member.id })?.avatarVersion,
+                groupId: groupId
+            )
+        }
 
         let cloudUsers: [User] = members
-            .map { User(id: $0.id, name: $0.name) }
+            .map {
+                User(
+                    id: $0.id,
+                    name: $0.name,
+                    avatarVersion: $0.avatarVersion
+                )
+            }
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
 
         isApplyingCloudUpdate = true

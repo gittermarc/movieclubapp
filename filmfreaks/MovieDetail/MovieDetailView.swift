@@ -213,7 +213,9 @@ struct MovieDetailView: View {
                             averageRating: movie.averageRating,
                             averageFazit: movie.averageFazit,
                             ratingsCount: movie.ratings.count,
-                            selectedUserName: userStore.selectedUser?.name,
+                            selectedUser: userStore.selectedUser,
+                            members: userStore.users,
+                            groupId: userStore.currentGroupId,
                             hasPendingChanges: hasPendingRatingChanges,
                             ratingsPreview: Array(sortedRatings.prefix(2)),
                             tintSoftBackground: displaySettings.tintSoftBackground

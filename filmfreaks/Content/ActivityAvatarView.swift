@@ -13,37 +13,30 @@ internal import SwiftUI
 struct ActivityAvatarView: View {
 
     @EnvironmentObject private var displaySettings: DisplaySettings
+    @EnvironmentObject private var userStore: UserStore
 
     let name: String
     let badgeSystemImage: String?
+    let memberId: UUID?
 
-    private var initials: String {
-        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        let parts = trimmed.split(separator: " ").map(String.init)
-        if parts.count >= 2 {
-            let first = (parts.first ?? "").prefix(1)
-            let last = (parts.last ?? "").prefix(1)
-            return String(first + last).uppercased()
-        }
-        if trimmed.isEmpty {
-            return "??"
-        }
-        return String(trimmed.prefix(2)).uppercased()
+    init(
+        name: String,
+        badgeSystemImage: String?,
+        memberId: UUID? = nil
+    ) {
+        self.name = name
+        self.badgeSystemImage = badgeSystemImage
+        self.memberId = memberId
     }
 
     var body: some View {
-        Text(initials)
-            .font(.caption.weight(.semibold))
-            .foregroundStyle(.primary)
-            .frame(width: 34, height: 34)
-            .background(
-                Circle()
-                    .fill(Color(.secondarySystemBackground))
-            )
-            .overlay(
-                Circle()
-                    .stroke(Color.primary.opacity(0.06), lineWidth: 1)
-            )
+        MemberAvatarView(
+            member: resolvedMember,
+            fallbackName: name,
+            groupId: userStore.currentGroupId,
+            size: 34,
+            tintColor: displaySettings.tintColor
+        )
             .overlay(alignment: .bottomTrailing) {
                 if let badgeSystemImage {
                     badge(systemImage: badgeSystemImage)
@@ -51,6 +44,10 @@ struct ActivityAvatarView: View {
                 }
             }
             .accessibilityLabel(name.isEmpty ? "Jemand" : name)
+    }
+
+    private var resolvedMember: User? {
+        MemberAvatarResolver.member(memberId: memberId, name: name, in: userStore.users)
     }
 
     private func badge(systemImage: String) -> some View {

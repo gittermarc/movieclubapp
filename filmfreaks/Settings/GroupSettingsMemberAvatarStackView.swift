@@ -1,13 +1,18 @@
 internal import SwiftUI
 
 struct GroupSettingsMemberAvatarStackView: View {
+    @EnvironmentObject private var userStore: UserStore
+
     let members: [GroupSettingsActiveCardSnapshot.MemberPreview]
     let hiddenMemberCount: Int
 
     var body: some View {
         HStack(spacing: -9) {
             ForEach(Array(members.enumerated()), id: \.element.id) { index, member in
-                GroupSettingsMemberAvatarView(name: member.name)
+                GroupSettingsMemberAvatarView(
+                    member: resolvedMember(for: member),
+                    groupId: userStore.currentGroupId
+                )
                     .zIndex(Double(members.count - index))
             }
 
@@ -32,41 +37,31 @@ struct GroupSettingsMemberAvatarStackView: View {
         }
         return "Keine Mitglieder"
     }
+
+    private func resolvedMember(for preview: GroupSettingsActiveCardSnapshot.MemberPreview) -> User {
+        userStore.users.first(where: { $0.id == preview.id })
+            ?? User(id: preview.id, name: preview.name)
+    }
 }
 
 private struct GroupSettingsMemberAvatarView: View {
     @EnvironmentObject private var displaySettings: DisplaySettings
 
-    let name: String
+    let member: User
+    let groupId: String?
 
     var body: some View {
-        Text(initials)
-            .font(.caption2.weight(.semibold))
-            .foregroundStyle(displaySettings.tintColor)
-            .frame(width: 28, height: 28)
-            .background(
-                Circle()
-                    .fill(displaySettings.tintColor.opacity(0.12))
-            )
+        MemberAvatarView(
+            member: member,
+            groupId: groupId,
+            size: 28,
+            tintColor: displaySettings.tintColor
+        )
             .overlay(
                 Circle()
                     .stroke(Color(.secondarySystemBackground), lineWidth: 2)
             )
             .accessibilityHidden(true)
-    }
-
-    private var initials: String {
-        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        let parts = trimmed.split(separator: " ").map(String.init)
-
-        if parts.count >= 2 {
-            let first = (parts.first ?? "").prefix(1)
-            let last = (parts.last ?? "").prefix(1)
-            return String(first + last).uppercased()
-        }
-
-        guard !trimmed.isEmpty else { return "??" }
-        return String(trimmed.prefix(2)).uppercased()
     }
 }
 

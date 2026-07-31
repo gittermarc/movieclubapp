@@ -77,7 +77,11 @@ struct MovieNightActivityRowView: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            ActivityAvatarView(name: actorName, badgeSystemImage: event.systemImage)
+            ActivityAvatarView(
+                name: actorName,
+                badgeSystemImage: event.systemImage,
+                memberId: event.actorUserId
+            )
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(headlineAttributedText)
