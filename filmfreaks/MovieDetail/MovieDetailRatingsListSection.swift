@@ -14,6 +14,7 @@ struct MovieDetailRatingsListSection: View {
     let ratings: [Rating]
     let selectedUserID: UUID?
     let selectedUserName: String?
+    let reviewTransitionNamespace: Namespace.ID
 
     private var summary: MovieRatingGroupSummary {
         MovieRatingGroupSummary(ratings: ratings)
@@ -53,7 +54,8 @@ struct MovieDetailRatingsListSection: View {
                             selectedUserID: selectedUserID,
                             selectedUserName: selectedUserName
                         ),
-                        tintColor: displaySettings.tintColor
+                        tintColor: displaySettings.tintColor,
+                        reviewTransitionNamespace: reviewTransitionNamespace
                     )
                 }
             }

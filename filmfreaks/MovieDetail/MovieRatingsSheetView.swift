@@ -24,9 +24,12 @@ struct MovieRatingsSheetView: View {
 
     @EnvironmentObject private var userStore: UserStore
     @Environment(\.dismiss) private var dismiss
+    @Namespace private var reviewTransitionNamespace
+    @State private var reviewPath: [MovieRatingReviewRoute] = []
+    @State private var selectedDetent: PresentationDetent = .medium
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $reviewPath) {
             ZStack {
                 LinearGradient(
                     colors: [
@@ -94,7 +97,8 @@ struct MovieRatingsSheetView: View {
                             MovieDetailRatingsListSection(
                                 ratings: movie.ratings,
                                 selectedUserID: userStore.selectedUser?.id,
-                                selectedUserName: userStore.selectedUser?.name
+                                selectedUserName: userStore.selectedUser?.name,
+                                reviewTransitionNamespace: reviewTransitionNamespace
                             )
                         }
 
@@ -106,22 +110,37 @@ struct MovieRatingsSheetView: View {
             }
             .navigationTitle("Bewertungen")
             .navigationBarTitleDisplayMode(.inline)
+            .navigationDestination(for: MovieRatingReviewRoute.self) { route in
+                reviewDestination(for: route)
+            }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Schließen") {
-                        dismiss()
+                    if reviewPath.isEmpty {
+                        Button("Schließen") {
+                            dismiss()
+                        }
                     }
                 }
             }
         }
-        .presentationDetents([.medium, .large])
+        .onChange(of: reviewPath) { _, newPath in
+            if newPath.isEmpty == false {
+                selectedDetent = .large
+            }
+        }
+        .presentationDetents([.medium, .large], selection: $selectedDetent)
         .presentationDragIndicator(.visible)
     }
 
     private var headerCard: some View {
         MovieDetailSectionCard {
             HStack(alignment: .top, spacing: 12) {
-                posterThumbnail
+                MovieRatingPosterThumbnailView(
+                    movie: movie,
+                    width: 68,
+                    height: 100,
+                    cornerRadius: 12
+                )
 
                 VStack(alignment: .leading, spacing: 8) {
                     Text(movie.title)
@@ -166,49 +185,6 @@ struct MovieRatingsSheetView: View {
     }
 
     @ViewBuilder
-    private var posterThumbnail: some View {
-        Group {
-            if let url = movie.posterURL {
-                CachedAsyncImage(url: url) { phase in
-                    switch phase {
-                    case .empty:
-                        ZStack {
-                            RoundedRectangle(cornerRadius: 12)
-                                .foregroundStyle(.gray.opacity(0.18))
-                            ProgressView()
-                        }
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .scaledToFill()
-                    case .failure:
-                        RoundedRectangle(cornerRadius: 12)
-                            .foregroundStyle(.gray.opacity(0.18))
-                            .overlay {
-                                Image(systemName: "film")
-                                    .font(.title2)
-                                    .foregroundStyle(.secondary)
-                            }
-                    @unknown default:
-                        RoundedRectangle(cornerRadius: 12)
-                            .foregroundStyle(.gray.opacity(0.18))
-                    }
-                }
-            } else {
-                RoundedRectangle(cornerRadius: 12)
-                    .foregroundStyle(.gray.opacity(0.18))
-                    .overlay {
-                        Image(systemName: "film")
-                            .font(.title2)
-                            .foregroundStyle(.secondary)
-                    }
-            }
-        }
-        .frame(width: 68, height: 100)
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-    }
-
-    @ViewBuilder
     private func averageChip(title: String, value: Double?, color: Color) -> some View {
         if let value {
             Text(String(format: "\(title) %.1f", value))
@@ -224,6 +200,35 @@ struct MovieRatingsSheetView: View {
                 .padding(.vertical, 6)
                 .background(Color.gray.opacity(0.10))
                 .clipShape(Capsule())
+        }
+    }
+
+    @ViewBuilder
+    private func reviewDestination(for route: MovieRatingReviewRoute) -> some View {
+        if let rating = MovieRatingReviewPresentation.rating(for: route, in: movie.ratings),
+           let comment = MovieRatingReviewPresentation.comment(for: rating) {
+            MovieRatingReviewReaderView(
+                movie: movie,
+                rating: rating,
+                comment: comment,
+                member: MemberAvatarResolver.member(for: rating, in: userStore.users),
+                groupId: userStore.currentGroupId,
+                isCurrentUser: MovieRatingPresentation.belongsToCurrentUser(
+                    rating,
+                    selectedUserID: userStore.selectedUser?.id,
+                    selectedUserName: userStore.selectedUser?.name
+                ),
+                tintColor: displaySettings.tintColor
+            )
+            .navigationTransition(
+                .zoom(sourceID: route.ratingID, in: reviewTransitionNamespace)
+            )
+        } else {
+            ContentUnavailableView(
+                "Rezension nicht verfügbar",
+                systemImage: "quote.bubble",
+                description: Text("Die Bewertung wurde zwischenzeitlich geändert oder entfernt.")
+            )
         }
     }
 }
