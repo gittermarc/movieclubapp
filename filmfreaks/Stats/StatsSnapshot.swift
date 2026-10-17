@@ -9,8 +9,11 @@ import Foundation
 
 struct StatsUserStats: Equatable {
     var movieCount: Int
+    /// All submitted contributions, including text-only reviews.
     var ratingsCount: Int
     var averageRating: Double?
+    /// Contributions supplying a number in the current display mode.
+    var numericRatingsCount: Int = 0
 }
 
 /// Cached, render-ready aggregation results.
@@ -23,6 +26,7 @@ struct StatsSnapshot {
     var filteredMovies: [Movie]
     var availableLocations: [String]
 
+    /// All submitted contributions, including text-only reviews.
     var totalRatingsCount: Int
     var activeReviewersCount: Int
     var ratedMoviesCount: Int
@@ -70,6 +74,8 @@ struct StatsSnapshot {
     var fastestToWatchSuggester: StatsSuggestionWatchTimingInsight?
 
     var userStatsByUserId: [UUID: StatsUserStats]
+    /// Sample size of overallAverageRating, after per-contribution mode fallback.
+    var numericRatingsCount: Int = 0
 
     static let empty = StatsSnapshot(
         moviesForCurrentTimeRange: [],

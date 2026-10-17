@@ -146,7 +146,7 @@ nonisolated enum ContentActivityPreviewSnapshotBuilder {
 
             for rating in movie.ratings {
                 guard let date = rating.updatedAt else { continue }
-                let value = activityPreviewRatingValue(for: rating, displayMode: displayMode)
+                let value = RatingCalculation.value(for: rating, displayMode: displayMode)
 
                 events.append(
                     GroupActivityEvent(
@@ -207,16 +207,3 @@ nonisolated private func activityPreviewFirstNonEmpty(_ a: String?, _ b: String?
     return nil
 }
 
-nonisolated private func activityPreviewRatingValue(for rating: Rating, displayMode: RatingDisplayMode) -> Double? {
-    switch displayMode {
-    case .ratingAverage:
-        let value = rating.averageScoreNormalizedTo10
-        return value <= 0 ? nil : value
-    case .fazitAverage:
-        if let fs = rating.fazitScore {
-            return Double(fs)
-        }
-        let fallback = rating.averageScoreNormalizedTo10
-        return fallback <= 0 ? nil : fallback
-    }
-}

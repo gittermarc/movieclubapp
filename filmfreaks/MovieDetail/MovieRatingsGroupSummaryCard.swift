@@ -24,7 +24,7 @@ struct MovieRatingsGroupSummaryCard: View {
 
                 Spacer(minLength: 8)
 
-                Text("\(summary.ratingsCount) \(summary.ratingsCount == 1 ? "Stimme" : "Stimmen")")
+                Text("\(summary.ratingsCount) \(summary.ratingsCount == 1 ? "Beitrag" : "Beiträge")")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
             }
@@ -33,6 +33,7 @@ struct MovieRatingsGroupSummaryCard: View {
                 metric(
                     title: "Kriterien Ø",
                     value: averageText(summary.averageRating),
+                    count: summary.criteriaRatingsCount,
                     icon: "slider.horizontal.3",
                     color: tintColor
                 )
@@ -40,6 +41,7 @@ struct MovieRatingsGroupSummaryCard: View {
                 metric(
                     title: "Fazit Ø",
                     value: averageText(summary.averageFazit),
+                    count: summary.fazitRatingsCount,
                     icon: "sparkles",
                     color: MovieRatingFazitScale.color(for: roundedFazit)
                 )
@@ -70,7 +72,7 @@ struct MovieRatingsGroupSummaryCard: View {
         summary.averageFazit.map { Int($0.rounded()) }
     }
 
-    private func metric(title: String, value: String, icon: String, color: Color) -> some View {
+    private func metric(title: String, value: String, count: Int, icon: String, color: Color) -> some View {
         HStack(spacing: 8) {
             Image(systemName: icon)
                 .font(.subheadline.weight(.semibold))
@@ -85,6 +87,10 @@ struct MovieRatingsGroupSummaryCard: View {
 
                 Text(value)
                     .font(.subheadline.weight(.bold))
+
+                Text("\(count) \(count == 1 ? "Wertung" : "Wertungen")")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
             }
 
             Spacer(minLength: 0)

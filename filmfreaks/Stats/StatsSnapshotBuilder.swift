@@ -71,14 +71,7 @@ enum StatsSnapshotBuilder {
         }()
 
         func displayedScore(for rating: Rating) -> Double? {
-            switch ratingDisplayMode {
-            case .ratingAverage:
-                return rating.averageScoreNormalizedTo10
-            case .fazitAverage:
-                if let f = rating.fazitScore { return Double(f) }
-                let v = rating.averageScoreNormalizedTo10
-                return v > 0 ? v : nil
-            }
+            RatingCalculation.value(for: rating, displayMode: ratingDisplayMode)
         }
 
         func reviewerKey(for rating: Rating) -> String {
@@ -136,14 +129,12 @@ enum StatsSnapshotBuilder {
             }.count
         }()
 
-        let overallAverageRating: Double? = {
-            let allScores = filteredMovies.flatMap { movie in
-                movie.ratings.compactMap { displayedScore(for: $0) }
-            }
-            guard !allScores.isEmpty else { return nil }
-            let total = allScores.reduce(0, +)
-            return total / Double(allScores.count)
-        }()
+        // Overall and month trends intentionally weight each numeric contribution,
+        // unlike movie leaderboards, which weight each movie's group average.
+        let allScores = filteredMovies.flatMap { movie in
+            movie.ratings.compactMap { displayedScore(for: $0) }
+        }
+        let overallAverageRating = RatingCalculation.average(allScores)
 
         let mostRecentWatchedDate: Date? = filteredMovies.compactMap { $0.watchedDate }.max()
 
@@ -160,12 +151,7 @@ enum StatsSnapshotBuilder {
             }
 
             let result = buckets.map { (monthStart, data) -> StatsMonthTrend in
-                let avg: Double?
-                if data.scores.isEmpty {
-                    avg = nil
-                } else {
-                    avg = data.scores.reduce(0, +) / Double(data.scores.count)
-                }
+                let avg = RatingCalculation.average(data.scores)
                 return StatsMonthTrend(monthStart: monthStart, movieCount: data.movies, averageRating: avg)
             }
             return result.sorted { $0.monthStart < $1.monthStart }
@@ -327,6 +313,7 @@ enum StatsSnapshotBuilder {
         for user in users {
             var movieIds = Set<UUID>()
             var scores: [Double] = []
+            var ratingsCount = 0
 
             let idKey = "id:\(user.id.uuidString.lowercased())"
             let nameKey = "name:\(user.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())"
@@ -338,22 +325,16 @@ enum StatsSnapshotBuilder {
                 }
                 if !userRatings.isEmpty {
                     movieIds.insert(movie.id)
+                    ratingsCount += userRatings.count
                     scores.append(contentsOf: userRatings.compactMap { displayedScore(for: $0) })
                 }
-            }
-
-            let ratingsCount = scores.count
-            let averageRating: Double?
-            if scores.isEmpty {
-                averageRating = nil
-            } else {
-                averageRating = scores.reduce(0, +) / Double(scores.count)
             }
 
             userStatsByUserId[user.id] = StatsUserStats(
                 movieCount: movieIds.count,
                 ratingsCount: ratingsCount,
-                averageRating: averageRating
+                averageRating: RatingCalculation.average(scores),
+                numericRatingsCount: scores.count
             )
         }
 
@@ -399,7 +380,8 @@ enum StatsSnapshotBuilder {
             bestHitRateSuggester: suggestionQuality.bestHitRateSuggester,
             mostControversialSuggester: suggestionQuality.mostControversialSuggester,
             fastestToWatchSuggester: suggestionQuality.fastestToWatchSuggester,
-            userStatsByUserId: userStatsByUserId
+            userStatsByUserId: userStatsByUserId,
+            numericRatingsCount: allScores.count
         )
     }
 }

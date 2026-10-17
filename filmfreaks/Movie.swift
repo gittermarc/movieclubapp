@@ -46,18 +46,15 @@ nonisolated struct Rating: Identifiable, Codable, Equatable, Sendable {
     /// Optional, damit Legacy-Payloads weiterhin problemlos decodieren.
     var updatedAt: Date? = nil
 
-    /// Durchschnitt über alle bewerteten Kriterien in Sternen (0–3, ggf. z.B. 2.3)
-    /// Hinweis: 0 zählt als „nicht bewertet“ und fließt nicht in den Durchschnitt ein.
-    nonisolated var averageStars: Double {
-        let rated = scores.values.filter { $0 > 0 }
-        guard !rated.isEmpty else { return 0 }
-        let total = rated.reduce(0, +)
-        return Double(total) / Double(rated.count)
+    /// Durchschnitt über vergebene Kriterien (1–3); nil ohne Kriterienwertung.
+    /// 0 zählt als „nicht bewertet“ und fließt nicht in den Durchschnitt ein.
+    nonisolated var averageStars: Double? {
+        RatingCalculation.criteriaAverageStars(scores: scores)
     }
 
-    /// Normalisiert auf 0–10 Skala für Rest der App
-    nonisolated var averageScoreNormalizedTo10: Double {
-        (averageStars / 3.0) * 10.0
+    /// Normalisiert auf 0–10; nil bleibt auch nach der Normalisierung fehlend.
+    nonisolated var averageScoreNormalizedTo10: Double? {
+        RatingCalculation.criteriaScore(scores: scores)
     }
 }
 
@@ -272,20 +269,14 @@ extension Movie {
         return URL(string: "https://image.tmdb.org/t/p/w500\(posterPath)")
     }
 
-    /// Overall-Bewertung (0–10) über alle User
+    /// Kriterien-Ø (0–10): jede Person mit Kriterienwertung zählt genau einmal.
     nonisolated var averageRating: Double? {
-        guard !ratings.isEmpty else { return nil }
-        let all = ratings.map { $0.averageScoreNormalizedTo10 }
-        let total = all.reduce(0, +)
-        return total / Double(all.count)
+        RatingCalculation.criteriaAverage(ratings: ratings)
     }
 
     /// Ø Fazit (1–10) über alle User, die ein Fazit vergeben haben
     nonisolated var averageFazit: Double? {
-        let values = ratings.compactMap { $0.fazitScore }.map { Double($0) }
-        guard !values.isEmpty else { return nil }
-        let total = values.reduce(0, +)
-        return total / Double(values.count)
+        RatingCalculation.fazitAverage(ratings: ratings)
     }
 
     /// Gruppen-Ø je nach Anzeige-Modus.

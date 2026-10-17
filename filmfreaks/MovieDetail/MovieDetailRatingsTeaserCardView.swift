@@ -39,7 +39,7 @@ struct MovieDetailRatingsTeaserCardView: View {
                                 .background(tintSoftBackground)
                                 .clipShape(Capsule())
                         } else {
-                            Text("Noch keine Bewertungen")
+                            Text(MovieRatingPresentation.missingCriteriaText(ratingsCount: ratingsCount))
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
                         }
@@ -114,7 +114,7 @@ struct MovieDetailRatingsTeaserCardView: View {
 
                                     Spacer(minLength: 0)
 
-                                    Text(String(format: "%.1f / 10", rating.averageScoreNormalizedTo10))
+                                    Text(MovieRatingPresentation.scoreText(rating.averageScoreNormalizedTo10))
                                         .font(.caption.weight(.semibold))
                                         .padding(.horizontal, 8)
                                         .padding(.vertical, 4)

@@ -120,10 +120,12 @@ extension StatsSnapshotBuilder {
         displayedScore: (Rating) -> Double?,
         reviewerKey: (Rating) -> String
     ) -> [String: (name: String, score: Double)] {
-        var scoresByReviewer: [String: (name: String, score: Double, updatedAt: Date?)] = [:]
+        var scoresByReviewer: [String: (name: String, score: Double?, updatedAt: Date?)] = [:]
 
         for rating in movie.ratings {
-            guard let score = displayedScore(rating) else { continue }
+            // Choose the newest contribution before dropping missing numbers.
+            // Otherwise an older numeric rating could survive a newer text review.
+            let score = displayedScore(rating)
 
             let key = reviewerKey(rating)
             let name = resolveReviewerName(
@@ -141,8 +143,9 @@ extension StatsSnapshotBuilder {
             }
         }
 
-        return scoresByReviewer.mapValues { value in
-            (name: value.name, score: value.score)
+        return scoresByReviewer.compactMapValues { value -> (name: String, score: Double)? in
+            guard let score = value.score else { return nil }
+            return (name: value.name, score: score)
         }
     }
 

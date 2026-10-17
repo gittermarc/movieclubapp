@@ -140,18 +140,17 @@ extension StatsView {
                         Text("Ø Bewertung pro Monat")
                             .font(.subheadline.weight(.semibold))
 
-                        Chart(monthTrends.compactMap { item -> StatsMonthTrend? in
-                            guard let avg = item.averageRating else { return nil }
-                            return StatsMonthTrend(monthStart: item.monthStart, movieCount: item.movieCount, averageRating: avg)
-                        }) { item in
-                            LineMark(
-                                x: .value("Monat", item.monthStart, unit: .month),
-                                y: .value("Ø", item.averageRating ?? 0)
-                            )
-                            PointMark(
-                                x: .value("Monat", item.monthStart, unit: .month),
-                                y: .value("Ø", item.averageRating ?? 0)
-                            )
+                        Chart(monthTrends) { item in
+                            if let average = item.averageRating {
+                                LineMark(
+                                    x: .value("Monat", item.monthStart, unit: .month),
+                                    y: .value("Ø", average)
+                                )
+                                PointMark(
+                                    x: .value("Monat", item.monthStart, unit: .month),
+                                    y: .value("Ø", average)
+                                )
+                            }
                         }
                         .chartYScale(domain: 0...10)
                         .chartXAxis {

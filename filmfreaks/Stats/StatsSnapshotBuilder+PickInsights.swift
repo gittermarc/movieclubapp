@@ -46,9 +46,10 @@ extension StatsSnapshotBuilder {
         displayedScore: (Rating) -> Double?
     ) -> StatsPickInsight? {
         let values = movie.ratings.compactMap { displayedScore($0) }
-        guard !values.isEmpty else { return nil }
+        // Picks compare each person's mode-aware numeric value, including the
+        // per-person criteria fallback in Fazit mode. Text is not a sample.
+        guard let averageRating = RatingCalculation.average(values) else { return nil }
 
-        let averageRating = values.reduce(0, +) / Double(values.count)
         let deviation = standardDeviation(values)
 
         return StatsPickInsight(

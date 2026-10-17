@@ -180,7 +180,7 @@ struct MovieRatingReviewReaderView: View {
     private var ratingChip: some View {
         metricChip(
             title: "Kriterien",
-            value: String(format: "%.1f / 10", rating.averageScoreNormalizedTo10),
+            value: MovieRatingPresentation.scoreText(rating.averageScoreNormalizedTo10),
             color: tintColor
         )
     }

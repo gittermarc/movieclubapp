@@ -83,7 +83,7 @@ struct MovieRatingMemberCard: View {
 
             Spacer(minLength: 8)
 
-            Text(String(format: "%.1f / 10", rating.averageScoreNormalizedTo10))
+            Text(MovieRatingPresentation.scoreText(rating.averageScoreNormalizedTo10))
                 .font(.caption.weight(.bold))
                 .padding(.horizontal, 9)
                 .padding(.vertical, 6)

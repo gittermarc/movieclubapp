@@ -92,7 +92,8 @@ Views sollten nicht direkt CloudKit oder Dateisystem schreiben. Der aktuelle Cod
 - `Rating`
   - Identity: `id: UUID`, `reviewerId: UUID?`, `reviewerName`
   - Scores: `[RatingCriterion: Int]`, `comment`, `fazitScore`, `updatedAt`
-  - Computed: average stars and normalized 0 to 10 score
+  - Computed: optional average stars and normalized 0 to 10 score; nil without assigned criteria.
+  - Pure calculations: `filmfreaks/Ratings/RatingCalculation.swift`; zero criteria are absent, not numeric zero ratings.
 - `CastMember`
   - `personId`, `name`
   - Used for cast and directors.
@@ -334,6 +335,18 @@ Views sollten nicht direkt CloudKit oder Dateisystem schreiben. Der aktuelle Cod
 8. Replace full-array equality/signature checks in Content and Stats with revision-based invalidation.
 9. Add a small CloudKit schema note or fixture documenting queryable fields and required indexes.
 10. Review `CloudKitActivityPushFetchCoordinator.swift` because its record fetch and local notification handling are gated behind `#if DEBUG`.
+
+## TMC-RATINGS-PR 1 – Bewertungsberechnung und fehlende Werte
+
+- `Rating.averageStars` und `averageScoreNormalizedTo10` liefern `Double?`. Ohne positive Kriterien ist das Ergebnis `nil`.
+- `RatingCalculation` ist `nonisolated` und verwendet nur Eingabewerte. Modell, Bewertungsübersicht, Aktivitäten und Statistiken verwenden die gemeinsame Logik.
+- `Movie.averageRating` mittelt ausschließlich vorhandene Personen-Kriterienwerte. Jede Person zählt gleich, auch bei unterschiedlich vielen ausgefüllten Kriterien. Text- und reine Fazitbeiträge senken den Kriterienwert nicht mehr.
+- `Movie.averageFazit` berücksichtigt weiterhin gespeicherte Fazitwerte. Im Fazit-Anzeigemodus gilt zuerst der Film-Fazitdurchschnitt, nur bei dessen Fehlen der Kriterien-Gruppendurchschnitt. Der separat einstellbare TMDb-Fallback bleibt erhalten.
+- Einzelkarten, Rezensionen und Vorschau zeigen fehlende Kriterien als „Nicht vergeben“. Beiträge und numerische Wertungen werden in Gruppenübersicht und Statistik separat gezählt. Reiner Text bleibt als Rezension, Mitgliederbeitrag und Aktivität erhalten.
+- Benachrichtigungstexte ohne numerischen Wert enthalten keinen künstlichen `0/10`-Zusatz. Die bestehende DEBUG-/Release-Aktivierung der Push-Verarbeitung ist unverändert.
+- Gespeicherte Felder, Kriterien, IDs, Kommentare, Codable-Formate, JSON-Persistenz und CloudKit-Schreibpfade sind unverändert. Keine Datenmigration und kein pauschales Neuschreiben erforderlich. Die Backlog-Bewertungssperre bleibt bestehen.
+- Gewichtungsdetails und Prüfpunkte stehen im Abschnitt „Rating calculation contract“ der `ARCHITECTURE_NOTES.md`. Neue Regressionstests liegen unter `filmfreaksTests/Ratings`, `MovieDetail`, `Content`, `Notifications`, `MovieSearch/Discovery` und `Stats`.
+- Validierungsgrenze dieser Umsetzung: Linux-Umgebung ohne Xcode und Swift-Compiler; kein iOS-Build und kein Swift-Testlauf ausgeführt. Die mitgelieferte lokale Prüfliste beschreibt die noch ausstehenden Xcode-Prüfungen.
 
 ## Open Questions
 

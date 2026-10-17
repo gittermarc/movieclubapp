@@ -62,7 +62,7 @@ extension StatsView {
                                                     .font(.caption)
                                                     .foregroundStyle(.secondary)
 
-                                                Text("• \(stats.ratingsCount) Bewertungen")
+                                                Text("• \(stats.ratingsCount) Beiträge")
                                                     .font(.caption)
                                                     .foregroundStyle(.secondary)
 
@@ -89,6 +89,12 @@ extension StatsView {
                                                 .font(.headline)
                                                 .foregroundStyle(.secondary)
                                         }
+                                    }
+
+                                    if stats.numericRatingsCount != stats.ratingsCount {
+                                        Text("\(stats.numericRatingsCount) Beiträge mit Zahlenwertung")
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
                                     }
 
                                     ProgressView(value: progress)

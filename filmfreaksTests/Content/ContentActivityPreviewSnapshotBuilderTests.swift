@@ -78,6 +78,37 @@ struct ContentActivityPreviewSnapshotBuilderTests {
         #expect(snapshot.allItems.isEmpty)
     }
 
+    @Test func textAndFazitOnlyContributionsRemainVisibleWithoutCriteriaScores() {
+        let ratings = [
+            Rating(reviewerName: "Text", scores: [:], comment: "Großartiger Film", updatedAt: makeDate(day: 5, hour: 12)),
+            Rating(reviewerName: "Zero", scores: [.action: 0, .emotion: 0], updatedAt: makeDate(day: 6, hour: 12)),
+            Rating(reviewerName: "Fazit", scores: [:], fazitScore: 9, updatedAt: makeDate(day: 7, hour: 12))
+        ]
+        let snapshot = makeRatingSnapshot(ratings: ratings, mode: .ratingAverage)
+        let numericRatings: [Double] = snapshot.allItems.compactMap { item in
+            item.movieEvent?.ratingValue
+        }
+
+        #expect(snapshot.allItems.count == 3)
+        #expect(snapshot.allItems.allSatisfy { $0.movieEvent?.kind == .movieRated })
+        #expect(numericRatings.isEmpty)
+        #expect(snapshot.allItems.compactMap { $0.movieEvent?.actorName } == ["Fazit", "Zero", "Text"])
+    }
+
+    @Test func fazitModeUsesAvailableFazitAndCriteriaFallbackWithoutDroppingTextContributions() {
+        let ratings = [
+            Rating(reviewerName: "Text", scores: [:], comment: "Sehenswert", updatedAt: makeDate(day: 5, hour: 12)),
+            Rating(reviewerName: "Criteria", scores: [.action: 3], updatedAt: makeDate(day: 6, hour: 12)),
+            Rating(reviewerName: "Fazit", scores: [.action: 1], fazitScore: 9, updatedAt: makeDate(day: 7, hour: 12))
+        ]
+        let snapshot = makeRatingSnapshot(ratings: ratings, mode: .fazitAverage)
+
+        #expect(snapshot.allItems.count == 3)
+        #expect(snapshot.allItems[0].movieEvent?.ratingValue == 9)
+        #expect(snapshot.allItems[1].movieEvent?.ratingValue == 10)
+        #expect(snapshot.allItems[2].movieEvent?.ratingValue == nil)
+    }
+
     @Test func newEventsCountIgnoresOwnEventsAndOldEntries() {
         let currentUserId = UUID(uuidString: "11111111-1111-1111-1111-111111111111")
         let threshold = makeDate(day: 10, hour: 12)
@@ -129,6 +160,18 @@ struct ContentActivityPreviewSnapshotBuilderTests {
         )
 
         #expect(newEventsCount == 2)
+    }
+
+    private func makeRatingSnapshot(ratings: [Rating], mode: RatingDisplayMode) -> ContentActivityPreviewSnapshot {
+        ContentActivityPreviewSnapshotBuilder.build(
+            input: .init(
+                watchedMovies: [Movie(title: "Arrival", year: "2016", ratings: ratings)],
+                backlogMovies: [],
+                movieNightEvents: [],
+                ratingDisplayMode: mode,
+                totalLimit: 10
+            )
+        )
     }
 
     private func makeSnapshot(

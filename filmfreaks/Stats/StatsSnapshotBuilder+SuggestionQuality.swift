@@ -88,6 +88,8 @@ extension StatsSnapshotBuilder {
                 return nil
             }
 
+            // Keep one group average per suggested movie. In Fazit mode this
+            // deliberately differs from the per-contribution trend average.
             guard let averageRating = movie.groupAverage(for: ratingDisplayMode) else {
                 return nil
             }

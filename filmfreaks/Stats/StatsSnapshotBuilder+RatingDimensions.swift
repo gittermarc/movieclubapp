@@ -48,6 +48,8 @@ extension StatsSnapshotBuilder {
             )
 
             for rating in ratingsByReviewer.values {
+                // Criterion insights count each assigned criterion observation,
+                // rather than the person's normalized overall criteria average.
                 for criterion in RatingCriterion.allCases {
                     let score = rating.scores[criterion] ?? 0
                     guard score > 0 else { continue }

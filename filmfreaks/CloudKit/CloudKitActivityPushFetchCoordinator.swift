@@ -168,14 +168,8 @@ enum CloudKitActivityPushFetchCoordinator {
         let actorName = rating.reviewerName
         let actorId = rating.reviewerId
 
-        let score10: String = {
-            if let f = rating.fazitScore { return String(f) }
-            let approx = Int((rating.averageScoreNormalizedTo10).rounded())
-            return String(approx)
-        }()
-
         let title = "Neue Bewertung"
-        let body = "\(actorName) hat eine Bewertung abgegeben (\(score10)/10)."
+        let body = RatingActivityNotificationText.body(for: rating)
 
         return GroupActivityNotificationSummary(
             kind: .rating,

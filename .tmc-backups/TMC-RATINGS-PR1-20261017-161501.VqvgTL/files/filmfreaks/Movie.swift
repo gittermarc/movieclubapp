@@ -1,0 +1,366 @@
+//
+//  Movie.swift
+//  filmfreaks
+//
+//  Created by Marc Fechner on 28.11.25.
+//
+
+import Foundation
+
+// MARK: - Kriterien
+
+nonisolated enum RatingCriterion: String, CaseIterable, Identifiable, Codable, Hashable, Sendable {
+    case action = "Action"
+    case suspense = "Spannung"
+    case emotion = "Emotion"
+    case humor = "Humor"
+    case music = "Musik"
+    case ambition = "Anspruch"
+    case erotic = "Erotik"
+
+    var id: String { rawValue }
+}
+
+// MARK: - Rating
+
+nonisolated struct Rating: Identifiable, Codable, Equatable, Sendable {
+    var id = UUID()
+
+    /// Stable identity of the reviewer (stored; does not change when the name changes).
+    /// For legacy data this can be nil and will be filled during migration.
+    var reviewerId: UUID? = nil
+
+    /// Display name of the reviewer (can be changed without breaking identity).
+    var reviewerName: String
+
+    /// Sterne pro Kriterium (1–3). 0 bedeutet: nicht bewertet.
+    var scores: [RatingCriterion: Int]
+
+    /// Optionaler Freitext-Kommentar zur Bewertung
+    var comment: String? = nil
+
+    /// ✅ NEU: Fazit pro User (1–10). nil bedeutet: nicht vergeben.
+    var fazitScore: Int? = nil
+
+    /// Zeitpunkt der letzten Bewertungsaenderung (aus CloudKit Record `updatedAt`).
+    /// Optional, damit Legacy-Payloads weiterhin problemlos decodieren.
+    var updatedAt: Date? = nil
+
+    /// Durchschnitt über alle bewerteten Kriterien in Sternen (0–3, ggf. z.B. 2.3)
+    /// Hinweis: 0 zählt als „nicht bewertet“ und fließt nicht in den Durchschnitt ein.
+    nonisolated var averageStars: Double {
+        let rated = scores.values.filter { $0 > 0 }
+        guard !rated.isEmpty else { return 0 }
+        let total = rated.reduce(0, +)
+        return Double(total) / Double(rated.count)
+    }
+
+    /// Normalisiert auf 0–10 Skala für Rest der App
+    nonisolated var averageScoreNormalizedTo10: Double {
+        (averageStars / 3.0) * 10.0
+    }
+}
+
+// MARK: - Person Reference (Cast/Director)
+
+nonisolated struct CastMember: Identifiable, Codable, Hashable, Sendable {
+    /// TMDb Person ID (positiv) – eindeutig.
+    /// Für Legacy-Daten können temporär negative IDs vorkommen (Migration ersetzt sie, wenn tmdbId vorhanden).
+    let personId: Int
+    let name: String
+
+    var id: Int { personId }
+}
+
+// MARK: - Movie
+
+nonisolated struct Movie: Identifiable, Codable, Equatable, Sendable {
+    var id: UUID
+    var title: String
+    var year: String
+    var tmdbRating: Double?
+    var ratings: [Rating]
+    var posterPath: String?
+    var watchedDate: Date?
+    var watchedLocation: String?
+    var tmdbId: Int?
+
+    /// Genres (Name + optional IDs für stabile Ziele)
+    var genres: [String]?
+    var genreIds: [Int]?
+
+    /// Keywords (Name + optional IDs für stabile Ziele)
+    var keywords: [String]?
+    var keywordIds: [Int]?
+
+    var suggestedBy: String?
+
+    /// Zeitpunkt, zu dem der Film in die Gruppe aufgenommen wurde (best-effort).
+    /// Wird beim Hinzufuegen gesetzt und bleibt danach stabil.
+    var addedAt: Date? = nil
+
+    /// Wer den Film hinzugefuegt hat (optional; fuer Social/Activity-Feed).
+    var addedById: UUID? = nil
+    var addedByName: String? = nil
+
+    /// ✅ Cast wird als [{personId, name}] gespeichert (eindeutig, skalierbar)
+    var cast: [CastMember]?
+
+    /// ✅ Directors werden als [{personId, name}] gespeichert (für Director-Goals)
+    var directors: [CastMember]?
+
+    var groupId: String?
+    var groupName: String?
+
+    init(
+        id: UUID = UUID(),
+        title: String,
+        year: String,
+        tmdbRating: Double? = nil,
+        ratings: [Rating] = [],
+        posterPath: String? = nil,
+        watchedDate: Date? = nil,
+        watchedLocation: String? = nil,
+        tmdbId: Int? = nil,
+        genres: [String]? = nil,
+        genreIds: [Int]? = nil,
+        keywords: [String]? = nil,
+        keywordIds: [Int]? = nil,
+        suggestedBy: String? = nil,
+        cast: [CastMember]? = nil,
+        directors: [CastMember]? = nil,
+        addedAt: Date? = nil,
+        addedById: UUID? = nil,
+        addedByName: String? = nil
+    ) {
+        self.id = id
+        self.title = title
+        self.year = year
+        self.tmdbRating = tmdbRating
+        self.ratings = ratings
+        self.posterPath = posterPath
+        self.watchedDate = watchedDate
+        self.watchedLocation = watchedLocation
+        self.tmdbId = tmdbId
+        self.genres = genres
+        self.genreIds = genreIds
+        self.keywords = keywords
+        self.keywordIds = keywordIds
+        self.suggestedBy = suggestedBy
+        self.cast = cast
+        self.directors = directors
+
+        self.addedAt = addedAt
+        self.addedById = addedById
+        self.addedByName = addedByName
+    }
+
+    // MARK: - Codable (inkl. Migration)
+
+    enum CodingKeys: String, CodingKey {
+        case id, title, year, tmdbRating, ratings, posterPath, watchedDate, watchedLocation
+        case tmdbId
+        case genres, genreIds
+        case keywords, keywordIds
+        case suggestedBy
+        case addedAt, addedById, addedByName
+        case cast
+        case directors
+        case groupId, groupName
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+
+        self.id = try c.decode(UUID.self, forKey: .id)
+        self.title = try c.decode(String.self, forKey: .title)
+        self.year = try c.decode(String.self, forKey: .year)
+        self.tmdbRating = try c.decodeIfPresent(Double.self, forKey: .tmdbRating)
+        self.ratings = (try? c.decode([Rating].self, forKey: .ratings)) ?? []
+        self.posterPath = try c.decodeIfPresent(String.self, forKey: .posterPath)
+        self.watchedDate = try c.decodeIfPresent(Date.self, forKey: .watchedDate)
+        self.watchedLocation = try c.decodeIfPresent(String.self, forKey: .watchedLocation)
+        self.tmdbId = try c.decodeIfPresent(Int.self, forKey: .tmdbId)
+
+        self.genres = try c.decodeIfPresent([String].self, forKey: .genres)
+        self.genreIds = try c.decodeIfPresent([Int].self, forKey: .genreIds)
+
+        self.keywords = try c.decodeIfPresent([String].self, forKey: .keywords)
+        self.keywordIds = try c.decodeIfPresent([Int].self, forKey: .keywordIds)
+
+        self.suggestedBy = try c.decodeIfPresent(String.self, forKey: .suggestedBy)
+
+        self.addedAt = try c.decodeIfPresent(Date.self, forKey: .addedAt)
+        self.addedById = try c.decodeIfPresent(UUID.self, forKey: .addedById)
+        self.addedByName = try c.decodeIfPresent(String.self, forKey: .addedByName)
+
+        self.groupId = try c.decodeIfPresent(String.self, forKey: .groupId)
+        self.groupName = try c.decodeIfPresent(String.self, forKey: .groupName)
+
+        // ✅ Directors (optional)
+        self.directors = try c.decodeIfPresent([CastMember].self, forKey: .directors)
+
+        // ✅ Neu: cast als [CastMember] – plus Legacy-Migration: alte Daten hatten cast: [String]
+        if let castMembers = try? c.decodeIfPresent([CastMember].self, forKey: .cast) {
+            self.cast = castMembers
+        } else if let legacyNames = try? c.decodeIfPresent([String].self, forKey: .cast) {
+            let mapped = legacyNames
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+                .map { CastMember(personId: Movie.legacyPersonId(forName: $0), name: $0) }
+            self.cast = mapped.isEmpty ? nil : mapped
+        } else {
+            self.cast = nil
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+
+        try c.encode(id, forKey: .id)
+        try c.encode(title, forKey: .title)
+        try c.encode(year, forKey: .year)
+        try c.encodeIfPresent(tmdbRating, forKey: .tmdbRating)
+        try c.encode(ratings, forKey: .ratings)
+        try c.encodeIfPresent(posterPath, forKey: .posterPath)
+        try c.encodeIfPresent(watchedDate, forKey: .watchedDate)
+        try c.encodeIfPresent(watchedLocation, forKey: .watchedLocation)
+        try c.encodeIfPresent(tmdbId, forKey: .tmdbId)
+
+        try c.encodeIfPresent(genres, forKey: .genres)
+        try c.encodeIfPresent(genreIds, forKey: .genreIds)
+
+        try c.encodeIfPresent(keywords, forKey: .keywords)
+        try c.encodeIfPresent(keywordIds, forKey: .keywordIds)
+
+        try c.encodeIfPresent(suggestedBy, forKey: .suggestedBy)
+
+        try c.encodeIfPresent(addedAt, forKey: .addedAt)
+        try c.encodeIfPresent(addedById, forKey: .addedById)
+        try c.encodeIfPresent(addedByName, forKey: .addedByName)
+
+        try c.encodeIfPresent(cast, forKey: .cast)
+        try c.encodeIfPresent(directors, forKey: .directors)
+        try c.encodeIfPresent(groupId, forKey: .groupId)
+        try c.encodeIfPresent(groupName, forKey: .groupName)
+    }
+
+    /// Stabile, negative ID für Legacy-Namen (bis wir über tmdbId echte personIds migrieren).
+    private static func legacyPersonId(forName name: String) -> Int {
+        let s = name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        var hash: UInt64 = 1469598103934665603 // FNV-1a
+        for b in s.utf8 {
+            hash ^= UInt64(b)
+            hash &*= 1099511628211
+        }
+        let v = Int(hash % UInt64(Int32.max))
+        return -max(1, v)
+    }
+}
+
+extension Movie {
+
+    static let watchedDateFormatter: DateFormatter = {
+        let df = DateFormatter()
+        df.dateStyle = .medium
+        df.timeStyle = .none
+        return df
+    }()
+
+    var posterURL: URL? {
+        guard let posterPath else { return nil }
+        return URL(string: "https://image.tmdb.org/t/p/w500\(posterPath)")
+    }
+
+    /// Overall-Bewertung (0–10) über alle User
+    nonisolated var averageRating: Double? {
+        guard !ratings.isEmpty else { return nil }
+        let all = ratings.map { $0.averageScoreNormalizedTo10 }
+        let total = all.reduce(0, +)
+        return total / Double(all.count)
+    }
+
+    /// Ø Fazit (1–10) über alle User, die ein Fazit vergeben haben
+    nonisolated var averageFazit: Double? {
+        let values = ratings.compactMap { $0.fazitScore }.map { Double($0) }
+        guard !values.isEmpty else { return nil }
+        let total = values.reduce(0, +)
+        return total / Double(values.count)
+    }
+
+    /// Gruppen-Ø je nach Anzeige-Modus.
+    /// - ratingAverage: Kriterien-Ø (wie bisher)
+    /// - fazitAverage: Fazit-Ø (mit Fallback auf Kriterien-Ø für Legacy)
+    nonisolated func groupAverage(for mode: RatingDisplayMode) -> Double? {
+        switch mode {
+        case .ratingAverage:
+            return averageRating
+        case .fazitAverage:
+            return averageFazit ?? averageRating
+        }
+    }
+
+    /// Anzeige-Ø je nach Modus – fällt auf TMDb zurück, wenn die Gruppe noch nichts hat.
+    nonisolated func displayAverage(for mode: RatingDisplayMode) -> Double? {
+        groupAverage(for: mode) ?? tmdbRating
+    }
+
+    var watchedDateText: String? {
+        guard let watchedDate else { return nil }
+        return Movie.watchedDateFormatter.string(from: watchedDate)
+    }
+}
+
+// MARK: - Sample-Daten nur für Previews
+
+let sampleMovies: [Movie] = [
+    Movie(
+        title: "Inception",
+        year: "2010",
+        tmdbRating: 8.8,
+        ratings: [
+            Rating(
+                reviewerName: "Marc",
+                scores: [
+                    .action: 3,
+                    .suspense: 3,
+                    .music: 2,
+                    .erotic: 1
+                ]
+            )
+        ],
+        posterPath: nil
+    ),
+    Movie(
+        title: "The Dark Knight",
+        year: "2008",
+        tmdbRating: 9.0,
+        ratings: [
+            Rating(
+                reviewerName: "Marc",
+                scores: [
+                    .action: 3,
+                    .suspense: 3,
+                    .music: 2
+                ]
+            )
+        ],
+        posterPath: nil
+    ),
+    Movie(
+        title: "Interstellar",
+        year: "2014",
+        tmdbRating: 8.6,
+        ratings: [
+            Rating(
+                reviewerName: "Marc",
+                scores: [
+                    .action: 2,
+                    .suspense: 2,
+                    .music: 3
+                ]
+            )
+        ],
+        posterPath: nil
+    )
+]

@@ -8,7 +8,9 @@
 import Foundation
 
 nonisolated struct MovieRatingGroupSummary: Equatable, Sendable {
+    /// All saved contributions, including reviews without a numeric score.
     let ratingsCount: Int
+    let criteriaRatingsCount: Int
     let averageRating: Double?
     let averageFazit: Double?
     let fazitRatingsCount: Int
@@ -18,20 +20,11 @@ nonisolated struct MovieRatingGroupSummary: Equatable, Sendable {
     init(ratings: [Rating]) {
         ratingsCount = ratings.count
 
-        if ratings.isEmpty {
-            averageRating = nil
-        } else {
-            let total = ratings
-                .map(\.averageScoreNormalizedTo10)
-                .reduce(0, +)
-            averageRating = total / Double(ratings.count)
-        }
+        criteriaRatingsCount = ratings.compactMap(\.averageScoreNormalizedTo10).count
+        averageRating = RatingCalculation.criteriaAverage(ratings: ratings)
 
-        let fazitValues = ratings.compactMap(\.fazitScore).map { Double($0) }
-        fazitRatingsCount = fazitValues.count
-        averageFazit = fazitValues.isEmpty
-            ? nil
-            : fazitValues.reduce(0, +) / Double(fazitValues.count)
+        fazitRatingsCount = ratings.compactMap(\.fazitScore).count
+        averageFazit = RatingCalculation.fazitAverage(ratings: ratings)
 
         var averages: [RatingCriterion: Double] = [:]
         var counts: [RatingCriterion: Int] = [:]
@@ -44,9 +37,7 @@ nonisolated struct MovieRatingGroupSummary: Equatable, Sendable {
 
             counts[criterion] = values.count
 
-            if !values.isEmpty {
-                averages[criterion] = values.reduce(0, +) / Double(values.count)
-            }
+            averages[criterion] = RatingCalculation.average(values)
         }
 
         criterionAverages = averages
@@ -55,6 +46,18 @@ nonisolated struct MovieRatingGroupSummary: Equatable, Sendable {
 }
 
 nonisolated enum MovieRatingPresentation {
+
+    static func scoreText(_ score: Double?) -> String {
+        guard let score else {
+            return "Nicht vergeben"
+        }
+
+        return String(format: "%.1f / 10", score)
+    }
+
+    static func missingCriteriaText(ratingsCount: Int) -> String {
+        ratingsCount == 0 ? "Noch keine Bewertungen" : "Kriterien nicht vergeben"
+    }
 
     static func orderedRatings(
         _ ratings: [Rating],

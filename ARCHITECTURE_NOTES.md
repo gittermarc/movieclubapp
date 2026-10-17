@@ -7,6 +7,33 @@
 - No SwiftData, CoreData or `@Model` usage was found.
 - Any item marked **UNKNOWN** is not asserted as fact and is collected in Open Questions.
 
+## Rating calculation contract – TMC-RATINGS-PR 1
+
+Die Hinweise dieses Abschnitts wurden am aktuellen Code geprüft. Zentrale reine Arithmetik liegt in `filmfreaks/Ratings/RatingCalculation.swift` (`nonisolated`). Ein Kriterium mit 0 ist nicht vergeben. Ohne positive Kriterien liefern beide berechneten Rating-Eigenschaften `nil`. Gespeicherte Fazitwerte werden wie bisher über ihre optionale Anwesenheit berücksichtigt; dieser PR validiert oder verändert keine gespeicherten Werte.
+
+| Auswertung | Einheit und Gewichtung | Verhalten ohne Zahl |
+|---|---|---|
+| Personen-Kriterienwert | Mittel der positiven Kriterien einer Person, normalisiert von 3 auf 10 | `nil` |
+| Film-Kriterienwert und Gruppenübersicht | Mittel der vorhandenen Personen-Kriterienwerte; jede Person zählt einmal | Beiträge ohne Kriterien bleiben im Beitragszähler, fehlen im numerischen Nenner |
+| Film-Fazitwert | Mittel der vorhandenen Fazitwerte | `nil`; Fazit-Anzeigemodus fällt dann auf Film-Kriterienwert zurück |
+| Listen, Timeline und Ziele | Film-Gruppenwert nach Anzeigemodus | TMDb nur über den bestehenden einstellbaren Anzeigepfad; ohne Wert leere Anzeige |
+| Statistik-Gesamtschnitt, Monatstrend und Mitgliederschnitt | Je vorhandener numerischer Beitrag; im Fazitmodus pro Beitrag Fazit, sonst Kriterien-Fallback | Kein numerischer Stichprobenwert; Beitrag, Film und aktive Person bleiben zählbar |
+| Top-Filme, Vorschlagsqualität und TMDb-Abstand | Je Film ein Gruppenwert nach Anzeigemodus | Film ohne Gruppenwert entfällt in dieser numerischen Auswertung; TMDb ersetzt ihn dort nicht |
+| Pick-Insights und Streuung/Kontroverse | Vorhandene einzelne Personenwerte nach Anzeigemodus und dessen individuellem Fazit-Fallback | Kein künstlicher Nullwert und keine zusätzliche Streuung |
+| Kriterien-Dimensionen | Je vergebenes Kriterium eine Beobachtung, auf ursprünglicher Sternskala | Fehlende/0-Kriterien entfallen; keine Änderung zu einem Gesamtmittel aller Kriterien |
+| Geschmacksvergleiche | Je Film und Reviewer der zeitlich maßgebliche Beitrag; nur vergleichbare numerische Paare | Neuerer Textbeitrag reaktiviert keine ältere Zahlenwertung desselben Reviewers |
+| Aktivitäten und Vorschau | Einzelbeitrag nach Anzeigemodus, Fazit-Fallback auf eigene Kriterien | Ereignis bleibt vorhanden, `ratingValue` ist `nil` |
+| Benachrichtigungstext | Wie bisher eigenes Fazit bevorzugt, sonst gerundete Kriterienwertung | Text ohne Wertungszusatz; Push-Verarbeitung bleibt unverändert unter ihren Build-Bedingungen |
+| Discovery-Seeds | Film-Fazitwert bevorzugt, sonst Film-Kriterienwert, kein TMDb-Ersatz | Kein numerischer Seed-Rang; jüngste Filme dürfen weiterhin Textbeiträge enthalten |
+
+Die Unterschiede zwischen Gruppen-Fazit-Fallback (erst auf Filmebene) und individuellem Fazit-Fallback in Statistiken/Aktivitäten sind beabsichtigt und durch Regressionstests geschützt. Beispielsweise ergibt eine Personen-Kriterienwertung von 10 plus ein zusätzlicher reiner Textbeitrag weiterhin einen Film-Kriterienwert von 10.
+
+`MovieRatingGroupSummary.ratingsCount`, `StatsSnapshot.totalRatingsCount` und `StatsUserStats.ratingsCount` zählen Beiträge. `criteriaRatingsCount`, `fazitRatingsCount` und die modusabhängigen `numericRatingsCount` zählen die tatsächlich einbezogenen Zahlenwerte. Diese abgeleiteten Werte werden nicht persistiert.
+
+Der PR ändert keine Codable-Felder, IDs, Kommentare, JSON-/CloudKit-Payloads, Sync-Routen, Backlog-Schreibsperren oder Projekteinstellungen. Neue Dateien werden über die vorhandenen synchronisierten App-/Testgruppen aufgenommen; `project.pbxproj` bleibt bytegleich.
+
+Validierung: statische Aufruferprüfung und Installer-Prüfungen in dieser Umgebung; kein Xcode-/Swift-Build oder Testlauf, weil beide Werkzeuge fehlen. Lokal sind Debug- und Release-Build, die vollständigen Unit-Tests einschließlich neuer Rating-Regressionen und die Anzeigeprüfungen aus der beiliegenden Prüfliste erforderlich.
+
 ## Big Files List: Top 15 by Lines
 
 | Rank | Lines | Path | Grober Zweck | Warum riskant |

@@ -49,6 +49,10 @@ extension StatsView {
         viewModel.snapshot.totalRatingsCount
     }
 
+    var numericRatingsCount: Int {
+        viewModel.snapshot.numericRatingsCount
+    }
+
     var activeReviewersCount: Int {
         viewModel.snapshot.activeReviewersCount
     }
@@ -213,10 +217,10 @@ extension StatsView {
         viewModel.snapshot.fastestToWatchSuggester
     }
 
-    func statsForUser(_ user: User) -> (movieCount: Int, ratingsCount: Int, averageRating: Double?) {
+    func statsForUser(_ user: User) -> StatsUserStats {
         guard let s = viewModel.snapshot.userStatsByUserId[user.id] else {
-            return (0, 0, nil)
+            return StatsUserStats(movieCount: 0, ratingsCount: 0, averageRating: nil)
         }
-        return (s.movieCount, s.ratingsCount, s.averageRating)
+        return s
     }
 }

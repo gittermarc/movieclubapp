@@ -62,17 +62,8 @@ nonisolated enum MovieDiscoverySeedBuilder {
     }
 
     private static func ownRatingBestEffort(for movie: Movie) -> Double? {
-        if let average = movie.averageFazit ?? movie.averageRating {
-            return average
-        }
-
-        let values = movie.ratings.map { rating -> Double in
-            if let fazit = rating.fazitScore {
-                return Double(fazit)
-            }
-            return rating.averageScoreNormalizedTo10
-        }
-        guard !values.isEmpty else { return nil }
-        return values.reduce(0, +) / Double(values.count)
+        // Prefer the group's fazit, then equally weighted reviewer criteria means.
+        // Text-only contributions remain eligible as recent seeds, never as a zero score.
+        movie.averageFazit ?? movie.averageRating
     }
 }

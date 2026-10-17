@@ -79,12 +79,12 @@ extension StatsView {
                     StatsKPICard(
                         title: "Ø Bewertung",
                         value: overallAverageRating != nil ? String(format: "%.1f", overallAverageRating!) : "–",
-                        subtitle: "0–10 Skala",
+                        subtitle: "\(numericRatingsCount) Zahlenwertungen",
                         systemImage: "star.fill"
                     )
 
                     StatsKPICard(
-                        title: "Bewertungen",
+                        title: "Beiträge",
                         value: "\(totalRatingsCount)",
                         subtitle: "alle Nutzer",
                         systemImage: "text.bubble.fill"
